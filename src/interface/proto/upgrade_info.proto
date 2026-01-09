@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+// 升级信息查询相关的通用响应结构（用于云端/设备间解耦的数据传输）
+package vehicle.upgrade.info;
+
+message CurrentVersionResp {
+  string current_version = 1; // 当前软件版本号
+  int32 code = 2;             // 0=成功, 1=失败
+  string message = 3;         // 响应消息
+}
+
+message UpgradeContentResp {
+  string ecu = 1;      // 升级内容描述（ECU）
+  int32 code = 2;      // 0=成功, 1=失败
+  string message = 3;  // 响应消息
+}
+
+message PackageSizeResp {
+  double package_size = 1; // 升级包大小（字节或单位由业务约定）
+  int32 code = 2;          // 0=成功, 1=失败
+  string message = 3;      // 响应消息
+}

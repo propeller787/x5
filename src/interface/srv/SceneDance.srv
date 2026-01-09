@@ -1,0 +1,10 @@
+std_msgs/Header header
+int16 type  #1|2|3|4   //开始、暂停、恢复、关闭
+# Request part
+int16 rows  # 行数，固定为 3
+# Response part
+float32[] musicalscore  # 3行，每行列数动态
+
+---
+int16 code
+string message

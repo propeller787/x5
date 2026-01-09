@@ -1,0 +1,8 @@
+int16 id
+float32 vx
+float32 w
+float32 heading
+float32 distance
+int16 position
+---
+int16 code

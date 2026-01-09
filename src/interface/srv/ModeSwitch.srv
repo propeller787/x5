@@ -1,0 +1,3 @@
+string str_mode  # auxiliary cruise narrow  standard autobot_indoor autobot_outdoor
+---
+bool result

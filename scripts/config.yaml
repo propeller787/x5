@@ -1,0 +1,8 @@
+/sensor_data_recorder:
+  ros__parameters:
+    record:
+      directory: "/opt/freego/bags"
+      bag_prefix: "sensor_data"
+      max_duration_minutes: 30
+      max_size_mb: 1024
+      auto_start: true

@@ -1,0 +1,10 @@
+ota_agent_node:
+  ros__parameters:
+    integrity.sha256_map_json: '{"3588":"<sha256>","ECU1":"<sha256>"}'
+    integrity.signature.map_json: '{"3588":"<base64sig>"}'
+    integrity.signature.pubkey_path: "/path/to/pub.pem"
+    integrity.signature.algorithm: "RSA"        # 或 ECDSA
+    integrity.signature.payload_template: "{version}|{url}|{md5}|{sha256}"  # 如需改可在此调整
+    integrity.l3.expected_versions_json: '{"3588":"1.2.3"}'
+    integrity.l3.required_nodes: [cloud_manager, ota_agent]
+    integrity.l4.required_nodes: [cloud_manager, common, interface, ota_agent, postback]

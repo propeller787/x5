@@ -1,0 +1,156 @@
+VERSION ""
+
+
+NS_ : 
+	NS_DESC_
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	CAT_DEF_
+	CAT_
+	FILTER
+	BA_DEF_DEF_
+	EV_DATA_
+	ENVVAR_DATA_
+	SGTYPE_
+	SGTYPE_VAL_
+	BA_DEF_SGTYPE_
+	BA_SGTYPE_
+	SIG_TYPE_REF_
+	VAL_TABLE_
+	SIG_GROUP_
+	SIG_VALTYPE_
+	SIGTYPE_VALTYPE_
+	BO_TX_BU_
+	BA_DEF_REL_
+	BA_REL_
+	BA_DEF_DEF_REL_
+	BU_SG_REL_
+	BU_EV_REL_
+	BU_BO_REL_
+	SG_MUL_VAL_
+
+BS_:
+
+BU_: receive send
+
+
+BO_ 3221225472 VECTOR__INDEPENDENT_SIG_MSG: 0 Vector__XXX
+ SG_ surplus_capacity : 0|16@1+ (1,0) [0|65535] "" Vector__XXX
+
+BO_ 2147485959 audio: 8 Vector__XXX
+ SG_ audio_type : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147484198 rocker: 8 Vector__XXX
+ SG_ rocker_y : 32|32@1- (1,0) [-2147483648|2147483647] "" Vector__XXX
+ SG_ rocker_x : 0|32@1- (1,0) [-2147483648|2147483647] "" Vector__XXX
+
+BO_ 2147484417 right_driver: 8 Vector__XXX
+ SG_ right_driver_sts : 56|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ right_driver_state : 32|16@1- (1,0) [-32768|32767] "" Vector__XXX
+ SG_ right_driver_error : 0|32@1+ (1,0) [0|4294967295] "" Vector__XXX
+
+BO_ 2147484161 left_driver: 8 Vector__XXX
+ SG_ left_driver_sts : 56|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ left_driver_state : 32|16@1- (1,0) [-32768|32767] "" Vector__XXX
+ SG_ left_driver_error : 0|32@1+ (1,0) [0|4294967295] "" Vector__XXX
+
+BO_ 2147485958 mode: 8 Vector__XXX
+ SG_ mode_status : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ mode_type : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 539 brake: 8 Vector__XXX
+ SG_ brake1 : 16|16@1- (1,0) [-32768|32767] "" Vector__XXX
+ SG_ brake0 : 0|16@1- (1,0) [-32768|32767] "" Vector__XXX
+
+BO_ 2147485957 battery: 8 Vector__XXX
+ SG_ remaining_mileage : 16|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ residual_electricity : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ charging : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 256 cell_pack: 8 Vector__XXX
+ SG_ crc : 55|16@0- (1,0) [0|0] "" Vector__XXX
+ SG_ capacitance : 39|16@0+ (1,0) [0|65535] "" Vector__XXX
+ SG_ electricity : 23|16@0- (1,0) [-32768|32767] "" Vector__XXX
+ SG_ total_voltage : 7|16@0+ (1,0) [0|65535] "" Vector__XXX
+
+BO_ 257 cell: 8 Vector__XXX
+ SG_ crc : 55|16@0- (1,0) [0|0] "" Vector__XXX
+ SG_ percent_capacitance : 39|16@0+ (1,0) [0|65535] "" Vector__XXX
+ SG_ discharge_size : 23|16@0- (1,0) [-32768|32767] "" Vector__XXX
+ SG_ capacitance : 7|16@0+ (1,0) [0|65535] "" Vector__XXX
+
+BO_ 2147485956 health_info: 8 Vector__XXX
+ SG_ microcirculation : 16|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ bloodoxygen : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ heartrate : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147485955 key_status_k: 8 Vector__XXX
+ SG_ lock_switch : 16|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ help_implement : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ sos : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147485954 gear_k: 8 Vector__XXX
+ SG_ get_gear : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147485953 colour_screen_k: 8 Vector__XXX
+ SG_ light_mode : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ light_status : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147484196 colour_screen: 8 Vector__XXX
+ SG_ light_mode : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ light_status : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147484197 key_status: 8 Vector__XXX
+ SG_ key_dance : 56|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ key_setting : 48|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ key_auxiliary : 40|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ key_charger : 32|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ key_cruise : 24|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ health : 16|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ help_implement : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ sos : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147484194 ves_infor: 8 Vector__XXX
+ SG_ lock_switch : 16|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ get_charging : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ get_gear : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147484193 heart: 8 Vector__XXX
+ SG_ heart_beat : 0|8@1- (1,0) [0|0] "" Vector__XXX
+
+BO_ 2147484186 count: 8 Vector__XXX
+ SG_ count1 : 32|32@1- (1,0) [-2147483648|2147483647] "" Vector__XXX
+ SG_ count0 : 0|32@1- (1,0) [-2147483648|2147483647] "" Vector__XXX
+
+BO_ 2147484192 topInput_vel: 8 Vector__XXX
+ SG_ input_vel1 : 32|32@1- (1,0) [-3.4E+038|3.4E+038] "" Vector__XXX
+ SG_ input_vel0 : 0|32@1- (1,0) [-3.4E+038|3.4E+038] "" Vector__XXX
+
+BO_ 2147484183 vbus_voltage: 8 Vector__XXX
+ SG_ vbus_voltage1 : 0|32@1- (1,0) [-3.4E+038|3.4E+038] "" Vector__XXX
+
+BO_ 2147484185 input_vel: 8 send
+ SG_ input_vel1 : 32|32@1- (1,0) [-3.4E+038|3.4E+038] ""  receive
+ SG_ input_vel0 : 0|32@1- (1,0) [-3.4E+038|3.4E+038] ""  receive
+
+BO_ 2147484188 vel_estimate: 8 Vector__XXX
+ SG_ vel_estimate1 : 32|32@1- (1,0) [-3.4E+038|3.4E+038] ""  receive
+ SG_ vel_estimate0 : 0|32@1- (1,0) [-3.4E+038|3.4E+038] ""  receive
+
+
+
+CM_ BO_ 3221225472 "This is a message for not used signals, created by Vector CANdb++ DBC OLE DB Provider.";
+BA_DEF_  "MultiplexExtEnabled" ENUM  "No","Yes";
+BA_DEF_  "BusType" STRING ;
+BA_DEF_DEF_  "MultiplexExtEnabled" "No";
+BA_DEF_DEF_  "BusType" "CAN";
+SIG_VALTYPE_ 2147484192 input_vel1 : 1;
+SIG_VALTYPE_ 2147484192 input_vel0 : 1;
+SIG_VALTYPE_ 2147484183 vbus_voltage1 : 1;
+SIG_VALTYPE_ 2147484185 input_vel1 : 1;
+SIG_VALTYPE_ 2147484185 input_vel0 : 1;
+SIG_VALTYPE_ 2147484188 vel_estimate1 : 1;
+SIG_VALTYPE_ 2147484188 vel_estimate0 : 1;
+

@@ -1,0 +1,6 @@
+bool narrow
+bool auxiliary
+bool followme
+---
+int16 code
+string message

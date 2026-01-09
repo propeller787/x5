@@ -1,0 +1,1 @@
+uint32 hex_value # 16进制数据

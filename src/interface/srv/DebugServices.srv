@@ -1,0 +1,8 @@
+std_msgs/Header header
+string op
+string str_param
+int16 int_param
+int16[] intarray_param
+geometry_msgs/Pose pose
+---
+int16 result

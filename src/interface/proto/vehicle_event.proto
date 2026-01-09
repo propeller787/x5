@@ -1,0 +1,97 @@
+syntax = "proto3";
+package vehicle.event;
+
+// 车端事件上报
+message VehicleEventInfo {
+  string sn = 1;                 // 车辆唯一标识
+  int64 device_timestamp = 2;    // 设备本地时间戳（毫秒）
+  string model = 3;              // 车辆型号 X5/Cruise
+  string version = 4;            // 软件版本
+  int64 config_version = 5;      // 配置文件版本
+
+  string event_id = 10;          // 事件唯一ID（UUID）
+  int32 event_type = 11;         // 事件类型 0安全事件 1报警 2故障
+  int32 duration_type = 12;      // 持续类型 0瞬时 1持续
+  int32 status = 13;             // 事件状态 0开始 1更新 2结束（瞬时直接2）
+  int64 up_index = 14;           // 更新持续事件序号
+
+  DeviceInfo source = 20;        // 产生故障设备
+  SafetyEventInfo safety_info = 21; // 安全事件信息
+  AlarmInfo alarm_info = 22;        // 报警信息
+  DTCInfo dtc_info = 23;           // 故障信息
+  Telemetry telemetry = 24;        // 报警时车辆遥测数据
+
+  repeated string log_file = 25;   // 日志文件列表
+  repeated string video_file = 26; // 视频文件列表
+  string extras = 30;              // 额外扩展信息JSON
+}
+
+
+// 故障设备来源
+message DeviceInfo {
+  string device_type = 1;       // "VCU", "BMS", "ADAS" ...
+  string device_sn = 2;         // 车内设备sn
+  string firmware_version = 3;  // 固件版本号
+}
+
+// 安全事件信息
+message SafetyEventInfo {
+  string code = 1;        // 碰撞(SE_COLLISION) 急刹(SE_BRAKE_HARD)等
+  int32 level = 2;        // 严重等级 1:致命 2:严重 3:一般 4:提示
+  double trigger_value = 3; // 触发值，如减速度(g)
+  double threshold = 4;     // 触发阈值
+  int64 first_ms = 5;       // 事件开始时间
+  int64 last_ms = 6;        // 事件结束时间（瞬时可等于first_ms）
+  string desc = 8;          // 描述
+  string extras = 20;       // 扩展数据JSON
+}
+
+// 报警信息
+message AlarmInfo {
+  string code = 1;        // 报警码 ALM_*
+  string code_name = 2;   // 报警名称
+  string desc = 3;        // 报警描述
+  int32 level = 4;        // 报警等级 1:紧急 2:严重 3:一般 4:提示
+  string info = 5;        // 附加信息
+  int64 first_ms = 6;     // 报警触发时间
+  int64 last_ms = 7;      // 报警结束时间
+}
+
+// 故障信息（DTC）
+message DTCInfo {
+  string code = 1;        // 故障码，例如 "DTC_B1012", "DTC_M1001"
+  string desc = 2;        // 故障描述
+  string info = 3;        // 附加信息
+  int64 first_ms = 6;     // 故障触发时间
+  int64 last_ms = 7;      // 故障结束时间
+}
+
+// 当前车辆遥测数据
+message Telemetry {
+  double speed = 1;               // 速度(km/h)
+  double steering = 2;            // 转向角度，大于0向右、小于0向左
+  int32 brake = 3;                // 是否踩刹车 0未刹车 1刹车
+  int32 b_force = 4;              // 刹车力度0-100
+  double battery = 5;             // 剩余电量百分比
+  double battery_voltage_v = 6;   // 电池实时电压
+  double battery_current_a = 7;   // 电流
+  int32 gear = 8;                 // 当前车辆档位
+  int32 mode = 9;                 // 模式 0有人驾驶 1自动驾驶(助行) 2远程遥控
+  double latitude = 10;           // 纬度（WGS84）
+  double longitude = 11;          // 经度（WGS84）
+  double altitude = 12;           // 海拔（米）
+  string extras = 20;             // 额外扩展数值JSON
+}
+
+// 云端事件回复
+message VehicleEventAck {
+  string sn = 1;                 // 车辆唯一标识
+  int64 server_timestamp = 2;    // 服务器时间戳（毫秒）
+  string model = 3;              // 车辆型号 X5/Cruise
+  int64 config_version = 5;      // 配置文件版本
+  string event_id = 10;          // 事件唯一ID（UUID）
+  int32 event_type = 11;         // 事件类型 0安全事件 1报警 2故障
+  int32 duration_type = 12;      // 持续类型 0瞬时 1持续
+  int32 status = 13;             // 事件状态 0开始 1更新 2结束
+  int64 up_index = 14;           // 更新事件序号
+}

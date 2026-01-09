@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package vlopb;
+
+// Proto3 定义，用于图像消息，类似于 ROS2 的 sensor_msgs::msg::Image
+message Image {
+    // 消息序号（用于标识消息的顺序）
+    uint32 seq = 1;
+
+    // 时间戳（秒部分）
+    uint32 stamp_sec = 2;
+
+    // 时间戳（纳秒部分）
+    uint32 stamp_nanosec = 3;
+
+    // 坐标系的名称（通常用于描述图像的参考坐标系）
+    string frame_id = 4;
+
+    // 图像高度（单位：像素）
+    uint32 height = 5;
+
+    // 图像宽度（单位：像素）
+    uint32 width = 6;
+
+    // 图像编码格式（如 "rgb8", "bgr8", "mono8" 等）
+    string encoding = 7;
+
+    // 是否为大端字节序（true 表示大端，false 表示小端）
+    bool is_bigendian = 8;
+
+    // 每行图像数据的字节数（step = width * 每像素字节数）
+    uint32 step = 9;
+
+    // 实际的图像数据（按字节存储的原始像素数据）
+    bytes data = 10;
+}

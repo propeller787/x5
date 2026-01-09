@@ -1,0 +1,13 @@
+[Unit]
+Description=can init
+ 
+[Service]
+Type=simple
+ExecStartPre=/bin/sleep 20
+ExecStart=/opt/can/can_init.sh
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
+ 
+[Install]
+WantedBy=multi-user.target

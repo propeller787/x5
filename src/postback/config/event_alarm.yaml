@@ -1,0 +1,31 @@
+event_alarm_node:
+  ros__parameters:
+    vin: "X001"
+    model_str: "x5"
+    protocol.version: "1"
+
+    # MQTT
+    mqtt.broker_url: "tcp://localhost:1883"
+    mqtt.client_id: "event_alarm_001"
+    mqtt.username: ""
+    mqtt.password: ""
+    mqtt.ca_cert: ""
+    mqtt.cipher: ""
+    mqtt.insecure_skip_verify: false
+
+    # Config HTTP fallback
+    api_base_url: ""
+    session_key: ""
+    config.poll_interval_seconds: 30
+
+    # OSS
+    oss.endpoint: "oss-cn-beijing.aliyuncs.com"
+    oss.bucket: "your-bucket-name"
+    oss.access_key: "YOUR_AK"
+    oss.secret_key: "YOUR_SK"
+
+    # Test alarm
+    test_alarm.enabled: true
+    test_alarm.code: "ALM_TEST"
+    test_alarm.level: 3
+    test_alarm.info: "demo-startup"

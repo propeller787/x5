@@ -1,0 +1,1089 @@
+智能代步机通信协议v1.0.2
+智能代步机
+通信协议
+V1.0.2
+日期	变动人	变动描述
+2025年11月18日	王晓超	创建
+2025年11月24日	王晓超	增加OTA章节
+2025年11月27日	王晓超	1:新增5.4使用连接令牌。
+2:6.2.1章节x5数据上报删除整车、RGB、IMU,调整整车应用数据、增加各类状态。
+3:6.3日志文件存储增加规范。
+4:增加章节9远程控制
+5:3.5.1增加GET请求签名。
+6:7.2调整topic协议版本位置。
+7:8.3章节topic增加协议版本。
+2025年11月
+1 协议描述
+本协议主要描述设备数据上报、控制指令和云控操作相关的MQTT协议具体数据内容，数据采用Protobuf进行二进制的序列化与反序列化。
+ 本文档为各类协议提供.proto文件，由各端根据.proto文件定义生成各自的映射序列化对象。
+2 MQTT客户端
+需使用支持MQTT5协议的客户端：
+C++：
+Paho MQTT C++
+https://github.com/eclipse-paho/paho.mqtt.cpp
+ React Nativ:
+Paho MQTT
+https://github.com/eclipse-paho/paho.mqtt.javascript
+npm install paho-mqtt
+# 或者
+yarn add paho-mqtt
+3 数据签名算法
+3.1 Ed25519 非对称算法
+系统需要进行数据签名的均使用Ed25519 非对称算法进行数据签名与验签，该算法使用密匙对即一个私钥进行签名其对应的公钥进行验签。
+系统由双重密匙对来确保数据的来源安全，分为内置根密匙和动态会话密匙。
+3.2 内置根密匙对
+内置根密匙对获取会话密匙对相关逻辑进行签名和验签。
+应用端：为APP、大屏分别内置各种独立的根密匙对。
+车机端：根据设备型号分别内置独立的根密匙对。
+3.3 会话密匙对
+会话密匙对由app每次启动并登录后获取。
+设备由每次上电或重置后获取。
+会话密匙对为后续业务数据的主要验签密匙对
+3.3.1 App会话密匙对
+1.	登录接口返回本次的会话密匙对。
+2.	App启动后刷新登录状态并返回新令牌后合并返回新的会话密匙对。
+3.3.2 设备会话密匙对
+设备开机或重置后获取随机会话密匙对。
+HTTP接口POST https://域名/api/auth/v1/device/getSessionKey
+Content-Type: application/json; charset=UTF-8
+Gversion: <后端服务版本>
+Glanguage: <语言en\zh-cn >
+GClient: <所属客户端>
+GApp-Version: <客户端版本>
+Gtime:<毫秒时间戳>
+Gnonce:<随机数UUID>
+GSign:<签名值>-使用内置根密匙对签名
+入参：
+参数	类型	是否必填	描述
+vin	String	是	车辆唯一识别码
+model	int	是	型号0:x5 1:Cruise
+返回：
+值	类型	描述
+publicKey	String	数据加签key
+privateKey	String	数据验签key
+3.4 签名算法
+使用Ed25519 非对称算法进行数据签名已验证数据合法性防止接口被攻击，私钥由设备保存进行数据加签，公钥由服务端保存对数据进行验签。
+各语言签名示例，必须是 UTF‑8 字节序列：
+如签名内容为：signText = vin + "|" + model + "|" + nonce
+1.	C++签名
+使用 libsodium
+#include <sodium.h>
+#include <string>
+std::string signMessage(
+ const std::string& vin,
+ const std::string& model,
+ const std::string& nonce,
+ const unsigned char* privateKey // 32 bytes
+) {
+ // build message
+ std::string message = vin + "|" + model + "|" + nonce;
+ unsigned char signature[crypto_sign_BYTES]; // 64 bytes
+ crypto_sign_detached(
+ signature,
+ nullptr,
+ reinterpret_cast<const unsigned char*>(message.c_str()),
+ message.size(),
+ privateKey
+ );
+ // return signature as base64
+ char sigBase64[128];
+ sodium_bin2base64(
+ sigBase64, sizeof(sigBase64),
+ signature, crypto_sign_BYTES,
+ sodium_base64_VARIANT_ORIGINAL
+ );
+ return std::string(sigBase64);
+}
+//生成签名
+std::string sig = signMessage(vin, model, nonce, devicePrivateKey);
+1.	React Native签名
+使用 tweetnacl
+import nacl from 'tweetnacl';
+import { encodeUTF8, decodeUTF8, encodeBase64 } from 'tweetnacl-util';
+export function signDeviceMessage(vin, model, nonce, privateKeyBase64) {
+ const privateKey = nacl.util.decodeBase64(privateKeyBase64); // Uint8Array(64)
+ const message = `${vin}|${model}|${nonce}`;
+ const msgUint8 = decodeUTF8(message);
+ const signature = nacl.sign.detached(msgUint8, privateKey);
+ return encodeBase64(signature); // base64 string
+}
+1.	服务端验签java
+使用 BouncyCastle
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters;
+import org.bouncycastle.crypto.signers.Ed25519Signer;
+import java.util.Base64;
+public class Ed25519Verify {
+ public static boolean verify(
+ String vin,
+ String model,
+ String nonce,
+ String signatureBase64,
+ byte[] publicKeyBytes // 32 bytes
+ ) {
+ String message = vin + "|" + model + "|" + nonce;
+ byte[] msgBytes = message.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+ byte[] signature = Base64.getDecoder().decode(signatureBase64);
+ Ed25519PublicKeyParameters pubKey = new Ed25519PublicKeyParameters(publicKeyBytes, 0);
+ Ed25519Signer verifier = new Ed25519Signer();
+ verifier.init(false, pubKey);
+ verifier.update(msgBytes, 0, msgBytes.length);
+ return verifier.verifySignature(signature);
+ }
+}
+3.5 签名数据
+3.5.1 HTTP接口
+3.5.2 post接口
+需签名的接口http头信息添加如下：
+如：HTTP接口https://域名/api/auth/v1/xxx
+Content-Type: application/json; charset=UTF-8
+Token: <认证后的令牌>
+Gversion: <后端服务版本>
+Glanguage: <语言en\zh-cn >
+GClient: <所属客户端>
+GApp-Version: <客户端版本>
+Gtime:<毫秒时间戳>
+Gnonce:<随机数UUID>
+GSign:<签名值>
+签名编码UTF-8
+示例如下：
+
+// 引入 Ed25519（tweetnacl）
+import nacl from 'tweetnacl';
+import naclUtil from 'tweetnacl-util';
+
+const PRIVATE_KEY = yourPrivateKeyUint8Array;
+
+async function sendSignedHttpSimplified() {
+
+ // 1. JSON Body
+ const bodyObj = {
+ speed: 12.5,
+ battery: 88,
+ status: "OK"
+ };
+ const bodyJson = JSON.stringify(bodyObj);
+
+ // 2. gtime / gnonce
+ const gtime = Date.now().toString();
+ const gnonce = crypto.randomUUID();
+
+ // 3. 拼接字符串（UTF-8）
+ const signSource = token+gversion+glanguage+gclient+ GAppVersion+gtime+gnonce+bodyJson;
+
+ // 4. 字符串 → UTF-8 字节
+ const messageBytes = naclUtil.decodeUTF8(signSource);
+
+ // 5. Ed25519 签名
+ const signatureBytes = nacl.sign.detached(messageBytes, PRIVATE_KEY);
+ const gsign = naclUtil.encodeBase64(signatureBytes);
+
+ // 6. 发送 HTTP 请求
+ const url = "https://你的域名/api/auth/v1/xxx";
+
+ const response = await fetch(url, {
+ method: "POST",
+ headers: {
+ "Content-Type": "application/json; charset=UTF-8",
+ "Gtime": gtime,
+ "Gnonce": gnonce,
+ "Gsign": gsign
+ },
+ body: bodyJson
+ });
+
+ console.log("服务器响应:", await response.text());
+}
+
+3.5.3 get接口
+const gsign = token+gversion+glanguage+gclient+ GAppVersion+gtime+gnonce+所有入参值的字符串累加拼接;
+如:传参为 id=001&name=xxx的GET请求则
+const gsign = token+gversion+glanguage+gclient+ GAppVersion+gtime+gnonce+001xxx;
+3.5.4 MQTT5
+MQTT协议签名数据存放协议User Properties 示例如下：
+
+// 引入 Paho MQTT 客户端
+import { Client, Message } from 'paho-mqtt';
+
+// 引入 Ed25519 实现（tweetnacl）
+import nacl from 'tweetnacl';
+import naclUtil from 'tweetnacl-util';
+
+// 引入你的 Protobuf 文件（示例：DeviceState）
+import { DeviceState } from './device_state_pb';
+
+// =========================
+// 1. 构造 Protobuf Payload
+// =========================
+
+// 创建一个 Protobuf 对象
+const state = new DeviceState();
+
+// 设置字段（示例字段，根据你的 proto 调整）
+state.setSpeed(12.5);
+state.setBattery(88);
+
+// 序列化为 Uint8Array（二进制字节数组）
+const payloadBytes = state.serializeBinary(); // 原始 Protobuf 字节
+
+// =========================
+// 2. 构造签名所需的字符串
+// =========================
+
+// gtime = 毫秒时间戳（字符串）
+const gtime = Date.now().toString();
+
+// gnonce = 随机字符串（防重放攻击）
+const gnonce = Math.random().toString(36).substring(2, 10);
+
+// =========================
+// 3. 拼接 gtime + gnonce + payload
+// =========================
+
+// gtime 转为 UTF-8 字节
+const gtimeBytes = naclUtil.decodeUTF8(gtime);
+
+// gnonce 转为 UTF-8 字节
+const gnonceBytes = naclUtil.decodeUTF8(gnonce);
+
+// 计算拼接后的总长度
+const totalLength =
+ gtimeBytes.length +
+ gnonceBytes.length +
+ payloadBytes.length;
+
+// 创建一个新的 Uint8Array 用于拼接
+const messageToSign = new Uint8Array(totalLength);
+
+// 写入偏移量
+let offset = 0;
+
+// 写入 gtime 字节
+messageToSign.set(gtimeBytes, offset);
+offset += gtimeBytes.length;
+
+// 写入 gnonce 字节
+messageToSign.set(gnonceBytes, offset);
+offset += gnonceBytes.length;
+
+// 写入 Protobuf 原始 payload
+messageToSign.set(payloadBytes, offset);
+
+// =========================
+// 4. 使用 Ed25519 对消息进行签名
+// =========================
+
+// TODO: 替换成你的设备私钥（Uint8Array，长度 32 或 64）
+const privateKey = yourPrivateKeyUint8Array;
+
+// 使用 Ed25519 进行签名（返回 64 字节签名）
+const signatureBytes = nacl.sign.detached(messageToSign, privateKey);
+
+// 签名转 Base64，放入 MQTT User Properties
+const gsign = naclUtil.encodeBase64(signatureBytes);
+
+// =========================
+// 5. 构造 MQTT5 消息并发送
+// =========================
+
+// 创建 MQTT 客户端（WebSocket 方式）
+const client = new Client(
+ "wss://your-emqx-server:8084/mqtt", // 替换为你的 EMQX WebSocket 地址
+ "rn_" + Date.now() // 客户端 ID
+);
+
+// 连接到 EMQX（MQTT 5）
+client.connect({
+ useSSL: true, // 启用 TLS
+ mqttVersion: 5, // 使用 MQTT 5.0
+ onSuccess: () => {
+
+ console.log("MQTT 连接成功");
+
+ // 创建 MQTT 消息（payload 必须是原始二进制）
+ const msg = new Message(payloadBytes);
+
+ // 设置主题
+ msg.destinationName = "device/state";
+
+ // 设置 MQTT5 用户属性（用于传递签名）
+ msg.userProperties = {
+ gtime: gtime, // 时间戳
+ gnonce: gnonce, // 随机数
+ gsign: gsign // Base64 签名字符串
+ };
+
+ // 发送消息到 EMQX
+ client.send(msg);
+
+ console.log("消息已发送");
+ }
+});
+
+接收服务端签名示例：
+
+client.onMessageArrived = (message) => {
+
+ console.log("收到消息 payload:", message.payloadBytes);
+
+ // 取 user-properties（如果服务器下发了）
+ const props = message.userProperties;
+
+ if (props) {
+ console.log("收到的 user-properties:", props);
+
+ // 示例：读取自定义字段
+ const serverTime = props.gtime; // 字符串
+ const serverNonce = props.gnonce;
+ const serverSign = props.gsign;
+
+ console.log("服务器时间:", serverTime);
+ console.log("服务器随机数:", serverNonce);
+ console.log("服务器签名:", serverSign);
+ }
+};
+
+4 MQTT连接
+1.	系统在设备、客户端与服务器之间统一采用 TLS 协议进行通信加密，提供上下行数据加密防止被窃听和中间人攻击，数据完整性校验使用消息摘要算法保证传输内容未被篡改，确保数据安全可靠。
+2.	基于jwt令牌的可信设备连接认证，jwt令牌由服务器为可信的设备颁发连接令牌。示意图如下： 
+5 获取连接令牌
+ 获取设备连接令牌为标准RESTful API接口，参考总体架构设计1.7接口设计章节。
+5.1 设备端获取挑战应答
+该接口用于向服务器请求获取一个随机数，该随机数在服务端存在有效期，防止被重放攻击。
+HTTP接口POST https://域名/api/auth/v1/mqtt/device/challenge
+Content-Type: application/json; charset=UTF-8
+Gversion: <后端服务版本>
+Glanguage: <语言en\zh-cn >
+GClient: <所属客户端>
+GApp-Version: <客户端版本>
+Gtime:<毫秒时间戳>
+Gnonce:<随机数UUID>
+GSign:<签名值>-使用会话密匙对签名
+入参：
+参数	类型	是否必填	描述
+vin	String	是	车辆唯一识别码
+model	int	是	型号0:x5 1:Cruise
+返回：
+值	类型	描述
+challenge	String	应答随机数
+exp	Int	有效期单位毫秒
+5.2 设备端获取连接令牌
+该接口用于获取挑战应答后调用获取MQTT连接令牌。
+HTTP接口POST https://域名/api/auth/v1/mqtt/device/getToken
+Content-Type: application/json; charset=UTF-8
+Gversion: <后端服务版本>
+Glanguage: <语言en\zh-cn >
+GClient: <所属客户端>
+GApp-Version: <客户端版本>
+Gtime:<毫秒时间戳>
+Gnonce:<随机数UUID>
+GSign:<签名值>-使用会话密匙对签名
+参数	类型	是否必填	描述
+vin	String	是	车辆唯一识别码
+model	int	是	型号0:x5 1:Cruise
+challenge	String	是	挑战应答随机数
+返回：
+值	类型	描述
+token	String	连接令牌
+exp	Int	有效期单位毫秒
+5.3 应用端获取连接令牌
+应用连接mqtt基于app已登录用户进行认证。
+HTTP接口POST https://域名/api/auth/v1/mqtt/user/getToken
+Content-Type: application/json; charset=UTF-8
+Token: <登录认证后的令牌>
+Gversion: <后端服务版本>
+Glanguage: <语言en\zh-cn >
+GClient: <所属客户端>
+GApp-Version: <客户端版本>
+Gtime:<毫秒时间戳>
+Gnonce:<随机数UUID>
+GSign:<签名值>
+入参：无
+返回：
+值	类型	描述
+token	String	连接令牌
+exp	Int	有效期单位毫秒
+5.4 使用令牌连接MQTT
+获取的连接令牌通过MQTT连接密码字段传输 React Native示例如下：
+
+import mqtt from 'mqtt/dist/mqtt';
+
+const jwtToken = "eyJhbGciOi...";
+const client = mqtt.connect('wss://mqtt.zq.com:8084/mqtt', {
+ protocolVersion: 5, //启用 MQTT 5
+ clientId: "userid001",
+ username: "user", //随意传值 已有令牌用户名不参与校验
+ password: jwtToken,
+ reconnectPeriod: 2000,
+ connectTimeout: 5000,
+});
+
+6 设备数据上报
+6.1 TOPIC结构规范
+设备数据上报总体TOPIC规范：
+vehicle/up/<设备类型>/<设备id>/<协议版本>/<数据类型>
+6.1.1 X5设备TOPIC
+整车信息(CAN): vehicle/up/x5/x001/1/can
+整车应用数据(info): vehicle/up/x5/x001/1/info
+车辆状态(STATUS): vehicle/up/x5/x001/1/status
+GPS: vehicle/up/x5/x001/1/gps
+雷达: vehicle/up/x5/x001/1/radar
+RGB-D: vehicle/up/x5/x001/1/rgbd
+IMU: vehicle/up/x5/x001/1/imu
+域控制器:vehicle/up/x5/x001/1/dc
+域控制器埋点:vehicle/up/x5/x001/1/event
+6.1.2 Cruise设备TOPIC
+车辆状态数据: vehicle/up/cruise/c001/1/status
+报警与故障数据: vehicle/up/cruise/c001/1/alarm
+驾驶行为与统计数据: vehicle/up/cruise/x001/1/db
+传感器信息: vehicle/up/cruise/x001/1/sensor
+域控制器系统状态: vehicle/up/cruise/x001/1/dc
+6.2 proto文件定义
+该文件proto文件仅定义通过MQTT上报的车辆数据。
+6.2.1 X5设备
+
+syntax = "proto3";
+
+package vehicle.up.x5;
+
+// 公共基础字段（所有子模块共享 字段号1-19）
+message BaseInfo {
+ string vin = 1; // 车辆唯一标识
+ int64 device_timestamp = 2; // 设备本地时间戳（毫秒）
+ int32 model = 3; // 设备类型：0:X5、1:Cruise 固定0
+string version = 4; //软件版本
+}
+
+// 1. 整车应用数据
+message VehicleInfo {
+ BaseInfo base = 1;
+ float speed_kmh = 20; // 行驶速度（单位：km/h，float32 精度）
+int32 remaining_mileage = 21; //剩余里程（单位：km，原float→int32兼容）
+int32 gear = 22; // 档位（整数类型，如1=前进、2=后退、0=空挡）
+int32 charging_status = 23; //充电状态（0=未充电、1=充电中、2=充满）
+int32 parking_status = 24; //驻车状态（0=未驻车、1=已驻车）
+int32 assist_mode = 25; //辅助模式（0=关闭、1=开启）
+int32 battery = 26; //电池电量（单位：%，原float→int32，如50=50%）
+int32 left_brakests = 27; // 左刹车状态 0 关闭 1 打开
+int32 right_brakests = 28; // 右刹车状态 0 关闭 1 打开
+float total_mileage = 29; // 总行驶里程（单位：m，累计不重置）
+float current_interval_mileage = 30; // 当次行驶里程（单位：m，1分钟重置一次）
+}
+//2. 车辆状态数据 被动上传 字段内容修改才上传 
+//各类型可空 空代表未变动
+message VehicleStatus {
+ BaseInfo base = 1;
+ optional int32 recharge_status = 20; // 回充状态（0=未回充、1=回充中、2=回充完成）
+ optional int32 summon_status = 21; // 召唤状态（0=未召唤、1=召唤中、2=召唤完成）
+optional int32 follow_me_status = 22; // 跟我走状态（0=未跟随、1=跟随中）
+optional string current_mode_chinese = 23; // 中文模式名称（空=避障关闭，非空=避障开启，如"巡航"）
+optional int32 alarmstatus = 30; // 异常提醒
+}
+
+// 3. GPS 信息
+message GPSData {
+ BaseInfo base = 1;
+ double timestamp = 20; //采样时间戳
+ double latitude = 21; //纬度
+ double longitude = 22; //经度
+ double altitude = 23; //海拔
+ float velocity_n = 24; //北向速度分量
+ float velocity_e = 25; //东向速度分量
+ float velocity_u = 26; //垂直速度分量
+ uint32 fix_type = 27; //定位状态0=无效，1=单点，2=RTK浮动，3=RTK固定
+ uint32 num_satellites = 28; //卫星数量
+ float hdop = 29; //水平精度因子
+}
+
+// 4. 雷达信息
+message RadarData {
+ BaseInfo base = 1;
+
+ double timestamp = 20; //采样时间
+float angle_min = 21; //起始角度
+ float angle_max = 22; //结束角度
+ float angle_increment = 23; //每步角度增量
+ float range_min = 24; //最小量程
+ float range_max = 25; //最大量程
+
+ repeated float ranges = 30; //距离数组（每个角度对应一条射线）
+ repeated float intensities = 31; //反射强度（部分雷达可选）
+
+ string frame_id = 40; //坐标系ID
+}
+
+// 5. 域控制器信息
+message DomainControllerData {
+ BaseInfo base = 1;
+
+ float cpu_usage = 20; //CPU利用率
+ float mem_usage = 21; //内存利用率
+ uint32 network_status = 22; // 网络状态0离线 / 1连接中 / 2正常
+ int32 error_code = 23; //错误码（0=正常）
+
+ string robot_mode = 30; //当前模式（安全 巡航 回充等）
+ string vehicle_id = 31; //车辆ID
+}
+
+// 6. 埋点事件
+message EventLog {
+ BaseInfo base = 1;
+
+ string from = 20; //数据来源，固定值 "vlago"
+ string type = 21; //消息类型，固定值 "trigger"
+ string event = 22; //事件名称，如 "mode_switch_start"
+
+
+ int64 timestamp = 23; // ms
+ string timestamp_str = 24; //时间戳字符串 "YYYY-MM-DD HH:MM:SS"
+
+ string node_name = 25; //ROS节点名称
+ string file = 26; //源文件路径
+ int32 line = 27; //源代码行号
+ string function = 28; //函数名称
+
+ map<string, string> data = 30; //业务数据键值对
+}
+
+// 7. 总数据容器
+message VehicleMessage {
+ BaseInfo base = 1;
+
+ VehicleInfo info = 10;
+ VehicleStatus status = 11;
+ GPSData gps = 11;
+ RadarData radar = 12;
+ DomainControllerData domain_controller = 13;
+ repeated EventLog event_logs = 14;
+}
+
+
+6.2.2 Cruise设备
+syntax = "proto3";
+
+package vehicle.up.cruise;
+
+// 公共基础字段（所有子模块共享，字段号1-19）
+message BaseInfo {
+ string vin = 1; // 车辆唯一标识
+ int64 device_timestamp = 2; // 设备本地时间戳（毫秒）
+ int32 model = 3; // 设备类型：0:X5、1:Cruise 固定1
+ string version = 4; // 软件版本
+}
+
+// 1. 车辆状态数据
+message VehicleState {
+ BaseInfo base = 1;
+
+ int32 gps_status = 20; //GPS状态 0=无效, 1=有效
+ double longitude = 21; // 经度
+ double latitude = 22; // 纬度
+ float speed = 23; // 车速km/h
+ float direction = 24; //航向角
+ float mileage = 25; // km 总里程
+ float power_level = 26; // 电量
+ int32 engine_status = 27; // 动力系统状态0=熄火,1=启动
+ int32 key_status = 28; // 车辆电源0=OFF,1=ACC,2=ON,3=Start
+}
+
+// 2. 报警与故障数据
+message AlarmData {
+ BaseInfo base = 1;
+
+ string alarm_id = 20; // 报警代码
+ string alarm_type = 21; // 报警类型说明
+ int32 alarm_level = 22; // 1=紧急,2=严重,3=一般,4=提示
+
+ string fault_code = 23; // DTC
+ string fault_desc = 24; // 描述
+ string additional_info = 25; // 扩展信息（直接字符串，不用JSON）
+}
+
+// 3. 驾驶行为与统计数据
+message DrivingBehavior {
+ BaseInfo base = 1;
+
+ string trip_id = 20; //单次行程的唯一标识
+
+ int64 start_time = 30; // 行程开始 UTC ms
+ int64 end_time = 31; // 行程结束 UTC ms
+
+ float trip_mileage = 40; // 行程里程km
+ float avg_speed = 41; // 平均车速km/h
+ float max_speed = 42; // 最高车速km/h
+
+ int32 sharp_accel_count = 50; // 急加速次数
+ int32 sharp_brake_count = 51; // 急刹车次数
+ int32 sharp_turn_count = 52; // 急转弯次数
+}
+
+// 4. 传感器信息
+message SensorInfo {
+ BaseInfo base = 1;
+ double timestamp = 20; //采样时间
+ string sensor_type = 21;//传感器类型Camera、Radar、Lidar、Ultrasonic
+ string sensor_id = 22; // 传感器唯一ID
+
+ int32 sensor_status = 23;//传感器状态0正常,1故障,2校准中,3数据无效
+ string sensor_data = 24; // 字符串描述感知结果
+
+ float signal_strength = 30; //信号强度dB
+ float fov = 31; //传感器的视场角度，例：120.0°
+ int32 calibration_status = 32; //校准状态0=已校准,1=未,2=需校准
+}
+
+// 5. 域控制器系统状态
+message DomainControllerStatus {
+ BaseInfo base = 1;
+
+ string domain_name = 20; // 控制器名称 ADAS / IVI / VCU
+ string hw_part_number = 21; // 硬件版本号
+ string sw_version = 22; // 软件版本
+
+ int64 boot_time = 30; //本次启动时间ms
+ int64 uptime = 31; //持续运行时间s
+
+ float cpu_usage = 40; // CPU占用率%
+ repeated float cpu_core_usage = 41; //各核CPU占用率
+
+ int32 memory_total = 42; //总内存MB
+ int32 memory_used = 43; //已用内存MB
+ float memory_usage = 44; //内存使用率%
+
+ int32 storage_total = 45; //总存储空间GB
+ int32 storage_used = 46; //已用存储空间GB
+ float storage_usage = 47; //存储使用率%
+
+ float network_usage = 48; //网络使用率%
+
+ string temperatures = 49; //温度信息JSON字符串
+ repeated string process_list = 60; //在运行的关键进程名称
+ string system_alert = 70; //统级别的告警信息
+}
+
+// 顶层消息封装（可用于 MQTT）
+message CruiseMessage {
+ BaseInfo base = 1;
+
+ VehicleState vehicle_state = 10;
+ AlarmData alarm_data = 11;
+ SensorInfo sensor_info = 12;
+ DomainControllerStatus domain_status = 13;
+ DrivingBehavior driving_behavior = 14;
+}
+
+6.3 日志文件
+日志文件由设备通过阿里云OSS提供的客户端SDK自行上传至OSS存储桶文件目录为logs/<设备型号>/<日期>/<文件业务类型>/
+X5: logs/x5/<日期>/<文件业务类型>/
+Cruise: logs/cruise/<日期>/<文件业务类型>/
+日志文件/压缩包命名规范：<YYYYMMDD>/<设备ID>_<毫米级时间戳/UUID>_<自定义类型/无>.<文件后缀>
+示例：
+X5: 1.整车CAN：logs/x5/20251119/can/X001_1731795893000_info.zip
+2.图像+IMU+can组合：logs/x5/20251119/zip/X001_1731795893000_info.zip
+3.日志：logs/x5/20251119/log/X001_1731795893000_info.zip
+4.埋点：logs/x5/20251119/hotlog/X001_1731795893000_info.zip
+Cruise: logs/Cruise/20251119/log/C001_1731795893000_info.zip
+7 设备控制命令
+由app发送的设备控制命令协议，分app到服务端协议和服务端下发设备控制命令协议。
+7.1 授权控制令牌
+授权控制令牌由【指令管理中心】颁发，该令牌由JWT构成，包含授权有效期和授权范围。
+7.1.1 C++解析JWT
+
+#include <jwt-cpp/jwt.h>
+#include <iostream>
+
+int main() {
+ // 示例 JWT token
+ std::string token = "your.jwt.token";
+
+ try {
+ // 解析 JWT
+ auto decoded = jwt::decode(token);
+
+ // 获取整个 payload 的 claims
+ auto claims = decoded.get_payload_claims();
+ std::cout << "All claims:" << std::endl;
+ for (auto &e : claims) {
+ std::cout << e.first << ": " << e.second.to_json() << std::endl;
+ }
+
+ // 获取自定义 claim，例如 key
+ if (decoded.has_payload_claim("key")) {
+ std::string dataSignKey = decoded.get_payload_claim("key").as_string();
+ std::cout << "key: " << dataSignKey << std::endl;
+ } else {
+ std::cout << "key not found in JWT." << std::endl;
+ }
+
+ } catch (const std::exception &e) {
+ std::cerr << "JWT parse error: " << e.what() << std::endl;
+ }
+
+ return 0;
+}
+
+7.1.2 React Native解析JWT
+安装依赖：npm install jwt-decode
+
+import jwtDecode from "jwt-decode";
+
+const token = "your.jwt.token";
+
+try {
+ const claims = jwtDecode(token);
+ //获取JWT载体
+ console.log("claims:", claims);
+ //从载体中获取KEY
+ console.log("key:", claims.key);
+ //获取授权过期时间
+ console.log("expireAt:", claims.exp);
+} catch (e) {
+ console.error("JWT 解析失败:", e);
+}
+
+7.2 TOPIC定义
+App发送请求控制：app/cmd/{用户id}/{设备类型}/{设备id}/{协议版本}/exe
+App接收服务端消息：app/cmd/{用户id }/{设备类型}/{设备id}/{协议版本}/ack
+如：app/cmd/u001/x5/x001/1/exe
+服务端向设备发送控制：vehicle/cmd/<设备类型>/<设备id>/<协议版本>/exe
+设备向服务端回执：vehicle/cmd/<设备类型>/<设备id>/<协议版本>/ack
+7.3 proto文件定义
+各客户端数据需使用会话密匙对进行签名和验签，服务端返回和app发送、设备接收和设备回执均需进行数据验签。MQTT5协议user-properties添加相关签名信息。
+msg.userProperties = {
+ gtime: gtime, // 时间戳
+ gnonce: gnonce, // 随机数
+ gsign: gsign // Base64 签名字符串
+ };
+7.3.1 app请求控制
+
+syntax = "proto3";
+
+package app.cmd.exe;
+
+// 1. APP 请求控制设备
+message AppCmdExe {
+ string auth_token = 1; //app登录后的认证令牌
+ string cmd_token = 2; //设备授权控制令牌
+ string vin = 3; //车辆唯一标识
+int32 model = 4; // 设备类型：0:X5、1:Cruise
+ int64 timestamp = 5; // 毫秒时间戳
+
+ string cmd_id = 10; // 控制指令唯一ID（App生成）
+ string cmd = 11; // 指令
+ int32 ttl = 12; //指令有效时间单位毫秒
+
+ string params = 20; //控制参数
+}
+
+7.3.2 app接收回执
+
+syntax = "proto3";
+
+package app.cmd.res;
+
+// 2. 服务端回执给 APP
+message AppCmdAck {
+ string vin = 1; //车辆唯一标识
+int32 model = 2; // 设备类型：0:X5、1:Cruise
+ int64 timestamp = 3; //毫秒时间戳
+
+ string user_id = 4; //用户id
+ string cmd_id = 5; //控制命令唯一id与exe发送时一致
+ 
+ int32 status = 6; //业务状态0成功 1失败 2执行中
+ 
+ int32 error_code = 10; //错误码status=1时该值有意义1失败 2设备离线 3无操作权限 10以上由设备定义
+ string error_message = 11; //错误描述
+}
+
+7.3.3 服务端向设备发送控制
+
+syntax = "proto3";
+
+package vehicle.cmd.exe;
+
+//控制设备
+message VehicleCmdExe {
+ string vin = 3; //车辆唯一标识
+int32 model = 4; // 设备类型：0:X5、1:Cruise
+ int64 timestamp = 5; // 毫秒时间戳
+ string user_id = 6; //控制的用户id
+
+ string cmd_id = 10; // 控制指令唯一ID（App生成）
+ string cmd = 11; // 指令
+int32 ttl = 12; //指令有效时间单位毫秒
+
+ string params = 20; //控制参数
+}
+
+7.3.4 设备向服务端回执
+
+syntax = "proto3";
+
+package vehicle.cmd.ack;
+
+//设备给服务端回执
+message VehicleCmdAck {
+ string vin = 1; //车辆唯一标识
+int32 model = 2; // 设备类型：0:X5、1:Cruise
+ int64 timestamp = 3; //毫秒时间戳
+
+ string user_id = 4; //用户id
+ string cmd_id = 5; //控制命令唯一id与exe发送时一致
+ 
+ int32 status = 6; //业务状态0成功 1失败 2执行中
+ 
+ int32 error_code = 10; //错误码status=1时该值有意义1失败 2设备离线 3无操作权限 10以上由设备定义
+ string error_message = 11; //错误描述
+}
+
+
+8 设备OTA升级
+8.1 升级规范
+设备OTA升级分全量设备升级和按设备标签进行灰度发布升级。
+8.2 获取自身标签列表
+该接口用获取当前设备的标签列表
+HTTP接口POST https://域名/api/device/v1/device/getTags
+Content-Type: application/json; charset=UTF-8
+Gversion: <后端服务版本>
+Glanguage: <语言en\zh-cn >
+GClient: <所属客户端>
+GApp-Version: <客户端版本>
+Gtime:<毫秒时间戳>
+Gnonce:<随机数UUID>
+GSign:<签名值>-使用会话密匙对签名
+参数	类型	是否必填	描述
+vin	String	是	车辆唯一识别码
+model	int	是	型号0:x5 1:Cruise
+返回（集合）：
+值	类型	描述
+tagName	String	标签名称
+tagCode	String	标签编号
+tagValues	List	标签值列表
+…valueCode	String	值编号
+…valueName	String	值名称
+设备需在成功获取自身标签列表后参照8.3.2进行标签TOPIC订阅。
+8.3 TOPIC规范
+8.3.1 全量OTA
+全量OTA升级：vehicle/ota/all/<设备型号>/<协议版本>/up
+x5设备：vehicle/ota/all/x5/1/up
+cruise设备：vehicle/ota/all/cruise/1/up
+8.3.2 标签灰度OTA
+标签灰度OTA升级：vehicle/ota/tag/<设备型号>/<标签编号>/<标签值编号><协议版本>/up
+如一台x5设备拥有测试标签(test),测试标签值是研发测试(devtest):
+vehicle/ota/tag/x5/test/devtest/1/up
+ 注意：一台设备拥有多个标签和其对应的标签值，根据8.2接口获取的自身标签列表进行标签灰度OTA升级TOPIC的消息监听。
+8.3.3 OTA升级回执
+设备进行OTA升级时通过改TOPIC发送升级进度报告至服务端。
+TOPIC为：vehicle/ota/up/1/ack
+8.3.4 标签变动
+该TOPIC用于设备实时接收自身的标签变动通知。
+TOPIC为：vehicle/ota/change/<设备型号>/<设备id>/<协议版本>/notic
+8.4 proto文件定义
+8.4.1 OTA升级
+
+syntax = "proto3";
+
+package vehicle.ota.up;
+
+//升级通知
+message VehicleOtaUp {
+ string up_id = 1; // 本次升级的唯一ID
+ int32 up_type = 2; // 升级类型（0all 1tag）
+ int32 action_type = 3; // 升级操作类型（0升级1回滚）
+ int64 exp_time = 4; // 升级过期时间戳，升级有效期 0为长期
+ int64 timestamp = 6; // 请求时间戳 
+repeated EcuUpgrade ecu_upgrades = 7; // 多个ECU的升级信息
+ string up_text = 8; //升级信息描述
+ 
+ // ECU升级包信息
+ message EcuUpgrade {
+ string ecu_id = 1; // ECU ID（如：主控、车轮控制器等）
+ string version = 2; // 固件版本号
+ string upgrade_url = 3; // 升级包下载URL
+ string md5= 4; // 升级包的校验md5
+ }
+}
+
+8.4.2 OTA升级回执
+
+syntax = "proto3";
+
+package vehicle.ota.up;
+
+//升级回执
+message VehicleOtaAck {
+ string up_id = 1; // 本次升级的唯一ID，回执时用来匹配
+ string vin = 2; //车辆唯一标识
+int32 model = 3; // 设备类型：0:X5、1:Cruise
+ int64 timestamp = 4; // 毫秒时间戳
+ repeated EcuUpgradeStatus status = 5; // 每个ECU的升级状态反馈
+ 
+ // ECU的升级状态
+ message EcuUpgradeStatus {
+string ecu_id = 1; // ECU ID
+string version = 2; // 升级版本号
+string status = 4; // 当前升级状态0完成 1待升级 2下载中 3升级中 4失败
+ string message = 5; // 失败信息（如果有）
+
+ }
+}
+
+
+
+8.4.3 标签变动
+
+syntax = "proto3";
+
+package vehicle.tag;
+
+//标签变动
+message VehicleTagChange {
+ string vin = 1; //车辆唯一标识
+int32 model = 2; // 设备类型：0:X5、1:Cruise
+ int64 timestamp = 3; // 毫秒时间戳
+repeated DeviceTag device_tags = 4; // 设备标签列表
+ 
+ // 每个设备的标签信息
+ message DeviceTag {
+ string tag_name = 1; // 标签名称
+ string tag_code = 2; // 标签编号
+ repeated TagValue tag_values = 3; // 标签值列表
+ }
+
+ // 标签值结构
+ message TagValue {
+ string value_code = 1; // 标签值编号
+ string value_name = 2; // 标签值名称
+ }
+}
+
+
+8.5 接口补获
+设备离线无法获取升级mqtt订阅消息时，在线后通过http接口请求获取最新的OTA升级信息。
+HTTP接口POST https://域名/api/device/v1/ota/getUp
+Content-Type: application/json; charset=UTF-8
+Gversion: <后端服务版本>
+Glanguage: <语言en\zh-cn >
+GClient: <所属客户端>
+GApp-Version: <客户端版本>
+Gtime:<毫秒时间戳>
+Gnonce:<随机数UUID>
+GSign:<签名值>-使用会话密匙对签名
+参数	类型	是否必填	描述
+vin	String	是	车辆唯一识别码
+model	int	是	型号0:x5 1:Cruise
+返回（集合）：使用会话密匙对验签
+值	类型	描述
+upId	String	本次升级唯一标识
+upType	Int	升级类型（0all 1tag）
+升级过期时间戳，升级有效期 0为长期
+actionType 	Int	升级操作类型（0升级1回滚）
+expTime	Long	升级过期时间戳，升级有效期 0为长期
+timestamp	Long	服务器时间戳
+upText	String	升级描述
+ecuUpgrades	List	固件列表
+…ecuId	String	ECU
+…version	String	升级版本
+…upgradeUrl	String	固件下载地址
+…md5	String	固件md5校验
+9 远程控制
+远程控制使用MQTT协议由服务端与设备进行消息传递。
+注意：该功能9.2所有协议均需使用会话秘钥对双向验签。
+9.1 TOPIC规范
+9.1.1 启动/结束控制
+设备订阅此topic收到服务端发送的启动控制命令后加入RTC视频会议共享多路视频后进入远程控制模式(如果有的话)，结束控制时退出远程控制并退出视频会议。
+vehicle/ctr/<设备类型>/<设备ID>/<协议版本>/call
+示例x5: vehicle/ctr/x5/x001/1/call
+9.1.2 设备回执
+设备收到启动控制命令和操作命令后进行命令的回执
+vehicle/ctr/<设备类型>/<设备ID>/<协议版本>/ack
+示例x5: vehicle/ctr/x5/x001/1/ack
+9.1.3 服务端下放操作命令
+服务端收到设备的启动控制成功回执后可通过该topic下放操作命令
+vehicle/ctr/<设备类型>/<设备ID>/<协议版本>/cmd
+示例x5: vehicle/ctr/x5/x001/1/cmd
+9.1.4 设备运行时状态上报
+在远程控制过程中设备周期性的上报自身的运行时状态到服务端。
+vehicle/ctr/<设备类型>/<设备ID>/<协议版本>/status
+示例x5: vehicle/ctr/x5/x001/1/status
+9.2 proto文件定义
+9.2.1 启动/结束控制
+syntax = "proto3";
+
+package vehicle.ctr.call;
+
+message VehicleCtrCall {
+ string ctr_id = 1; // 本轮控制的唯一编号
+ string ctr_user_id = 2; //控制人的id
+ int64 seq = 3; //命令序号 防止设备重复执行
+ int32 type = 4; //类型0启动 1结束
+ int64 timestamp = 5; //毫秒时间戳
+ string rtc_room_id = 6; //rtc的房间id
+ int64 ttl_timeout = 7; //指令过期时长 毫秒
+}
+
+9.2.2 设备回执
+syntax = "proto3";
+
+package vehicle.ctr.ack;
+
+message VehicleCtrAck {
+ string ctr_id = 1; // 本轮控制的唯一编号
+ string ctr_user_id = 2; //控制人的id
+int64 seq = 3; //命令序号 防止设备重复执行
+ int64 timestamp = 4; //设备毫秒时间戳
+ string rtc_room_id = 5; //rtc的房间id
+ int32 ack_type = 6; //回执类型 0call回执 1end回执 2操作命令
+ int32 code = 7; // 0成功；非0失败
+ string message = 9; // 错误信息（可空）
+}
+
+
+
+9.2.3 服务端下放操作命令
+syntax = "proto3";
+
+package vehicle.ctr.cmd;
+
+message VehicleCtrCmd {
+ string ctr_id = 1; // 本轮控制的唯一编号
+ string ctr_user_id = 2; //控制人的id
+ int64 timestamp = 3; //设备毫秒时间戳
+
+ int64 seq = 4; //命令序号 防止设备重复执行
+ int32 cmd = 5; //0停止 1前进 -1后退
+ double speed = 6; //速度(km/h)
+ double speed_limit = 7; //限速(km/h)限制的最大速度
+ double direction = 8; //转向角度大于0向右 小于0向左
+ int32 brake = 9; //是否踩刹车0未刹车 1刹车 刹车时速度为0
+ int32 b_force = 10; //刹车力度0-100
+ int64 d_ms = 11; //本次指令执行时长 毫秒
+ int64 ttl_timeout = 5; //指令过期时长单位毫秒超时设备自动丢
+}
+
+9.2.4 设备运行时状态上报
+syntax = "proto3";
+
+package vehicle.ctr.status;
+
+message VehicleCtrStatus {
+ string ctr_id = 1; // 本轮控制的唯一编号
+ string ctr_user_id = 2; //控制人的id
+ int64 timestamp = 3; //设备毫秒时间戳
+
+ int64 seq = 4; //命令序号 防止设备重复执行
+ int32 cmd = 5; //0停止 1前进 -1后退
+ double speed = 6; //速度(km/h)
+ double speed_limit = 7; //限速(km/h)限制的最大速度
+ double steering = 8; //转向角度大于0向右 小于0向左
+ int32 brake = 9; //是否踩刹车0未刹车 1刹车 刹车时速度为0
+ int32 b_force = 10; //刹车力度0-100
+ double battery = 11; // 电量百分比
+ //定位信息 =====
+ double latitude = 12; // 纬度（WGS84）
+ double longitude = 13; // 经度（WGS84）
+ double altitude = 14; // 海拔（米）
+ int32 error_code = 90; // 运行时错误码
+ string error_message = 91; // 错误描述
+}
+

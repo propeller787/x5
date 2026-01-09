@@ -1,0 +1,661 @@
+#include "handle_can_adapter.h"
+#include "../chassis/chassis_can_adapter.h"
+#include "sensor_utils.hpp"
+#include <linux/can.h>
+
+using namespace sensor::chassis;
+using namespace sensor::utils;
+
+HandleCanAdapter::HandleCanAdapter(std::unordered_map<std::string, std::shared_ptr<CanTransreceiver>> devs) : CanAdapter(devs, "handle") {
+    car_info_.vx = 0;
+    car_info_.w = 0;
+    car_info_.speed = 0;
+    car_info_.electricquantity = 0;
+    car_info_.remainingmileage = 0;
+    car_info_.gear = 1;
+    car_info_.helpcar = 0;
+    car_info_.sos = 0;
+    car_info_.turnswitch = -1;
+    car_info_.lighttype = -1;
+    car_info_.lockswitch = 1;
+    car_info_.health = -1;
+    car_info_.getcharging = -1;
+    using namespace std::placeholders;
+    message_unpack_table_ = {
+        {HANDLE_FRAME_ID, std::bind(&HandleCanAdapter::onReceive8014Info, this, _1, _2, _3)},
+        {ODRIVE_TOP_INPUT_VEL_FRAME_ID, std::bind(&HandleCanAdapter::onReceive220Info, this, _1, _2, _3)},
+        {ODRIVE_VBUS_VOLTAGE_FRAME_ID, std::bind(&HandleCanAdapter::onReceive217Info, this, _1, _2, _3)},
+        //{ ODRIVE_INPUT_VEL_FRAME_ID, std::bind(&HandleCanAdapter::onReceive219Info, this, _1, _2, _3) },
+        {ODRIVE_COUNT_FRAME_ID, std::bind(&HandleCanAdapter::onReceive21aInfo, this, _1, _2, _3)},
+        {ODRIVE_VEL_ESTIMATE_FRAME_ID, std::bind(&HandleCanAdapter::onReceive21cInfo, this, _1, _2, _3)},
+        {ODRIVE_KEY_STATUS_FRAME_ID, std::bind(&HandleCanAdapter::onReceive225Info, this, _1, _2, _3)},
+        {ODRIVE_COLOUR_SCREEN_FRAME_ID, std::bind(&HandleCanAdapter::onReceive224Info, this, _1, _2, _3)},
+        {ODRIVE_VES_INFOR_FRAME_ID, std::bind(&HandleCanAdapter::onReceive222Info, this, _1, _2, _3)},
+        {ODRIVE_CELL_FRAME_ID, std::bind(&HandleCanAdapter::onReceive101Info, this, _1, _2, _3)},
+        {ODRIVE_CELL_PACK_FRAME_ID, std::bind(&HandleCanAdapter::onReceive100Info, this, _1, _2, _3)},
+        {ODRIVE_LEFT_DRIVER_FRAME_ID, std::bind(&HandleCanAdapter::onReceive201Info, this, _1, _2, _3)},
+        {ODRIVE_RIGHT_DRIVER_FRAME_ID, std::bind(&HandleCanAdapter::onReceive301Info, this, _1, _2, _3)},
+        {ODRIVE_ROCKER_FRAME_ID, std::bind(&HandleCanAdapter::onReceive226Info, this, _1, _2, _3)},
+
+        {ODRIVE_AXLE_1_ERROR_FRAME_ID, std::bind(&HandleCanAdapter::onReceive270Info, this, _1, _2, _3)},
+        {ODRIVE_AXLE_2_ERROR_FRAME_ID, std::bind(&HandleCanAdapter::onReceive271Info, this, _1, _2, _3)},
+        {ODRIVE_BRAKE_ERROR_FRAME_ID, std::bind(&HandleCanAdapter::onReceive272Info, this, _1, _2, _3)},
+        {ODRIVE_DETAILED_ERRORS_FRAME_ID, std::bind(&HandleCanAdapter::onReceive27FInfo, this, _1, _2, _3)},
+
+        {ODRIVE_UPPER_STATUS_ERROR_FRAME_ID, std::bind(&HandleCanAdapter::onReceive280Info, this, _1, _2, _3)},
+        {ODRIVE_ROCKER_ERROR_FRAME_ID, std::bind(&HandleCanAdapter::onReceive281Info, this, _1, _2, _3)},
+        {ODRIVE_MOTOR_ERROR_FRAME_ID, std::bind(&HandleCanAdapter::onReceive282Info, this, _1, _2, _3)},
+    };
+    std::map<uint16_t, unsigned int> canIdMap = {
+        {HANDLE_FRAME_ID, CAN_EFF_MASK},
+        {ODRIVE_TOP_INPUT_VEL_FRAME_ID, CAN_EFF_MASK},
+    };
+    
+    // 创建CAN数据发布器 - 实时发布CAN数据到话题供recorder订阅
+    can_frame_publisher_ = this->create_publisher<can_msgs::msg::Frame>("/can/frames", 100);
+    
+    RCLCPP_INFO(logger_, "CAN data publisher created on topic: /can/frames");
+}
+
+void HandleCanAdapter::onReceiveCanMessage(const std::string &dev, int fid, muduo::net::Buffer &buffer) {
+    // 发布CAN数据到话题供recorder订阅
+    publishCanFrame(dev, fid, buffer);
+    
+    auto iter = message_unpack_table_.find(fid);
+    if (iter == message_unpack_table_.end()) {
+        // RCLCPP_WARN(logger_, "No Handle to unpack frame %04x", fid);
+        return;
+    }
+
+    iter->second(dev, fid, buffer);
+}
+void HandleCanAdapter::onReceiveGnssMessage(const interface::msg::Gnss::SharedPtr msg) {}
+
+int16_t parseTwoBytesToInt16(uint8_t byte1, uint8_t byte2) {
+    // Function definition
+    return (byte1 << 8) | byte2;
+}
+
+// 701
+void HandleCanAdapter::onReceive8014Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    // return;
+    // RCLCPP_INFO(logger_, "onReceive8014Info --- %04x %d %s", fid, buffer.readableBytes(),
+    //     encodeToHexString(buffer.toStringPiece().as_string()).c_str());
+    const uint8_t *data = reinterpret_cast<const uint8_t *>(buffer.peek());
+    auto now = muduo::Timestamp::now();
+    // D0 左轮速度值低8位 D1 左轮速度值高8位 D2 右轮速度值低8位 D3 右轮速度值高8位
+    uint8_t lowByte = data[0];
+    uint8_t highByte = data[1];
+    int16_t leftData = parseTwoBytesToInt16(highByte, lowByte);
+
+    lowByte = data[2];
+    highByte = data[3];
+    int16_t hightData = parseTwoBytesToInt16(highByte, lowByte);
+
+    float pvx, pw = 0.0;
+    distributionSpeed(leftData, hightData, pvx, pw);
+    geometry_msgs::msg::Twist twist;
+    twist.linear.x = pvx;
+    twist.angular.z = pw;
+    control_pubs_->publish(twist);
+}
+// 假设我们有一个简化的电压-电量映射表（这些值是根据经验得到的，并不准确）
+std::map<double, double> voltageToCapacityMapH = {
+    {3.2 * 7, 0.0},  // 当电压低于3.2V时，认为电量为0%
+    {3.4 * 7, 10.0}, // 电压3.4V对应10%电量
+    {3.6 * 7, 30.0}, // 电压3.6V对应30%电量
+    {3.7 * 7, 70.0}, // 电压3.7V对应70%电量
+    {3.8 * 7, 90.0}, // 额定电压3.8V对应90%电量
+    {4.2 * 7, 100.0} // 当电压高于4.0V时（通常不会这样），认为电量为100%
+};
+
+// 线性插值函数，用于估算电压和映射表中两个点之间的电量
+double linearInterpolateH(double x, const std::pair<double, double> &p1, const std::pair<double, double> &p2) {
+    return p1.second + (x - p1.first) * (p2.second - p1.second) / (p2.first - p1.first);
+}
+
+// 根据电压估算电量的函数
+double estimateCapacityFromVoltageH(double voltage) {
+    // 找到电压所在的区间
+    auto it = voltageToCapacityMapH.lower_bound(voltage);
+
+    if (it == voltageToCapacityMapH.begin()) {
+        // 电压低于映射表中的最小值
+        return 0.0;
+    } else if (it == voltageToCapacityMapH.end()) {
+        // 电压高于映射表中的最大值
+        return 100.0;
+    } else {
+        // 电压位于两个映射点之间，进行线性插值
+        auto prev = std::prev(it);
+        return linearInterpolateH(voltage, *prev, *it);
+    }
+}
+void HandleCanAdapter::onReceive217Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_vbus_voltage_t obj;
+    auto piece = buffer.toStringPiece();
+    if (piece.size() < 4) {
+        return;
+    }
+    int retv = odrive_vbus_voltage_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    double estimeat = estimateCapacityFromVoltageH(obj.vbus_voltage1);
+    if ((int)estimeat > 10 && (int)estimeat < 100) {
+        estimeat = ((int)estimeat / 10 + 1) * 10;
+    }
+    // car_info_.electricquantity = (int)estimeat;
+
+    // std::cout << " HandleCanAdapter::onReceive217Info - electricquantity " << car_info_.electricquantity << std::endl;
+}
+
+void HandleCanAdapter::onReceive21aInfo(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_count_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_count_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    auto message = interface::msg::Encoder();
+    message.header.stamp = this->now();
+    message.header.frame_id = "base_link";
+    message.left_wheel_count = obj.count0;
+    message.right_wheel_count = obj.count1;
+    control_car_encoder_pubs_->publish(message);
+    // std::cout << " HandleCanAdapter::onReceive21aInfo 左 " << obj.count0
+    //           << " 右 " << obj.count1 << std::endl;
+}
+void HandleCanAdapter::onReceive21cInfo(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_vel_estimate_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_vel_estimate_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    float pvx, pw = 0.0;
+    ZqDistributionSpeed(obj.vel_estimate0, obj.vel_estimate1, pvx, pw);
+    auto message = geometry_msgs::msg::TwistStamped();
+    message.header.stamp = this->now();
+    message.header.frame_id = "base_link";
+    message.twist.linear.x = pvx;
+    message.twist.linear.y = 0.0;
+    message.twist.linear.z = 0.0;
+    message.twist.angular.x = 0.0;
+    message.twist.angular.y = 0.0;
+    message.twist.angular.z = pw;
+    if (pvx <= 0.0) {
+        speed_status_ = false;
+    } else {
+        speed_status_ = true;
+    }
+    // car_info_.vx = std::abs(message.twist.linear.x) > 0.001 ? 1 : 0;
+    // car_info_.w = std::abs(message.twist.angular.z) > 0.001 ? 1 : 0;
+    car_info_.speedkmh = std::abs(message.twist.linear.x * 3.6); // 转换为km/h
+    car_info_.speed = car_info_.speedkmh;
+    //
+    // std::cout << " HandleCanAdapter::onReceive21cInfo car_info_.speedkmh " << car_info_.speedkmh << std::endl;
+    control_car_spubs_->publish(message);
+}
+
+void HandleCanAdapter::onReceive220Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_top_input_vel_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_top_input_vel_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    float pvx, pw = 0.0;
+    ZqDistributionSpeed(obj.input_vel0, obj.input_vel1, pvx, pw);
+    geometry_msgs::msg::Twist twist;
+    twist.linear.x = pvx;
+    twist.linear.y = 0.0;
+    twist.linear.z = 0.0;
+    twist.angular.x = 0.0;
+    twist.angular.y = 0.0;
+    twist.angular.z = pw;
+    control_pubs_->publish(twist);
+    // std::cout << " -----------twist.linear.x -----------" << std::fixed << std::setprecision(3) << twist.linear.x << std::endl;
+    if (twist.linear.x < -0.01 && !backup_car_) {
+        if (!is_backup_car_) {
+            last_backup_car_time_ = muduo::Timestamp::now();
+            is_backup_car_ = true;
+        } else {
+            auto now = muduo::Timestamp::now();
+            if (muduo::timeDifference(now, last_backup_car_time_) > 0.1) {
+                auto message = interface::msg::BackupCar();
+                message.header.stamp = this->now();
+                message.header.frame_id = "base_link";
+                message.is_backup_car = true;
+                backup_car_pubs_->publish(message);
+                backup_car_ = true;
+                is_backup_car_ = false;
+            }
+        }
+    } else if (twist.linear.x >= -0.01 && backup_car_) {
+        if (!is_backup_car_) {
+            last_backup_car_time_ = muduo::Timestamp::now();
+            is_backup_car_ = true;
+        } else {
+            auto now = muduo::Timestamp::now();
+            if (muduo::timeDifference(now, last_backup_car_time_) > 0.1) {
+                auto message = interface::msg::BackupCar();
+                message.header.stamp = this->now();
+                message.header.frame_id = "base_link";
+                message.is_backup_car = false;
+                backup_car_pubs_->publish(message);
+                backup_car_ = false;
+                is_backup_car_ = false;
+            }
+        }
+    }
+}
+
+void HandleCanAdapter::onReceiveControlMessage(const geometry_msgs::msg::Twist::SharedPtr msg) {
+    if (ZQZY) {
+        float pcmda, pcmdb = 0.0;
+        // 过滤最大速度 不超过6迈
+        if (msg->linear.x > 1.667) {
+            msg->linear.x = 1.666;
+        }
+        if (speep_dump_count_ > 0) {
+            speep_dump_count_--;
+            if (speep_dump_count_ == 0) {
+                speedbump_flag_ = false;
+                send90108();
+            }
+            if (msg->linear.x > 0.4) {
+                msg->linear.x = 0.4;
+            }
+        }
+        if (podao_flag_ && pa_dao_type_ == 100) {
+            podao_flag_ = false;
+            send90108();
+        }
+        if (uppd_flag_ && pa_dao_type_ == 100) {
+            uppd_flag_ = false;
+        }
+        if (pa_dao_type_ == 104 || pa_dao_type_ == 102) {
+            if (msg->linear.x > 0.4) {
+                msg->linear.x = 0.3;
+            }
+            if (std::fabs(msg->angular.z) > 0.4) {
+                msg->angular.z = (msg->angular.z > 0 ? 0.3 : -0.3);
+            }
+        }
+        // msg->linear.x = 0.5;
+        ZqSpeedDistribution(msg->linear.x, msg->angular.z, pcmda, pcmdb);
+        odrive_input_vel_t velt;
+        velt.input_vel0 = pcmda;
+        velt.input_vel1 = pcmdb;
+        uint8_t dstp[8];
+        if (int ret = odrive_input_vel_pack(dstp, &velt, sizeof(dstp))) {
+            muduo::net::Buffer buffer;
+            buffer.append(dstp, ret);
+            canSend("can0", (ODRIVE_INPUT_VEL_FRAME_ID | CAN_EFF_FLAG), buffer);
+        }
+
+    } else {
+        int pcmda, pcmdb = 0;
+        speedDistribution(msg->linear.x, msg->angular.z, pcmda, pcmdb);
+        uint8_t dstp[8];
+        dstp[0] = pcmda & 0xFF;
+        dstp[1] = (pcmda >> 8) & 0xFF;
+        dstp[2] = pcmdb & 0xFF;
+        dstp[3] = (pcmdb >> 8) & 0xFF;
+        dstp[4] = 0x00;
+        dstp[5] = 0x00;
+        dstp[6] = 0x00;
+        dstp[7] = 0x00;
+        muduo::net::Buffer buffer;
+        buffer.append(dstp, 8);
+        const char *data = buffer.peek();
+        size_t size = buffer.readableBytes();
+        canSend("can0", (0x80801400 | CAN_EFF_FLAG), buffer);
+    }
+}
+
+void HandleCanAdapter::onReceive225Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_key_status_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_key_status_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    if (car_info_.sos != obj.sos || car_info_.helpcar != obj.help_implement || car_info_.health != obj.health) {
+        car_info_.sos = obj.sos;
+        car_info_.helpcar = obj.help_implement;
+        car_info_.health = obj.health;
+        car_info_pubs_->publish(car_info_);
+    }
+    if (car_info_.sos == 1) {
+        car_info_.sos = 0;
+    }
+    if (car_info_.health == 1) {
+        auto message = interface::msg::HealthStart();
+        message.status = true;
+        health_pubs_->publish(message);
+        car_info_.health = 0;
+    } else if (car_info_.health == 0) {
+        auto message = interface::msg::HealthStart();
+        message.status = false;
+        health_pubs_->publish(message);
+        car_info_.health = 0;
+    }
+    if (obj.key_auxiliary == 1) {
+        auto request = std::make_shared<interface::srv::KeyValueInt::Request>();
+        request->name = "auxiliary";
+        request->value = 1;
+        auto response = mode_enable_client_->async_send_request(request);
+    } else if (obj.key_auxiliary == 0) {
+        auto request = std::make_shared<interface::srv::KeyValueInt::Request>();
+        request->name = "auxiliary";
+        request->value = 0;
+        auto response = mode_enable_client_->async_send_request(request);
+    }
+    if (obj.key_setting == 1) {
+    }
+    if (obj.key_cruise == 1) {
+        auto request = std::make_shared<interface::srv::KeyValueInt::Request>();
+        request->name = "cruise";
+        request->value = 1;
+        auto response = mode_enable_client_->async_send_request(request);
+    }
+    if (obj.key_dance == 1 || obj.key_dance == 0) {
+        std_msgs::msg::Int32 msg;
+        msg.data = obj.key_dance;
+        dance_puts_->publish(msg);
+    }
+}
+
+void HandleCanAdapter::onReceive222Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_ves_infor_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_ves_infor_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    if (car_info_.gear != obj.get_gear || car_info_.lockswitch != obj.lock_switch) {
+        car_info_.gear = obj.get_gear;
+        // car_info_.getcharging = obj.get_charging;
+        car_info_.lockswitch = obj.lock_switch;
+        car_info_pubs_->publish(car_info_);
+    }
+}
+
+void HandleCanAdapter::onReceive224Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_colour_screen_k_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_colour_screen_k_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    if (car_info_.turnswitch != obj.light_status || car_info_.lighttype != obj.light_mode) {
+        car_info_.turnswitch = obj.light_status;
+        car_info_.lighttype = obj.light_mode;
+    }
+}
+
+void HandleCanAdapter::sendCarInfo() {
+    // std::cout << "sendCarInfo" << std::endl;
+    auto car_info = interface::msg::CarInfo();
+    car_info.vx = car_info_.vx;
+    car_info.w = car_info_.w;
+
+    car_info.speed = std::abs(car_info_.vx + car_info_.w) > 0.0 ? car_info_.gear : 0;
+    car_info.electricquantity = car_info_.electricquantity;
+    car_info.remainingmileage = car_info_.remainingmileage;
+    car_info.gear = car_info_.gear;
+    car_info.helpcar = car_info_.helpcar;
+    car_info.sos = car_info_.sos;
+    car_info.turnswitch = car_info_.turnswitch;
+    car_info.lighttype = car_info_.lighttype;
+    car_info.lockswitch = car_info_.lockswitch;
+    car_info.health = car_info_.health;
+    car_info.getcharging = car_info_.getcharging;
+    car_info.speedkmh = std::abs(car_info_.speedkmh); // 转换为km/h
+    car_info_pubs_->publish(car_info);
+}
+
+void HandleCanAdapter::onReceive201Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_left_driver_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_left_driver_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    car_info_.left_brakests = obj.left_driver_sts;
+}
+
+void HandleCanAdapter::onReceive301Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_right_driver_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_right_driver_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    car_info_.right_brakests = obj.right_driver_sts;
+}
+
+void HandleCanAdapter::onReceive226Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_rocker_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_rocker_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    auto message = interface::msg::Joystick();
+    message.rocker_x = obj.rocker_x;
+    message.rocker_y = obj.rocker_y;
+    // 前拨 x 为正 后拨 x 为负(-100,100) 右拨y为正 左拨y为负(-100,100)
+    // 通过x y 计算出方向和角度
+    double direction = atan2(obj.rocker_y, obj.rocker_x);
+    double angle = direction * 180.0 / M_PI;
+    message.rocker_direction = direction;
+    message.rocker_angle = angle;
+    joystick_pubs_->publish(message);
+}
+
+void HandleCanAdapter::sendBattery() {
+    odrive_battery_t obj;
+    obj.charging = (car_info_.getcharging == 0) ? 1 : 0;
+    obj.residual_electricity = car_info_.electricquantity;
+    obj.remaining_mileage = car_info_.remainingmileage;
+    uint8_t dstp[8];
+    if (int ret = odrive_battery_pack(dstp, &obj, sizeof(dstp))) {
+        muduo::net::Buffer buffer;
+        buffer.append(dstp, ret);
+        canSend("can2", (ODRIVE_BATTERY_FRAME_ID | CAN_EFF_FLAG), buffer);
+    }
+}
+
+void HandleCanAdapter::onReceive101Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_cell_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_cell_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    // std::cout << " capacitance " << obj.capacitance << "  percent_capacitance " << obj.percent_capacitance << std::endl;
+    if (obj.percent_capacitance < 101) {
+        car_info_.electricquantity = obj.percent_capacitance;
+        car_info_.remainingmileage = 30 * car_info_.electricquantity / 100;
+    }
+}
+
+void HandleCanAdapter::onReceive100Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_cell_pack_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_cell_pack_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    // std::cout << " electricity " << obj.electricity << std::endl;
+    if (obj.electricity < 0.1) {
+        car_info_.getcharging = 1;
+    } else if (obj.electricity > 0.1) {
+        car_info_.getcharging = 0;
+    }
+}
+
+void HandleCanAdapter::onReceive270Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_axle_1_error_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_axle_1_error_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    interface::msg::HexData error_msg;
+    error_msg.hex_value = obj.error_code;
+    auto* global = sensor::Global::getInstance();
+    if (global) {
+        global->sendHexData(error_msg);
+    }
+    // std::cout << " axle_1_error " << obj.axle_1_error << std::endl;
+}
+
+void HandleCanAdapter::onReceive271Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_axle_2_error_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_axle_2_error_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    interface::msg::HexData error_msg;
+    error_msg.hex_value = obj.error_code;
+    auto* global = sensor::Global::getInstance();
+    if (global) {
+        global->sendHexData(error_msg);
+    }
+    // std::cout << " axle_2_error " << obj.axle_2_error << std::endl;
+}
+
+void HandleCanAdapter::onReceive272Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_brake_error_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_brake_error_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    interface::msg::HexData error_msg;
+    error_msg.hex_value = obj.error_code;
+    auto* global = sensor::Global::getInstance();
+    if (global) {
+        global->sendHexData(error_msg);
+    }
+    // std::cout << " brake_error " << obj.brake_error << std::endl;
+}
+
+void HandleCanAdapter::onReceive27FInfo(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    
+    // std::cout << " detailed_errors " << obj.detailed_errors << std::endl;
+}
+
+void HandleCanAdapter::onReceive280Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_upper_status_error_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_upper_status_error_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    interface::msg::HexData error_msg;
+    error_msg.hex_value = obj.error_code;
+    auto* global = sensor::Global::getInstance();
+    if (global) {
+        global->sendHexData(error_msg);
+    }
+    // std::cout << " upper_status_error " << obj.upper_status_error << std::endl;
+}
+
+void HandleCanAdapter::onReceive281Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_rocker_error_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_rocker_error_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    interface::msg::HexData error_msg;
+    error_msg.hex_value = obj.error_code;
+    auto* global = sensor::Global::getInstance();
+    if (global) {
+        global->sendHexData(error_msg);
+    }
+    // std::cout << " rocker_error " << obj.rocker_error << std::endl;
+}
+
+void HandleCanAdapter::onReceive282Info(const std::string &, int fid, muduo::net::Buffer &buffer) {
+    struct odrive_motor_error_t obj;
+    auto piece = buffer.toStringPiece();
+    int retv = odrive_motor_error_unpack(&obj, (const uint8_t *)(piece.data()), piece.size());
+    interface::msg::HexData error_msg;
+    error_msg.hex_value = obj.error_code;
+    auto* global = sensor::Global::getInstance();
+    if (global) {
+        global->sendHexData(error_msg);
+    }
+    // std::cout << " motor_error " << obj.motor_error << std::endl;
+}
+
+void HandleCanAdapter::onRechargeStatusMessage(const interface::msg::RechargeStatus::SharedPtr msg) {
+
+    int charging = 0;
+    if (msg->status == 5) {
+        car_info_.getcharging = 2;
+        charging = 2;
+    } else if (msg->status == 6) {
+        car_info_.getcharging = 1;
+        charging = 3;
+    }
+    odrive_battery_t obj;
+    obj.charging = charging;
+    obj.residual_electricity = car_info_.electricquantity;
+    obj.remaining_mileage = car_info_.remainingmileage;
+    uint8_t dstp[8];
+    if (int ret = odrive_battery_pack(dstp, &obj, sizeof(dstp))) {
+        muduo::net::Buffer buffer;
+        buffer.append(dstp, ret);
+        canSend("can2", (ODRIVE_BATTERY_FRAME_ID | CAN_EFF_FLAG), buffer);
+    }
+    // sendBattery();
+}
+
+void HandleCanAdapter::onRecieveSpeedbumpMessage(const visualization_msgs::msg::MarkerArray::SharedPtr msg) {
+
+    // 处理速度带信息
+    if (msg->markers.empty()) {
+        return;
+    }
+    auto &marker = msg->markers[0];
+    if (marker.points.size() != 2) {
+        return;
+    }
+    // std::cout << " HandleCanAdapter::onRecieveSpeedbumpMessage 1 " << marker.points[0].x << " " << marker.points[1].x
+    //           << " " << marker.points[0].y << " " << marker.points[1].y << std::endl;
+    double distance = 2.8;
+    if (car_info_.gear == 3) {
+        distance = 4.0;
+    }
+    // 判断两个点的y值是否为一个正数一个负数
+    if (speed_status_) {
+        if ((marker.points[0].y > 0 && marker.points[1].y < 0) || (marker.points[0].y < 0 && marker.points[1].y > 0)) {
+            if (marker.points[0].x < distance || marker.points[1].x < distance) {
+                speep_dump_count_ = 280; // 设置速度带倒计时
+                if (!speedbump_flag_) {
+                    std_msgs::msg::Int32 msg;
+                    msg.data = 1; // 速度带触发
+                    speedbump_pubs_->publish(msg);
+                    speedbump_flag_ = true;
+                }
+                // std::cout << " HandleCanAdapter::onRecieveSpeedbumpMessage 2 " << marker.points[0].x << " " << marker.points[1].x
+                //           << " " << marker.points[0].y << " " << marker.points[1].y << std::endl;
+            }
+        }
+    }
+}
+
+void HandleCanAdapter::onRecievePaDaoMessage(const std::shared_ptr<std_msgs::msg::Int32> msg) {
+    pa_dao_type_ = msg->data;
+    if (pa_dao_type_ == 104 && !podao_flag_ && speed_status_) {
+        std_msgs::msg::Int32 msg;
+        msg.data = 1; // 速度带触发
+        podao_pubs_->publish(msg);
+        podao_flag_ = true;
+    }
+    if (pa_dao_type_ == 103 && !uppd_flag_ && speed_status_) {
+        std_msgs::msg::Int32 msg;
+        msg.data = 1; // 速度带触发
+        uppd_pubs_->publish(msg);
+        uppd_flag_ = true;
+    }
+    // std::cout << "HandleCanAdapter::onRecievePaDaoMessage pa_dao_type_ " << pa_dao_type_ << std::endl;
+}
+
+void HandleCanAdapter::send90108() {
+    odrive_colour_screen_k_t obj;
+    obj.light_status = 0;
+    obj.light_mode = 8;
+    uint8_t data[8];
+    odrive_colour_screen_k_pack(data, &obj, 8);
+    muduo::net::Buffer buffer;
+    buffer.append(data, 8);
+    canSend("can0", (ODRIVE_COLOUR_SCREEN_K_FRAME_ID | CAN_EFF_FLAG), buffer);
+}
+
+void HandleCanAdapter::publishCanFrame(const std::string& dev, int fid, muduo::net::Buffer& buffer) {
+    can_msgs::msg::Frame frame;
+    
+    // 设置header
+    frame.header.stamp = this->now();
+    frame.header.frame_id = dev;
+    
+    // 设置CAN帧信息
+    frame.id = fid;
+    frame.dlc = static_cast<uint8_t>(buffer.readableBytes());
+    
+    // 复制数据（最多8字节）
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(buffer.peek());
+    size_t data_len = std::min(static_cast<size_t>(buffer.readableBytes()), static_cast<size_t>(8));
+    std::fill(frame.data.begin(), frame.data.end(), 0);
+    for (size_t i = 0; i < data_len; ++i) {
+        frame.data[i] = data[i];
+    }
+    
+    // 判断是否为扩展帧
+    frame.is_extended = (fid & CAN_EFF_FLAG) != 0;
+    frame.is_rtr = false;  // 通常接收到的不是RTR帧
+    frame.is_error = false;  // 接收到的帧通常不是错误帧
+    
+    // 发布CAN数据到话题（供recorder订阅）
+    if (can_frame_publisher_) {
+        can_frame_publisher_->publish(frame);
+    }
+}

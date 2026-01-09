@@ -1,0 +1,39 @@
+syntax = "proto3";
+package car_status;
+
+import "google/protobuf/wrappers.proto";
+
+// 公共基础信息
+message BaseInfo {
+  string vin = 1;               // 车辆唯一标识
+  int64 device_timestamp = 2;   // 设备本地时间戳（毫秒）
+  int32 model = 3;              // 设备类型：0=X5、1=Cruise（本机固定 0）
+  string version = 4;           // 软件版本
+}
+
+// 1. 实时上报消息（5秒一次） -> VehicleInfo
+message VehicleInfo {
+  BaseInfo base = 1;
+  float speed_kmh = 20;                // 行驶速度（单位：km/h，float32 精度）
+  int32 remaining_mileage = 21;        // 剩余里程（单位：km，原float→int32兼容）
+  int32 gear = 22;                     // 档位（1=前进、2=后退、0=空挡）
+  int32 charging_status = 23;          // 充电状态（0=未充电、1=充电中、2=充满）
+  int32 parking_status = 24;           // 驻车状态（0=未驻车、1=已驻车）
+  int32 assist_mode = 25;              // 辅助模式（0=关闭、1=开启）
+  int32 battery = 26;                  // 电池电量（单位：%）
+  int32 left_brakests = 27;            // 左刹车状态 0 关闭 1 打开
+  int32 right_brakests = 28;           // 右刹车状态 0 关闭 1 打开
+  float total_mileage = 29;            // 总行驶里程（单位：m，累计不重置）
+  float current_interval_mileage = 30; // 当次行驶里程（单位：m，1分钟重置）
+}
+
+// 2. 被动上报消息（字段内容修改才上传） -> VehicleStatus
+message VehicleStatus {
+  BaseInfo base = 1;
+  // 使用 wrapper types 提供 presence 支持（等价于 proto3 optional）
+  google.protobuf.Int32Value recharge_status = 20;      // 回充状态（0=未回充、1=回充中、2=回充完成）
+  google.protobuf.Int32Value summon_status = 21;        // 召唤状态（0=未召唤、1=召唤中、2=召唤完成）
+  google.protobuf.Int32Value follow_me_status = 22;     // 跟我走状态（0=未跟随、1=跟随中）
+  google.protobuf.StringValue current_mode_chinese = 23;// 中文模式名称（空=避障关闭）
+  google.protobuf.Int32Value alarmstatus = 30;          // 异常提醒（0=无异常、非0=对应异常码）
+}

@@ -1,0 +1,5 @@
+int16 on_off
+---
+int16 code # 当前状态下成功失败结果。0成功，非零失败
+int16 type  # 1:开始回充 ，0：取消关闭回充
+string message  # 失败描述

@@ -1,0 +1,10 @@
+# Detect current architecture
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  set(TP_ARCH "x86_64")
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+  set(TP_ARCH "aarch64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+  set(TP_ARCH "armv7")
+else()
+  message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()

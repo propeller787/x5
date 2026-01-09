@@ -1,0 +1,5 @@
+int16 start   # 导航 goto:1 / 取消 cannel:0
+int16 id  # 目的地id
+---
+int16 code
+string message

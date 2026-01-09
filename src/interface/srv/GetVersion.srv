@@ -1,0 +1,7 @@
+# 当前软件版本查询服务
+# 请求: 空
+---
+# 响应字段
+string current_version  # 当前软件版本号
+int32 code              # 0=成功, 1=失败
+string message          # 响应消息

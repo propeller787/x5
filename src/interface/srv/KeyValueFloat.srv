@@ -1,0 +1,5 @@
+string name
+float32 value
+---
+int16 code
+string message

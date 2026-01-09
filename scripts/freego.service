@@ -1,0 +1,17 @@
+[Unit]
+Description = UNIEYE ROS Service
+After       = systemd-timesyncd.service network.target
+Wants       = systemd-timesyncd.service
+[Service]
+Type               = simple
+User=firefly
+#ExecStartPre       = /home/zq/likang/vlago/scripts/wait_ntp.sh
+ExecStartPre       = /bin/sleep 15
+Environment        = HOME=/home/zq/likang/vlago/data/
+Environment        = ROS_LOG_DIR=/home/zq/likang/vlago/log/
+ExecStart          = /bin/bash -c "source /opt/ros/humble/setup.bash && source /home/zq/likang/vlago/install/setup.bash && ros2 launch /home/zq/likang/vlago/scripts/vlago_launch.py"
+Restart            = always
+RestartSec         = 2
+
+[Install]
+WantedBy    = multi-user.target

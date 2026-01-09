@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package vehicle.tag;
+
+//标签变动
+message VehicleTagChange {
+  string vin = 1;           //车辆唯一标识
+  int32 model = 2;       // 设备类型：0:X5、1:Cruise
+  int64 timestamp = 3;      // 毫秒时间戳
+  repeated DeviceTag device_tags = 4;  // 设备标签列表
+  
+  // 每个设备的标签信息
+  message DeviceTag {
+    string tag_name = 1;              // 标签名称
+    string tag_code = 2;              // 标签编号
+    repeated TagValue tag_values = 3; // 标签值列表
+  }
+
+  // 标签值结构
+  message TagValue {
+    string value_code = 1;            // 标签值编号
+    string value_name = 2;            // 标签值名称
+  }
+}

@@ -1,0 +1,6 @@
+Invoking command in '/home/zq/likang/vlago/src/common/serial_ros2/build/serial': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /home/zq/likang/vlago/src/common/serial_ros2 -DCMAKE_INSTALL_PREFIX=/home/zq/likang/vlago/src/common/serial_ros2/install/serial
+Invoked command in '/home/zq/likang/vlago/src/common/serial_ros2/build/serial' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /home/zq/likang/vlago/src/common/serial_ros2 -DCMAKE_INSTALL_PREFIX=/home/zq/likang/vlago/src/common/serial_ros2/install/serial
+Invoking command in '/home/zq/likang/vlago/src/common/serial_ros2/build/serial': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /home/zq/likang/vlago/src/common/serial_ros2/build/serial -- -j8 -l8
+Invoked command in '/home/zq/likang/vlago/src/common/serial_ros2/build/serial' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /home/zq/likang/vlago/src/common/serial_ros2/build/serial -- -j8 -l8
+Invoking command in '/home/zq/likang/vlago/src/common/serial_ros2/build/serial': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /home/zq/likang/vlago/src/common/serial_ros2/build/serial
+Invoked command in '/home/zq/likang/vlago/src/common/serial_ros2/build/serial' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /home/zq/likang/vlago/src/common/serial_ros2/build/serial

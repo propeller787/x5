@@ -1,0 +1,16 @@
+syntax = "proto3";
+package domain;
+
+import "car_status.proto";
+
+message DomainControllerData {
+  car_status.BaseInfo base = 1;
+
+  float cpu_usage = 20;        // CPU 利用率
+  float mem_usage = 21;        // 内存利用率
+  uint32 network_status = 22;  // 网络状态 0=离线 1=连接中 2=正常
+  int32 error_code = 23;       // 错误码（0=正常）
+
+  string robot_mode = 30;      // 当前模式（安全 巡航 回充等）
+  string vehicle_id = 31;      // 车辆ID
+}

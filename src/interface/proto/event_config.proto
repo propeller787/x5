@@ -1,0 +1,53 @@
+syntax = "proto3";
+package vehicle.config;
+
+// 事件配置包，下发至车端
+message EventConfigPackage {
+  string config_id = 1;       // 每次配置唯一ID（UUID，防重放）
+  int64 timestamp = 2;        // 时间戳（毫秒）
+  string version = 3;         // 配置版本号
+
+  repeated Config configs = 10;       // 各类事件的配置列表
+  map<string, string> extras = 20;    // 扩展字段
+}
+
+// 单个配置项
+message Config {
+  string code = 1;          // 事件码，如 SE_* / ALM_* / DTC_*
+  string name = 2;          // 名称
+  bool enabled = 3;         // 是否开启此类事件
+
+  ThresholdCondition threshold = 4;   // 触发条件
+  int32 update_interval_sec = 5;      // 持续报警上报“更新”间隔（秒）
+  int32 end_timeout_sec = 6;          // 连续多长时间无触发自动结束
+  UploadOptions upload = 7;           // 上传配置
+  int32 level = 8;                    // 报警等级：1紧急、2严重、3一般、4提示
+}
+
+// 阈值条件（例如急刹、碰撞）
+message ThresholdCondition {
+  double value = 1;         // 阈值数值，如急刹 -5 m/s^2
+  string unit = 2;          // 示例："m/s^2", "g", "%"
+  double duration_ms = 3;   // 持续达到多少时间视为触发
+  string script = 4;        // 自定义表达式，可选
+}
+
+// 上传配置
+message UploadOptions {
+  bool upload_log = 1;             // 是否上传日志文件
+  bool upload_video = 2;           // 是否上传视频文件
+
+  uint32 pre_event_log_seconds = 3;    // 报警事件前多少秒日志
+  uint32 post_event_log_seconds = 4;   // 报警事件后多少秒日志
+  uint32 pre_event_video_seconds = 5;  // 报警事件前多少秒视频
+  uint32 post_event_video_seconds = 6; // 报警事件后多少秒视频
+  repeated string log_filter = 10;     // 日志类型过滤列表
+}
+
+// 配置更新回执
+message EventConfigAck {
+  string config_id = 1;  // 每次配置唯一ID（UUID，防重放）
+  int64 timestamp = 2;   // 时间戳（毫秒）
+  string version = 3;    // 配置版本号
+  string sn = 4;         // 车辆SN
+}

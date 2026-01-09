@@ -1,0 +1,19 @@
+syntax = "proto3";
+package gps;
+
+import "car_status.proto";
+
+// GPS 实时上报消息
+message GPSData {
+  car_status.BaseInfo base = 1;
+  double timestamp = 20;   // 采样时间戳（秒，带小数）
+  double latitude = 21;    // 纬度
+  double longitude = 22;   // 经度
+  double altitude = 23;    // 海拔
+  float velocity_n = 24;   // 北向速度分量
+  float velocity_e = 25;   // 东向速度分量
+  float velocity_u = 26;   // 垂直速度分量
+  uint32 fix_type = 27;    // 定位状态 0=无效,1=单点,2=RTK浮动,3=RTK固定
+  uint32 num_satellites = 28; // 卫星数量
+  float hdop = 29;         // 水平精度因子
+}

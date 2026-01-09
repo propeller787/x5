@@ -1,0 +1,22 @@
+#pragma once
+
+#include <interface/msg/vlago_scene.hpp>
+#include <interface/msg/named_status.h>
+#include <interface/msg/report_mode.hpp>
+#include <interface/msg/recharge_status.hpp>
+#include <interface/srv/dance_controls.hpp>
+#include <interface/srv/follow_me.hpp>
+#include <interface/srv/follow_status.hpp>
+#include <interface/srv/id_controls.hpp>
+#include <interface/srv/mode_switch.hpp>
+#include <interface/srv/scene_controls.hpp>
+#include <interface/srv/mode_switch.hpp>
+#include <interface/srv/debug_services.hpp>
+#include <interface/srv/recharge_controls.hpp>
+#include <interface/srv/mode_enable.hpp>
+#include <interface/srv/autoindoor_nav.hpp>
+#include <interface/srv/key_value_int.hpp>
+#include <interface/srv/key_value_float.hpp>
+#include <interface/srv/key_value_str.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include "../../../common/utils/topic.h"

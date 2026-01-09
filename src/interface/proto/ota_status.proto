@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package vehicle.ota.status;
+
+// 任务状态变动（协议 8.3.3）
+message VehicleOtaStatusChange {
+  string task_id = 1;     // 任务id
+  int32 task_status = 2;  // 0恢复 1暂停 2取消
+  int64 timestamp = 3;    // 请求时间戳
+  string desc = 10;       // 备注
+}

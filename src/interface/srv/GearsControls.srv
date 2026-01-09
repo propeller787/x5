@@ -1,0 +1,6 @@
+int16 gear
+int16 helpcar
+int16 sos
+int16 lock
+---
+int16 code

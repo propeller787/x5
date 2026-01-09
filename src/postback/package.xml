@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <!-- 核心修改：模块名称与命名空间/文件夹名一致（对应postback模块） -->
+  <name>postback</name>
+  
+  <version>1.0.0</version>
+  
+  <!-- 描述同步为postback模块的功能（OSS上传） -->
+  <description>Postback module (负责阿里云OSS日志上传功能)</description>
+  
+  <maintainer email="limingkai@freegoai.com">lmk</maintainer>
+  
+  <license>Apache-2.0</license>
+
+  <!-- 依赖项配置（修复语法错误，按ROS2规范分类） -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- 编译/运行依赖（去掉多余的 < 符号，标签格式为 <depend>） -->
+  <depend>rclcpp</depend>
+  <depend>interface</depend>
+  <depend>common</depend>
+  <depend>ament_index_cpp</depend>
+
+  <!-- OSS上传所需系统依赖（补充，避免编译时找不到库） -->
+  <build_depend>curl</build_depend>
+  <build_depend>openssl</build_depend>
+  <build_depend>uuid</build_depend>
+  <exec_depend>curl</exec_depend>
+  <exec_depend>openssl</exec_depend>
+  <exec_depend>uuid</exec_depend>
+  
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

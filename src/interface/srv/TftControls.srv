@@ -1,0 +1,4 @@
+int16 turns_switch
+int16 light_type
+---
+int16 code

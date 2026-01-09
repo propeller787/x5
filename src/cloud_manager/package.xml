@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <!-- 1. 核心修改：模块名称（和文件夹名、CMakeLists.txt的project名一致） -->
+  <name>cloud_manager</name>
+  
+  <!-- 2. 版本号（1.0.0） -->
+  <version>1.0.0</version>
+  
+  <!-- 3. 描述信息（同步修改为新模块语义） -->
+  <description>Cloud manager module (原 mqtt_demo，功能不变，负责MQTT上报)</description>
+  
+  <!-- 4. 维护者信息 -->
+  <maintainer email="limingkai@freegoai.com">lmk</maintainer>
+  
+  <!-- 5. 许可证 -->
+  <license>Apache-2.0</license>
+
+  <!-- 以下依赖项、编译工具配置完全不变-->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>interface</depend>
+  <depend>common</depend>
+  <depend>ament_index_cpp</depend>
+  
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,226 @@
+# 决策器配置参数文件
+# Decision Maker Configuration Parameters
+# 作者: likang@freego.com
+# 版本: 1.1.0
+# 日期: 2025-10-31
+
+decision_maker:
+  ros__parameters:
+    # ==================== 系统频率配置 ====================
+
+    # 雷达数据采集频率 (Hz)
+    # 说明: 雷达数据的更新频率，决定了障碍物检测的时间分辨率
+    # 推荐值: 10-20 Hz (过高会增加计算负担，过低会降低响应速度)
+    radar_frequency: 10.0
+
+    # 目标位置预测时间间隔 (秒)
+    # 说明: 预测目标未来位置的时间步长
+    # 推荐值: 1/radar_frequency = 0.1s
+    prediction_time: 0.1
+
+    # ==================== 距离阈值配置 ====================
+
+    # 预警区距离 (米)
+    # 说明: 超过此距离不进行速度限制，但会记录状态
+    # 推荐值: 1.0-3.0 m
+    # - 较大值(2.0-3.0): 更保守，适合高速或拥挤环境
+    # - 较小值(1.0-1.5): 更激进，适合低速或开阔环境
+    warning_zone: 1.5
+
+    # 减速区距离 (米)
+    # 说明: 在此距离内开始平滑减速
+    # 推荐值: 0.5-1.5 m
+    # - 较大值(1.0-1.5): 更早减速，更平滑
+    # - 较小值(0.5-0.8): 更晚减速，更高效
+    deceleration_zone: 0.8
+
+    # 紧急制动距离 (米)
+    # 说明: 在此距离内立即制动 (速度限制为0)
+    # 推荐值: 0.2-0.5 m
+    # - 应考虑车辆制动距离和反应时间
+    # - 不应小于车辆物理尺寸的一半
+    emergency_brake_distance: 0.3
+
+    # ==================== 速度限制配置 ====================
+
+    # 最小速度限制 (m/s)
+    # 换算: 0.056 m/s ≈ 0.2 km/h
+    # 说明: 在减速区近端允许的最低速度
+    # 推荐值: 0.05-0.2 m/s
+    min_speed_limit: 0.056
+
+    # 最大速度限制 (m/s)
+    # 换算: 1.67 m/s ≈ 6.0 km/h
+    # 说明: 正常行驶时的最大速度
+    # 推荐值: 1.0-3.0 m/s (3.6-10.8 km/h)
+    # - 室内环境: 1.0-1.5 m/s
+    # - 室外环境: 1.5-3.0 m/s
+    max_speed_limit: 1.67
+
+    # 绝对最大线速度 (m/s)
+    # 说明: 硬限制，防止任何情况下超速（安全保护）
+    # 推荐值: max_speed_limit * 1.2
+    absolute_max_linear_speed: 2.0
+
+    # 绝对最大角速度 (rad/s)
+    # 说明: 硬限制，防止转向过快（安全保护）
+    # 推荐值: 0.5-2.0 rad/s
+    absolute_max_angular_speed: 1.0
+
+    # ==================== 状态保持与恢复 ====================
+
+    # 状态保持时间 (秒)
+    # 说明: 障碍物消失后保持干预状态的时间，避免振荡
+    # 推荐值: 0.1-1.0 s
+    # - 较小值(0.1-0.3): 响应更快，但可能振荡
+    # - 较大值(0.5-1.0): 更稳定，但恢复较慢
+    state_hold_time: 0.3
+
+    # 速度恢复时间 (秒)
+    # 说明: 从限速状态恢复到正常速度的时间
+    # 推荐值: 0.5-3.0 s
+    # - 较小值(0.5-1.0): 快速恢复，适合动态环境
+    # - 较大值(1.5-3.0): 平滑恢复，适合稳定环境
+    speed_recovery_time: 1.5
+
+    # ==================== 数据管理配置 ====================
+
+    # 雷达数据超时时间 (秒)
+    # 说明: 超过此时间未收到雷达数据视为超时，启用预测模式
+    # 推荐值: 1.5 * (1/radar_frequency) = 0.15s
+    # - 不应小于雷达更新周期
+    # - 不应大于3倍雷达更新周期
+    radar_timeout: 0.05
+
+    # 最大历史数据大小
+    # 说明: 保存的历史数据帧数，用于数据分析和预测
+    # 推荐值: 10-50 帧
+    # - 较小值(10-20): 节省内存
+    # - 较大值(30-50): 更好的预测和分析
+    max_history_size: 10
+
+    # ==================== 碰撞检测开关配置 ====================
+
+    # 启用前向碰撞检测
+    # 说明: 检测机器人前方的障碍物
+    # 推荐: 始终启用
+    enable_forward_collision: true
+
+    # 启用侧向碰撞检测
+    # 说明: 检测机器人左右两侧的障碍物
+    # 推荐: 在狭窄通道或自主导航时启用
+    enable_lateral_collision: false
+
+    # 启用后向碰撞检测
+    # 说明: 检测机器人后方的障碍物
+    # 推荐: 在倒车或后退时启用
+    enable_backward_collision: false
+# ==================== 场景预设配置 ====================
+# 以下是不同应用场景的推荐配置
+
+# 场景1: 室内仓储 (高安全性，低速)
+# decision_maker:
+#   ros__parameters:
+#     warning_zone: 2.0
+#     deceleration_zone: 1.0
+#     emergency_brake_distance: 0.4
+#     max_speed_limit: 1.39  # 5 km/h
+#     state_hold_time: 0.5
+#     speed_recovery_time: 2.0
+#     enable_forward_collision: true
+#     enable_lateral_collision: true
+#     enable_backward_collision: true
+
+# 场景2: 室外巡检 (中等安全性，中速)
+# decision_maker:
+#   ros__parameters:
+#     warning_zone: 1.5
+#     deceleration_zone: 0.8
+#     emergency_brake_distance: 0.3
+#     max_speed_limit: 1.67  # 6 km/h
+#     state_hold_time: 0.3
+#     speed_recovery_time: 1.5
+#     enable_forward_collision: true
+#     enable_lateral_collision: false
+#     enable_backward_collision: false
+
+# 场景3: 开阔场地 (低安全要求，高速)
+# decision_maker:
+#   ros__parameters:
+#     warning_zone: 1.2
+#     deceleration_zone: 0.6
+#     emergency_brake_distance: 0.25
+#     max_speed_limit: 1.94  # 7 km/h
+#     state_hold_time: 0.2
+#     speed_recovery_time: 1.0
+#     enable_forward_collision: true
+#     enable_lateral_collision: false
+#     enable_backward_collision: false
+
+# 场景4: 人机协作 (极高安全性，极低速)
+# decision_maker:
+#   ros__parameters:
+#     warning_zone: 2.5
+#     deceleration_zone: 1.5
+#     emergency_brake_distance: 0.5
+#     max_speed_limit: 1.11  # 4 km/h
+#     state_hold_time: 0.5
+#     speed_recovery_time: 2.5
+#     enable_forward_collision: true
+#     enable_lateral_collision: true
+#     enable_backward_collision: true
+
+# ==================== 参数调优指南 ====================
+#
+# 1. 安全性调优（提高安全性）
+#    - 增加 warning_zone (1.5 -> 2.0)
+#    - 增加 deceleration_zone (0.8 -> 1.0)
+#    - 增加 emergency_brake_distance (0.3 -> 0.4)
+#    - 降低 max_speed_limit (1.67 -> 1.39)
+#    - 增加 state_hold_time (0.3 -> 0.5)
+#    - 增加 speed_recovery_time (1.5 -> 2.0)
+#
+# 2. 效率调优（提高通行效率）
+#    - 减少 warning_zone (1.5 -> 1.2)
+#    - 减少 deceleration_zone (0.8 -> 0.6)
+#    - 减少 emergency_brake_distance (0.3 -> 0.25)
+#    - 提高 max_speed_limit (1.67 -> 1.94)
+#    - 减少 state_hold_time (0.3 -> 0.2)
+#    - 减少 speed_recovery_time (1.5 -> 1.0)
+#
+# 3. 平滑性调优（减少速度抖动）
+#    - 增加 state_hold_time (0.3 -> 0.5)
+#    - 增加 speed_recovery_time (1.5 -> 2.0)
+#    - 调整 smooth_filter alpha (在代码中)
+#
+# 4. 响应性调优（提高响应速度）
+#    - 减少 state_hold_time (0.3 -> 0.2)
+#    - 减少 speed_recovery_time (1.5 -> 1.0)
+#    - 减少 radar_timeout (0.05 -> 0.03)
+#
+# ==================== 注意事项 ====================
+#
+# 1. 参数约束关系：
+#    - warning_zone > deceleration_zone > emergency_brake_distance
+#    - max_speed_limit > min_speed_limit
+#    - absolute_max_linear_speed > max_speed_limit
+#
+# 2. 修改参数后务必进行测试：
+#    - 静态障碍物测试
+#    - 动态障碍物测试
+#    - 边界情况测试
+#    - 长时间稳定性测试
+#
+# 3. 建议的测试流程：
+#    a) 在仿真环境中测试
+#    b) 在受控环境中小范围测试
+#    c) 逐步扩大测试范围
+#    d) 最后在实际环境中部署
+#
+# 4. 监控指标：
+#    - 速度限制触发频率
+#    - 紧急制动次数
+#    - 平均行驶速度
+#    - 目标点到达时间
+#    - 碰撞次数（应为0）
+

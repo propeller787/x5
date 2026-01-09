@@ -1,0 +1,7 @@
+# 请求：查询指定模块的错误码（module 为空时查询所有）
+string module  # 模块名称，如 "LIDAR1"、"IMU"、"GPS"，空字符串表示查询所有
+---
+# 响应：错误码列表（兼容简化：附带发生/解除状态）
+bool success   # 查询是否成功
+uint8 status_code # 状态码，0=OK，1=无记录，2=未找到
+interface/ModuleError[] items  # 错误项列表

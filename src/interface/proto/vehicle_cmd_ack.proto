@@ -1,0 +1,16 @@
+syntax = "proto3";  // 必须指定proto3语法
+
+// 定义命名空间（对应C++的namespace vehicle::cmd::ack）
+package vehicle.cmd.ack;
+
+// 设备端回复给服务端的指令回执
+message VehicleCmdAck {
+  string vin = 3;            // 车辆VIN码（和指令中的vin一致）
+  int32 model = 4;           // 车辆型号（和指令中的model一致）
+  int64 timestamp = 5;       // 回执发送时间戳（毫秒级）
+  string user_id = 6;        // 对应指令的用户ID
+  string cmd_id = 10;        // 对应指令的唯一ID（必填，匹配指令）
+  int32 status = 11;         // 指令执行状态（0=成功，1=失败，2=执行中）
+  int32 error_code = 12;     // 错误码（status=1时必填，0=无错误）
+  string error_message = 13; // 错误描述（status=1时必填）
+}
