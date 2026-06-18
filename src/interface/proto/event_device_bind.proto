@@ -1,0 +1,13 @@
+syntax = "proto3";
+package vehicle.device.bind;
+
+//升级回执
+message VehicleBindStatus {
+  string sn = 1;               // 车辆唯一标识
+  int64 timestamp = 2;   // 服务器本地时间戳（毫秒）
+  string model = 3;       //车辆销售型号FREEGO X5 Air
+
+  string user_id = 10;     //用户id
+  int32 status = 11;  //状态0未绑定 1绑定 2变更(隐私协议变更)
+  string privacy_policy= 12; //用勾选的隐私协议 逗号分隔
+}

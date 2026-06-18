@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package vehicle.ota.ack;
+
+//升级回执
+message VehicleOtaAck {
+string task_id = 1;             //主任务id
+string sn = 2;                  //车辆唯一标识
+string model = 3;               //车辆销售型号 FREEGO X5 Air
+int64 timestamp = 4;            // 毫秒时间戳
+  
+int32 task_status = 5;          //任务状态0已接收未开始、1升级执行中、2回滚执行中、3被暂停、4被取消、5已结束（升级或回滚完成）
+int32 task_result = 6;          //任务完成状态0无 1升级成功、2升级失败、3升级失败但成功回滚稳定
+int32 task_error_code = 7;      //任务失败原因0无 1用户拒绝 2下载升级包失败 3升级包校验失败 4升级包版本不适配 5升级包硬件不适配 6回滚异常 7设备异常 
+string sys_error_code = 8;      //具体的设备产生的异常码
+repeated UpgradePackageStatus packages = 10;  // 每个升级包的升级状态反馈
+string sub_task_id = 20;        //子任务id
+
+// ECU的升级状态
+message UpgradePackageStatus {
+string package_id = 1;          // 升级包 ID
+string ecu = 2;                 // ECU
+string ecu_hardware_code = 3;   // ECU硬件编号
+string current_version = 4;     //当前版本号 
+int32 status = 10;              //0待执行 1下载中 2校验中 3升级中4回滚中10升级成功 11升级失败20回滚成功21回滚失败
+int32 error_code = 11;          //0无 1下载失败 2校验失败 3版本不匹配 4硬件不匹配 5刷写失败 6ecu自检异常 7回滚失败 8设备异常
+string sys_error_code = 12;     //具体的设备产生的异常码
+string message = 13;            // 失败信息（如果有）
+}
+}

@@ -1,0 +1,10 @@
+# 请求检查当前包时为最近安装包
+# 请求: 空
+---
+# 响应字段
+int32 code     # 0=有最新版本发布，待下载最近安装包, 1=当前已是最新版本，无需更新 2=下载完成待更新 3 = 服务请求失败
+string new_version # 最新版本号
+string history_version #历史版本号
+string new_description #新版本描述
+int32 new_size #新版本大小
+string message # 错误信息

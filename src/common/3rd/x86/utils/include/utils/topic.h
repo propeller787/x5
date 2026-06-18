@@ -20,6 +20,7 @@ constexpr const char *carWheelSpeedStaTopic = "/wheel/twist";              // �
 constexpr const char *carEncoderTopic = "/car/encoder";                    // 车辆电机圈数
 constexpr const char *healthDataTopic = "/sensor/health/data";             // 健康计信息
 constexpr const char *healthTftDataTopic = "/sensor/tft/health/data";      // tft健康计信息
+constexpr const char *sensorTftChargingStatusTopic = "/sensor/recharge/charging_status";
 constexpr const char *healthStatusTopic = "/sensor/health/start";          // 健康计启动
 constexpr const char *sensorhandleControlTopic = "/sensor/handle/control"; // 上控健康控制
 constexpr const char *gpsTopic = "/sensor/gps/data";
@@ -29,7 +30,10 @@ constexpr const char *ultrasoundLeftTopic = "/sensor/left/ultrasound";
 constexpr const char *ultrasoundRightTopic = "/sensor/right/ultrasound";
 constexpr const char *ultrasoundBackTopic = "/sensor/back/ultrasound";
 constexpr const char *joystickTopic = "/sensor/joystick";
+constexpr const char *laneWarningPointTopic = "/sensor/laneWarningPoint";
 constexpr const char *carInfoTopic = "/vlago/car/info";
+constexpr const char *iccidControlService = "/vlago/iccid_control";
+constexpr const char *bluetoothStatusTopic = "/vlago/bluetooth/status";
 constexpr const char *operationSceTopic = "/service/operation/scenario";
 constexpr const char *serviceColourScreenTopic = "/service/colour_screen";
 constexpr const char *serviceGearTopic = "/service/gear";
@@ -42,6 +46,14 @@ constexpr const char *rightTiltLaserTopic = "/scan/right_tilt";
 constexpr const char *backLaserTopic = "/scan/back";
 constexpr const char *leftTiltPointTopice = "/perception/left_tilt/pointcloud";
 constexpr const char *rightTiltPointTopice = "/perception/right_tilt/pointcloud";
+
+// 物理按键失效发布 1 驻车失败 2 解除驻车失败 3 助行失败
+constexpr const char *physicalButtonFailureTopic = "/vlago/physical/button/failure";
+// 安全功能开启/关闭发布 1 开启 0 关闭
+constexpr const char *safetyFunctionTopic = "/vlago/safety/function";
+// 巡航模式开启/关闭发布 1 开启 0 关闭
+constexpr const char *cruiseModeTopic = "/vlago/cruise/mode";
+
 
 // 场景辅助测试相关topic
 constexpr const char *leftLaserROITopic = "/scene_auxiliary/left_laser/roi_filtered";
@@ -60,10 +72,11 @@ constexpr const char *rightTiltBaseLinkTopic = "/scene_auxiliary/right_tilt/base
 constexpr const char *backLaserBaseLinkTopic = "/scene_auxiliary/back_laser/base_link";
 
 constexpr const char *modeStatusTopic = "/vlago/mode/status";
-constexpr const char *rechargeStatusTopic = "/vlago/recharge/status";
+constexpr const char *rechargeStatusTopic = "/vlago/recharge/status"; // 废弃不用
+constexpr const char *rechargeStateTopic = "/vlago/recharge/state";
 constexpr const char *sceneServiceModeTopic = "/scene_services/mode";
 constexpr const char *rgbPointCloudTopic = "/rgb/pointcloud";
-
+constexpr const char *followmeStatusTopic = "/vlago/followme/status";
 // 自车
 // constexpr const char* carInfo = "/sensor/car/information";
 
@@ -95,6 +108,10 @@ constexpr const char *vlagoModeEnableService = "/vlago/mode/enable";
 constexpr const char *rechargeService = "/vlago/auto_charge";
 constexpr const char *manageFollowmeService = "/manage/followme";
 constexpr const char *manageCruiseService = "/manage/cruise";
+constexpr const char *manageHelpcarService = "/manage/helpcar";
+constexpr const char *manageStandardService = "/manage/standard";
+constexpr const char *manageBluetoothService = "/manage/bluetooth";
+constexpr const char *manageRechargeService = "/manage/recharge";
 constexpr const char *autoindoorService = "/vlago/autoDriveMode";
 constexpr const char *autoindoorNavGotoService = "/vlago/autoindoor/goto";
 constexpr const char *autoindoorNavCannelService = "/vlago/autoindoor/cannel";
@@ -103,13 +120,19 @@ constexpr const char *feedNarrowService = "/feed/narrow/ctrl";
 constexpr const char *feedRechargeService = "/feed/recharge/ctrl";
 constexpr const char *feedFollwmeService = "/feed/follwme/ctrl";
 constexpr const char *feedDanceService = "/feed/dance/ctrl";
-//
+
+// 系统版本
+constexpr const char *UCVersionService = "/vlago/uc/version";
+constexpr const char *DBVersionService = "/vlago/db/version";
+// 蓝牙mac地址
+constexpr const char *bluetoothMacService = "/vlago/bluetooth/mac";
 constexpr const char *ServiceFollowControlTopic = "/service/follow/control";
 // 模式
 constexpr const char *sceneAuxiliaryService = "/scene/auxiliary";
 constexpr const char *sceneNarrowService = "/scene/narrow";
 constexpr const char *sceneStandardService = "/scene/standard";
 constexpr const char *sceneCruiseService = "/scene/cruise";
+constexpr const char *sceneHelpcarService = "/scene/helpcar";
 constexpr const char *sceneDanceService = "/scene/dance";
 constexpr const char *sceneRechargeService = "/scene/recharge";
 constexpr const char *sceneFollowmeService = "/scene/followme";
@@ -130,16 +153,49 @@ constexpr const char *perPoDaoTopic = "/perception/podao_detect_status";
 // 预警
 constexpr const char *auxiliaryAlarmTopic = "/vlago/auxiliary/alarm";
 constexpr const char *auxiliaryAlarmBackTopic = "/vlago/backcar/alarm";
+constexpr const char *auxiliaryStatusTopic = "/scene_auxiliary/status";  // 安全功能开启/关闭状态
 constexpr const char *cursorAlarmTopic = "/vlago/cruise/status";
 constexpr const char *speedbumpAlarmTopic = "/speed_bump/status";
 constexpr const char *downhillAlarmTopic = "/downhill/status";
 constexpr const char *uphillAlarmTopic = "/uphill/status";
 constexpr const char *footLimiterTopic = "/foot/limiter/status";
+constexpr const char *collisionWarningTopic = "/vlago/collision/warning";
 
 // tft模式
 constexpr const char *tftModeTopic = "/vlago/tft/mode";
-
+constexpr const char *tftCarModeTopic = "/vlago/tft/car/mode";  // 切换车辆模式 1 舒适 2 运动
+constexpr const char *tftSoundSwitchTopic = "/vlago/tft/sound/switch"; // 设置声音开关 1 打开 0 关闭
+constexpr const char *tftLanguageTopic = "/vlago/tft/language"; // 中英文 0 中文 1 英文
+// tft屏触摸事件
+constexpr const char *tftTouchEventTopic = "/vlago/tft/touch/event";
+constexpr const char *tftJoystickEventTopic = "/tft/joystick/event";
 constexpr const char *audioTopic = "/vlago/audio/play";
-
+//灯效类型
+constexpr const char *lightTypeTopic = "/vlago/light/type";
+// 弹窗类型
+constexpr const char *popupTypeTopic = "/vlago/popup/type";
 // 错误码topic
 constexpr const char* errorEventTopic = "/error_events";
+
+//ota相关
+constexpr const char *otaSystemUpgradePrepare = "/system/upgrade_prepare";
+constexpr const char *otaPackageInfoTopic = "/ota_agent/upgrade/package_info";
+constexpr const char *otaDownloadMessageTopic = "/ota_agent/upgrade/download_message";
+constexpr const char *otaDownloadProgressTopic = "/ota_agent/upgrade/download_progress";
+constexpr const char *otaUpgradeMessageTopic = "/ota_agent/upgrade/upgrade_message";
+constexpr const char *otaUpgradeProgressTopic = "/ota_agent/upgrade/upgrade_progress";
+
+//service/upgrade/package_download
+constexpr const char *UpgradePackageDownloadService = "/service/upgrade/package_download";
+//service/upgrade/package_upgrade
+constexpr const char *UpgradePackageUpgradeService = "/service/upgrade/package_upgrade";
+//service/upgrade/package_check
+constexpr const char *UpgradePackageCheckService = "/service/upgrade/package_check";
+
+
+//cloud_manager
+constexpr const char *cloudManagerAuthInfoTopic = "/cloud_manager/mqtt/auth_info";
+constexpr const char *cloudManagerDeviceBindService = "/cloud_manager/device/bind/status";
+constexpr const char *cloudManagerDeviceBindPubTopic = "/vehicle/bind/status";
+
+constexpr const char *cloudManagerGetAuthInfoService = "/cloud_manager/mqtt/get_auth_info";

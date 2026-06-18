@@ -1,0 +1,13 @@
+# srv/GetToken.srv
+string client_id       # 请求参数：
+---
+string jwt_token       # 响应参数1：Token 字符串
+int64 exp              # token 时效
+bool token_success     # 响应参数2：是否成功
+string token_err_msg   # 响应参数3(可选)：错误信息
+string public_key      #会话公钥，用于验签
+string private_key     #会话私钥，用于加签
+string key_no          #密钥对编号
+bool key_success
+string key_err_msg
+string result

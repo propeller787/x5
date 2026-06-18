@@ -1,0 +1,18 @@
+In file included from [01m[K/home/m1513/sou/freego_tft/freego_2025_tft/src/common/utils/serial_port.cpp:6[m[K:
+[01m[K/home/m1513/sou/freego_tft/freego_2025_tft/src/common/utils/serial_port.h:[m[K In constructor ‘[01m[Kutils::SerialPort::SerialPort(const string&, const utils::OpenOptions&, bool)[m[K’:
+[01m[K/home/m1513/sou/freego_tft/freego_2025_tft/src/common/utils/serial_port.h:97:17:[m[K [01;35m[Kwarning: [m[K‘[01m[Kutils::SerialPort::_open_options[m[K’ will be initialized after [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wreorder-Wreorder]8;;[m[K]
+   97 |     OpenOptions [01;35m[K_open_options[m[K;
+      |                 [01;35m[K^~~~~~~~~~~~~[m[K
+[01m[K/home/m1513/sou/freego_tft/freego_2025_tft/src/common/utils/serial_port.h:93:10:[m[K [01;35m[Kwarning: [m[K  ‘[01m[Kbool utils::SerialPort::_is_block[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wreorder-Wreorder]8;;[m[K]
+   93 |     bool [01;35m[K_is_block[m[K;
+      |          [01;35m[K^~~~~~~~~[m[K
+[01m[K/home/m1513/sou/freego_tft/freego_2025_tft/src/common/utils/serial_port.cpp:15:1:[m[K [01;35m[Kwarning: [m[K  when initialized here [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wreorder-Wreorder]8;;[m[K]
+   15 | [01;35m[KSerialPort[m[K::SerialPort(const std::string& devpath, const OpenOptions& options, bool is_block)
+      | [01;35m[K^~~~~~~~~~[m[K
+[01m[K/home/m1513/sou/freego_tft/freego_2025_tft/src/common/utils/config_manager.cpp:[m[K In member function ‘[01m[Kbool common::utils::ConfigManager::loadFromJson(const string&, const string&)[m[K’:
+[01m[K/home/m1513/sou/freego_tft/freego_2025_tft/src/common/utils/config_manager.cpp:133:53:[m[K [01;35m[Kwarning: [m[Kunused parameter ‘[01m[Kfile_path[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wunused-parameter-Wunused-parameter]8;;[m[K]
+  133 | bool ConfigManager::loadFromJson([01;35m[Kconst std::string& file_path[m[K, const std::string& namespace_prefix) {
+      |                                  [01;35m[K~~~~~~~~~~~~~~~~~~~^~~~~~~~~[m[K
+[01m[K/home/m1513/sou/freego_tft/freego_2025_tft/src/common/utils/config_manager.cpp:133:83:[m[K [01;35m[Kwarning: [m[Kunused parameter ‘[01m[Knamespace_prefix[m[K’ [[01;35m[K]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wunused-parameter-Wunused-parameter]8;;[m[K]
+  133 | bool ConfigManager::loadFromJson(const std::string& file_path, [01;35m[Kconst std::string& namespace_prefix[m[K) {
+      |                                                                [01;35m[K~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~[m[K

@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package vehicle.ota.up;
+
+//升级通知
+message VehicleOtaUp {
+  string task_id = 1;     //主任务id
+  int32 task_status = 2;     //任务状态0正常(正常执行) 1暂停 2取消
+
+  int64 timestamp = 3;        // 请求时间戳
+  int64 exec_time = 4;   //任务开始执行时间
+  
+  Strategy strategy = 20;  //策略
+  
+  string sub_task_id = 30;     //子任务id
+}
+
+//策略
+message Strategy {
+  string id = 1;  //策略id
+  int64 create_time = 2;   //策略创建时间
+  int32 up_type = 3;  //0升级 1回滚
+
+  // 前置条件
+  Preconditions preconditions = 4;
+  // 下载失败最大重试次数
+  int32 download_retry_count = 5;
+  // 刷写失败最大重试次数
+  int32 flash_retry_count = 6;
+  // 升级模式
+  int32 up_mode = 7;  //0静默 1提醒 2强制
+
+  //升级分组集合如:["升级包id1,升级包id2","升级包id3"]
+  //组内升级包逗号分隔可并行升级,组间串行。
+  repeated string upgrade_groups = 10;
+  //回滚分组
+  repeated string rollback_groups = 11;
+  string desc = 20; //升级描述
+
+  repeated UpgradePackage packages = 30; //升级包列表
+}
+
+// 前置条件
+message Preconditions {
+  int32 min_battery_percent = 1;  //最低电量要求（百分比）
+  int32 parking_status = 2;   //驻车状态0未驻车 1已驻车
+  int32 max_speed = 3;        //最大车速
+  int32 charging_status = 4; //充电状态（0=未充电、1=充电中、2=充满）
+}
+
+// 升级包信息
+message UpgradePackage {
+  string package_id = 1; // 升级包 ID
+  string ecu = 2; // ECU
+  string ecu_hardware_code = 3; // ECU硬件编号
+  string target_version = 4;    // 目标版本
+  string from_version = 5;      // 最低允许版本（可空）
+  string from_max_version = 6;  // 最高允许版本（可空）
+  string download_url = 10;     // 下载地址
+  string sha256 = 11;           // 整包 SHA256
+  int64 size = 12;              // 包大小字节
+}

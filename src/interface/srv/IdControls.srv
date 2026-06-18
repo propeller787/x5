@@ -1,4 +1,4 @@
 int16 id
 ---
-int16 carid
+string sn
 int16 code

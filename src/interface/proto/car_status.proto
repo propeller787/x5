@@ -25,6 +25,8 @@ message VehicleInfo {
   int32 right_brakests = 28;           // 右刹车状态 0 关闭 1 打开
   float total_mileage = 29;            // 总行驶里程（单位：m，累计不重置）
   float current_interval_mileage = 30; // 当次行驶里程（单位：m，1分钟重置）
+  int32 line_charging = 33;            // 0 未充电 1 线充
+  int32 return_charging = 34;          // 0 未充电 1 回充
 }
 
 // 2. 被动上报消息（字段内容修改才上传） -> VehicleStatus

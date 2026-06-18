@@ -1,0 +1,1215 @@
+[0.000000] (-) TimerEvent: {}
+[0.000556] (-) JobUnselected: {'identifier': 'PahoMqttCpp'}
+[0.000618] (-) JobUnselected: {'identifier': 'cloud_manager'}
+[0.000673] (-) JobUnselected: {'identifier': 'common'}
+[0.000726] (-) JobUnselected: {'identifier': 'cpr'}
+[0.000778] (-) JobUnselected: {'identifier': 'interface'}
+[0.000831] (-) JobUnselected: {'identifier': 'ldlidar_stl_ros2'}
+[0.001059] (-) JobUnselected: {'identifier': 'lidar_obstacle_groundmodel'}
+[0.001176] (-) JobUnselected: {'identifier': 'lx_camera_ros'}
+[0.001623] (-) JobUnselected: {'identifier': 'mqtt_module'}
+[0.001702] (-) JobUnselected: {'identifier': 'oradar_lidar'}
+[0.001764] (-) JobUnselected: {'identifier': 'ota_agent'}
+[0.001854] (-) JobUnselected: {'identifier': 'paho.mqtt.c'}
+[0.002202] (-) JobUnselected: {'identifier': 'podao_detect'}
+[0.002431] (-) JobUnselected: {'identifier': 'postback'}
+[0.002534] (-) JobUnselected: {'identifier': 'scene_node'}
+[0.002595] (-) JobUnselected: {'identifier': 'scene_service'}
+[0.003102] (-) JobUnselected: {'identifier': 'sensor'}
+[0.003186] (-) JobUnselected: {'identifier': 'tft_manager'}
+[0.003239] (-) JobUnselected: {'identifier': 'ydlidar_ros2_driver'}
+[0.003923] (safety_node) JobQueued: {'identifier': 'safety_node', 'dependencies': OrderedDict([('common', '/home/m1513/sou/freego_tft/freego_2025_tft/install/common'), ('interface', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface')])}
+[0.004024] (safety_node) JobStarted: {'identifier': 'safety_node'}
+[0.099461] (-) TimerEvent: {}
+[0.186431] (safety_node) JobProgress: {'identifier': 'safety_node', 'progress': 'cmake'}
+[0.189681] (safety_node) Command: {'cmd': ['/usr/bin/cmake', '/home/m1513/sou/freego_tft/freego_2025_tft/src/scene/safety_node', '-DCMAKE_INSTALL_PREFIX=/home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node'], 'cwd': '/home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node', 'env': OrderedDict([('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'm1513'), ('GIT_ASKPASS', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/extensions/git/dist/askpass.sh'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface/lib:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('HOME', '/home/m1513'), ('OLDPWD', '/home/m1513/sou/freego_tft/freego_2025_tft/src'), ('TERM_PROGRAM_VERSION', '1.124.2'), ('VSCODE_IPC_HOOK_CLI', '/run/user/1000/vscode-ipc-291aef6a-cdd7-4c40-9126-d220a1ce2620.sock'), ('ROS_PYTHON_VERSION', '3'), ('VSCODE_GIT_ASKPASS_MAIN', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/extensions/git/dist/askpass-main.js'), ('VSCODE_GIT_ASKPASS_NODE', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/node'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('WSL_DISTRO_NAME', 'Ubuntu-22.04'), ('WAYLAND_DISPLAY', 'wayland-0'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'm1513'), ('NAME', 'likang'), ('WSL_INTEROP', '/run/WSL/622_interop'), ('PULSE_SERVER', 'unix:/mnt/wslg/PulseServer'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('TERM', 'xterm-256color'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/bin/remote-cli:/home/m1513/.local/bin:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/WireGuard/:/mnt/c/Program Files/nodejs/:/mnt/c/Users/m1513/AppData/Local/hermes/hermes-agent/venv/Scripts:/mnt/c/Users/m1513/AppData/Local/hermes/bin:/mnt/c/Users/m1513/AppData/Local/Microsoft/WindowsApps:/mnt/d/ruanjian/Microsoft VS Code/bin:/mnt/d/ruanjian/cursor/resources/app/bin:/mnt/c/Users/m1513/AppData/Local/hermes/git/cmd:/mnt/c/Users/m1513/AppData/Local/hermes/git/bin:/mnt/c/Users/m1513/AppData/Local/hermes/git/usr/bin:/mnt/c/Users/m1513/AppData/Local/hermes/node:/mnt/c/Users/m1513/AppData/Local/Microsoft/WinGet/Packages/BurntSushi.ripgrep.MSVC_Microsoft.Winget.Source_8wekyb3d8bbwe/ripgrep-15.1.0-x86_64-pc-windows-msvc:/mnt/c/Users/m1513/AppData/Roaming/npm:/mnt/c/Users/m1513/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1.1-full_build/bin:/snap/bin'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('DISPLAY', ':0'), ('LANG', 'C.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-9bf4e05693.sock'), ('TERM_PROGRAM', 'vscode'), ('AMENT_PREFIX_PATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface:/home/m1513/sou/freego_tft/freego_2025_tft/install/common:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('PWD', '/home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node'), ('XDG_DATA_DIRS', '/usr/local/share:/usr/share:/var/lib/snapd/desktop'), ('PYTHONPATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('WSL2_GUI_APPS_ENABLED', '1'), ('HOSTTYPE', 'x86_64'), ('WSLENV', 'VSCODE_WSL_EXT_LOCATION/up'), ('CMAKE_PREFIX_PATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface:/home/m1513/sou/freego_tft/freego_2025_tft/install/common:/opt/ros/humble')]), 'shell': False}
+[0.199600] (-) TimerEvent: {}
+[0.299959] (-) TimerEvent: {}
+[0.373919] (safety_node) StdoutLine: {'line': b'-- The C compiler identification is GNU 11.4.0\n'}
+[0.400057] (-) TimerEvent: {}
+[0.500471] (-) TimerEvent: {}
+[0.600932] (-) TimerEvent: {}
+[0.701444] (-) TimerEvent: {}
+[0.801896] (-) TimerEvent: {}
+[0.902228] (-) TimerEvent: {}
+[1.002729] (-) TimerEvent: {}
+[1.050043] (safety_node) StdoutLine: {'line': b'-- The CXX compiler identification is GNU 11.4.0\n'}
+[1.102859] (-) TimerEvent: {}
+[1.203423] (-) TimerEvent: {}
+[1.303903] (-) TimerEvent: {}
+[1.404283] (-) TimerEvent: {}
+[1.504662] (-) TimerEvent: {}
+[1.565328] (safety_node) StdoutLine: {'line': b'-- Detecting C compiler ABI info\n'}
+[1.604836] (-) TimerEvent: {}
+[1.705361] (-) TimerEvent: {}
+[1.780516] (safety_node) StdoutLine: {'line': b'-- Detecting C compiler ABI info - done\n'}
+[1.787638] (safety_node) StdoutLine: {'line': b'-- Check for working C compiler: /usr/bin/cc - skipped\n'}
+[1.787956] (safety_node) StdoutLine: {'line': b'-- Detecting C compile features\n'}
+[1.788349] (safety_node) StdoutLine: {'line': b'-- Detecting C compile features - done\n'}
+[1.791586] (safety_node) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info\n'}
+[1.805435] (-) TimerEvent: {}
+[1.905771] (-) TimerEvent: {}
+[2.006083] (-) TimerEvent: {}
+[2.015718] (safety_node) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info - done\n'}
+[2.022734] (safety_node) StdoutLine: {'line': b'-- Check for working CXX compiler: /usr/bin/c++ - skipped\n'}
+[2.023110] (safety_node) StdoutLine: {'line': b'-- Detecting CXX compile features\n'}
+[2.023572] (safety_node) StdoutLine: {'line': b'-- Detecting CXX compile features - done\n'}
+[2.026783] (safety_node) StdoutLine: {'line': b'-- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)\n'}
+[2.106153] (-) TimerEvent: {}
+[2.206584] (-) TimerEvent: {}
+[2.208429] (safety_node) StdoutLine: {'line': b'-- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter \n'}
+[2.306738] (-) TimerEvent: {}
+[2.317415] (safety_node) StdoutLine: {'line': b'-- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)\n'}
+[2.406896] (-) TimerEvent: {}
+[2.507376] (-) TimerEvent: {}
+[2.548312] (safety_node) StdoutLine: {'line': b'-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)\n'}
+[2.554943] (safety_node) StdoutLine: {'line': b'-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)\n'}
+[2.563922] (safety_node) StdoutLine: {'line': b'-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)\n'}
+[2.577850] (safety_node) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[2.597519] (safety_node) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[2.607479] (-) TimerEvent: {}
+[2.649555] (safety_node) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)\n'}
+[2.652641] (safety_node) StdoutLine: {'line': b'-- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)\n'}
+[2.707637] (-) TimerEvent: {}
+[2.808091] (-) TimerEvent: {}
+[2.908597] (-) TimerEvent: {}
+[3.009104] (-) TimerEvent: {}
+[3.109547] (-) TimerEvent: {}
+[3.210227] (-) TimerEvent: {}
+[3.310719] (-) TimerEvent: {}
+[3.411148] (-) TimerEvent: {}
+[3.511578] (-) TimerEvent: {}
+[3.611980] (-) TimerEvent: {}
+[3.712357] (-) TimerEvent: {}
+[3.812872] (-) TimerEvent: {}
+[3.913244] (-) TimerEvent: {}
+[4.013639] (-) TimerEvent: {}
+[4.113998] (-) TimerEvent: {}
+[4.214421] (-) TimerEvent: {}
+[4.314887] (-) TimerEvent: {}
+[4.329410] (safety_node) StdoutLine: {'line': b'-- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.2")  \n'}
+[4.415007] (-) TimerEvent: {}
+[4.515420] (-) TimerEvent: {}
+[4.615745] (-) TimerEvent: {}
+[4.716092] (-) TimerEvent: {}
+[4.816477] (-) TimerEvent: {}
+[4.916836] (-) TimerEvent: {}
+[5.017234] (-) TimerEvent: {}
+[5.117678] (-) TimerEvent: {}
+[5.218103] (-) TimerEvent: {}
+[5.318627] (-) TimerEvent: {}
+[5.419042] (-) TimerEvent: {}
+[5.519468] (-) TimerEvent: {}
+[5.620813] (-) TimerEvent: {}
+[5.721187] (-) TimerEvent: {}
+[5.821612] (-) TimerEvent: {}
+[5.922341] (-) TimerEvent: {}
+[6.022875] (-) TimerEvent: {}
+[6.123285] (-) TimerEvent: {}
+[6.184728] (safety_node) StdoutLine: {'line': b'-- Found FastRTPS: /opt/ros/humble/include  \n'}
+[6.223444] (-) TimerEvent: {}
+[6.323824] (-) TimerEvent: {}
+[6.424218] (-) TimerEvent: {}
+[6.524653] (-) TimerEvent: {}
+[6.625107] (-) TimerEvent: {}
+[6.725595] (-) TimerEvent: {}
+[6.825997] (-) TimerEvent: {}
+[6.926403] (-) TimerEvent: {}
+[7.026871] (-) TimerEvent: {}
+[7.127317] (-) TimerEvent: {}
+[7.227787] (-) TimerEvent: {}
+[7.328116] (-) TimerEvent: {}
+[7.428578] (-) TimerEvent: {}
+[7.529065] (-) TimerEvent: {}
+[7.629485] (-) TimerEvent: {}
+[7.729816] (-) TimerEvent: {}
+[7.830240] (-) TimerEvent: {}
+[7.930729] (-) TimerEvent: {}
+[8.031218] (-) TimerEvent: {}
+[8.131562] (-) TimerEvent: {}
+[8.231967] (-) TimerEvent: {}
+[8.332386] (-) TimerEvent: {}
+[8.432834] (-) TimerEvent: {}
+[8.533195] (-) TimerEvent: {}
+[8.633577] (-) TimerEvent: {}
+[8.734010] (-) TimerEvent: {}
+[8.834415] (-) TimerEvent: {}
+[8.934788] (-) TimerEvent: {}
+[9.035132] (-) TimerEvent: {}
+[9.135480] (-) TimerEvent: {}
+[9.235907] (-) TimerEvent: {}
+[9.336296] (-) TimerEvent: {}
+[9.436664] (-) TimerEvent: {}
+[9.537062] (-) TimerEvent: {}
+[9.561282] (safety_node) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[9.570885] (safety_node) StdoutLine: {'line': b'-- Looking for pthread.h\n'}
+[9.637136] (-) TimerEvent: {}
+[9.737579] (-) TimerEvent: {}
+[9.773403] (safety_node) StdoutLine: {'line': b'-- Looking for pthread.h - found\n'}
+[9.773977] (safety_node) StdoutLine: {'line': b'-- Performing Test CMAKE_HAVE_LIBC_PTHREAD\n'}
+[9.837653] (-) TimerEvent: {}
+[9.938094] (-) TimerEvent: {}
+[9.976248] (safety_node) StdoutLine: {'line': b'-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success\n'}
+[9.977611] (safety_node) StdoutLine: {'line': b'-- Found Threads: TRUE  \n'}
+[10.035933] (safety_node) StdoutLine: {'line': b'-- Found geometry_msgs: 4.9.1 (/opt/ros/humble/share/geometry_msgs/cmake)\n'}
+[10.038141] (-) TimerEvent: {}
+[10.048997] (safety_node) StdoutLine: {'line': b'-- Found interface: 0.0.0 (/home/m1513/sou/freego_tft/freego_2025_tft/install/interface/share/interface/cmake)\n'}
+[10.088930] (safety_node) StdoutLine: {'line': b'-- Found nav_msgs: 4.9.1 (/opt/ros/humble/share/nav_msgs/cmake)\n'}
+[10.106549] (safety_node) StdoutLine: {'line': b'-- Found visualization_msgs: 4.9.1 (/opt/ros/humble/share/visualization_msgs/cmake)\n'}
+[10.130315] (safety_node) StdoutLine: {'line': b'-- Found tf2: 0.25.20 (/opt/ros/humble/share/tf2/cmake)\n'}
+[10.138275] (-) TimerEvent: {}
+[10.141164] (safety_node) StdoutLine: {'line': b'-- Found tf2_ros: 0.25.20 (/opt/ros/humble/share/tf2_ros/cmake)\n'}
+[10.238413] (-) TimerEvent: {}
+[10.241471] (safety_node) StdoutLine: {'line': b'-- Found tf2_geometry_msgs: 0.25.20 (/opt/ros/humble/share/tf2_geometry_msgs/cmake)\n'}
+[10.309614] (safety_node) StdoutLine: {'line': b'-- Found eigen3_cmake_module: 0.1.1 (/opt/ros/humble/share/eigen3_cmake_module/cmake)\n'}
+[10.311151] (safety_node) StdoutLine: {'line': b'-- Found Eigen3: TRUE (found version "3.4.0") \n'}
+[10.311440] (safety_node) StdoutLine: {'line': b'-- Ensuring Eigen3 include directory is part of orocos-kdl CMake target\n'}
+[10.313369] (safety_node) StdoutLine: {'line': b'-- Found common: 0.0.0 (/home/m1513/sou/freego_tft/freego_2025_tft/install/common/share/common/cmake)\n'}
+[10.328480] (safety_node) StdoutLine: {'line': b"-- Checking for module 'eigen3'\n"}
+[10.338550] (-) TimerEvent: {}
+[10.344994] (safety_node) StdoutLine: {'line': b'--   Found eigen3, version 3.4.0\n'}
+[10.388533] (safety_node) StdoutLine: {'line': b'-- Found Eigen: /usr/include/eigen3 (Required is at least version "3.1") \n'}
+[10.388918] (safety_node) StdoutLine: {'line': b'-- Eigen found (include: /usr/include/eigen3, version: 3.4.0)\n'}
+[10.412819] (safety_node) StdoutLine: {'line': b'-- Found Boost: /usr/lib/x86_64-linux-gnu/cmake/Boost-1.74.0/BoostConfig.cmake (found suitable version "1.74.0", minimum required is "1.65.0") found components: system filesystem date_time iostreams serialization \n'}
+[10.438733] (-) TimerEvent: {}
+[10.539402] (-) TimerEvent: {}
+[10.639837] (-) TimerEvent: {}
+[10.740174] (-) TimerEvent: {}
+[10.840502] (-) TimerEvent: {}
+[10.940914] (-) TimerEvent: {}
+[11.041291] (-) TimerEvent: {}
+[11.141727] (-) TimerEvent: {}
+[11.242135] (-) TimerEvent: {}
+[11.342555] (-) TimerEvent: {}
+[11.442922] (-) TimerEvent: {}
+[11.543316] (-) TimerEvent: {}
+[11.643694] (-) TimerEvent: {}
+[11.744166] (-) TimerEvent: {}
+[11.844544] (-) TimerEvent: {}
+[11.944899] (-) TimerEvent: {}
+[12.036905] (safety_node) StdoutLine: {'line': b"-- Checking for module 'flann'\n"}
+[12.045016] (-) TimerEvent: {}
+[12.053633] (safety_node) StdoutLine: {'line': b'--   Found flann, version 1.9.1\n'}
+[12.145162] (-) TimerEvent: {}
+[12.245529] (-) TimerEvent: {}
+[12.345876] (-) TimerEvent: {}
+[12.446354] (-) TimerEvent: {}
+[12.546803] (-) TimerEvent: {}
+[12.574276] (safety_node) StdoutLine: {'line': b'-- Found FLANN: /usr/lib/x86_64-linux-gnu/libflann_cpp.so  \n'}
+[12.574689] (safety_node) StdoutLine: {'line': b'-- FLANN found (include: /usr/include, lib: /usr/lib/x86_64-linux-gnu/libflann_cpp.so)\n'}
+[12.620241] (safety_node) StdoutLine: {'line': b'-- Found GLEW: /usr/lib/x86_64-linux-gnu/libGLEW.so  \n'}
+[12.646921] (-) TimerEvent: {}
+[12.723158] (safety_node) StdoutLine: {'line': b'-- Found OpenGL: /usr/lib/x86_64-linux-gnu/libOpenGL.so  found components: OpenGL GLX \n'}
+[12.747061] (-) TimerEvent: {}
+[12.847371] (-) TimerEvent: {}
+[12.947763] (-) TimerEvent: {}
+[12.988194] (safety_node) StdoutLine: {'line': b'-- Found MPI_C: /usr/lib/x86_64-linux-gnu/libmpi.so (found version "3.1") \n'}
+[12.988540] (safety_node) StdoutLine: {'line': b'-- Found MPI: TRUE (found version "3.1") found components: C \n'}
+[12.991122] (safety_node) StdoutLine: {'line': b'-- Found JsonCpp: /usr/lib/x86_64-linux-gnu/libjsoncpp.so (found suitable version "1.9.5", minimum required is "0.7.0") \n'}
+[13.047885] (-) TimerEvent: {}
+[13.148272] (-) TimerEvent: {}
+[13.248648] (-) TimerEvent: {}
+[13.348977] (-) TimerEvent: {}
+[13.449305] (-) TimerEvent: {}
+[13.544983] (safety_node) StdoutLine: {'line': b'-- Found ZLIB: /usr/lib/x86_64-linux-gnu/libz.so (found version "1.2.11") \n'}
+[13.549376] (-) TimerEvent: {}
+[13.649716] (-) TimerEvent: {}
+[13.750089] (-) TimerEvent: {}
+[13.850548] (-) TimerEvent: {}
+[13.950913] (-) TimerEvent: {}
+[14.051281] (-) TimerEvent: {}
+[14.151640] (-) TimerEvent: {}
+[14.248307] (safety_node) StdoutLine: {'line': b'-- Found PNG: /usr/lib/x86_64-linux-gnu/libpng.so (found version "1.6.37") \n'}
+[14.251707] (-) TimerEvent: {}
+[14.262567] (safety_node) StdoutLine: {'line': b'-- Found Eigen3: /usr/include/eigen3 (found version "3.4.0") \n'}
+[14.351827] (-) TimerEvent: {}
+[14.452175] (-) TimerEvent: {}
+[14.552582] (-) TimerEvent: {}
+[14.652951] (-) TimerEvent: {}
+[14.753329] (-) TimerEvent: {}
+[14.853688] (-) TimerEvent: {}
+[14.954064] (-) TimerEvent: {}
+[15.054420] (-) TimerEvent: {}
+[15.154843] (-) TimerEvent: {}
+[15.255255] (-) TimerEvent: {}
+[15.355689] (-) TimerEvent: {}
+[15.456087] (-) TimerEvent: {}
+[15.556466] (-) TimerEvent: {}
+[15.656867] (-) TimerEvent: {}
+[15.757269] (-) TimerEvent: {}
+[15.792868] (safety_node) StdoutLine: {'line': b'-- Found X11: /usr/include   \n'}
+[15.793210] (safety_node) StdoutLine: {'line': b'-- Looking for XOpenDisplay in /usr/lib/x86_64-linux-gnu/libX11.so;/usr/lib/x86_64-linux-gnu/libXext.so\n'}
+[15.857361] (-) TimerEvent: {}
+[15.957741] (-) TimerEvent: {}
+[15.967561] (safety_node) StdoutLine: {'line': b'-- Looking for XOpenDisplay in /usr/lib/x86_64-linux-gnu/libX11.so;/usr/lib/x86_64-linux-gnu/libXext.so - found\n'}
+[15.967834] (safety_node) StdoutLine: {'line': b'-- Looking for gethostbyname\n'}
+[16.057858] (-) TimerEvent: {}
+[16.149837] (safety_node) StdoutLine: {'line': b'-- Looking for gethostbyname - found\n'}
+[16.150118] (safety_node) StdoutLine: {'line': b'-- Looking for connect\n'}
+[16.157931] (-) TimerEvent: {}
+[16.258339] (-) TimerEvent: {}
+[16.338380] (safety_node) StdoutLine: {'line': b'-- Looking for connect - found\n'}
+[16.339067] (safety_node) StdoutLine: {'line': b'-- Looking for remove\n'}
+[16.358510] (-) TimerEvent: {}
+[16.458972] (-) TimerEvent: {}
+[16.528508] (safety_node) StdoutLine: {'line': b'-- Looking for remove - found\n'}
+[16.528763] (safety_node) StdoutLine: {'line': b'-- Looking for shmat\n'}
+[16.559064] (-) TimerEvent: {}
+[16.659432] (-) TimerEvent: {}
+[16.713754] (safety_node) StdoutLine: {'line': b'-- Looking for shmat - found\n'}
+[16.714037] (safety_node) StdoutLine: {'line': b'-- Looking for IceConnectionNumber in ICE\n'}
+[16.759557] (-) TimerEvent: {}
+[16.859902] (-) TimerEvent: {}
+[16.896968] (safety_node) StdoutLine: {'line': b'-- Looking for IceConnectionNumber in ICE - found\n'}
+[16.960051] (-) TimerEvent: {}
+[17.060433] (-) TimerEvent: {}
+[17.160825] (-) TimerEvent: {}
+[17.261201] (-) TimerEvent: {}
+[17.361596] (-) TimerEvent: {}
+[17.461989] (-) TimerEvent: {}
+[17.562351] (-) TimerEvent: {}
+[17.662779] (-) TimerEvent: {}
+[17.763116] (-) TimerEvent: {}
+[17.863629] (-) TimerEvent: {}
+[17.964253] (-) TimerEvent: {}
+[18.064706] (-) TimerEvent: {}
+[18.165085] (-) TimerEvent: {}
+[18.228932] (safety_node) StdoutLine: {'line': b'-- Found EXPAT: /usr/lib/x86_64-linux-gnu/libexpat.so (found version "2.4.7") \n'}
+[18.231001] (safety_node) StdoutLine: {'line': b'-- Found double-conversion: /usr/lib/x86_64-linux-gnu/libdouble-conversion.so  \n'}
+[18.233353] (safety_node) StdoutLine: {'line': b'-- Found LZ4: /usr/lib/x86_64-linux-gnu/liblz4.so (found version "1.9.3") \n'}
+[18.235269] (safety_node) StdoutLine: {'line': b'-- Found LZMA: /usr/lib/x86_64-linux-gnu/liblzma.so (found version "5.2.5") \n'}
+[18.265179] (-) TimerEvent: {}
+[18.365526] (-) TimerEvent: {}
+[18.456178] (safety_node) StdoutLine: {'line': b'-- Found JPEG: /usr/lib/x86_64-linux-gnu/libjpeg.so (found version "80") \n'}
+[18.465598] (-) TimerEvent: {}
+[18.565978] (-) TimerEvent: {}
+[18.666337] (-) TimerEvent: {}
+[18.677379] (safety_node) StdoutLine: {'line': b'-- Found TIFF: /usr/lib/x86_64-linux-gnu/libtiff.so (found version "4.3.0")  \n'}
+[18.681950] (safety_node) StdoutLine: {'line': b'-- Found Freetype: /usr/lib/x86_64-linux-gnu/libfreetype.so (found version "2.11.1") \n'}
+[18.687230] (safety_node) StdoutLine: {'line': b'-- Found utf8cpp: /usr/include/utf8cpp  \n'}
+[18.766569] (-) TimerEvent: {}
+[18.809568] (safety_node) StdoutLine: {'line': b"-- Checking for module 'libusb-1.0'\n"}
+[18.826873] (safety_node) StdoutLine: {'line': b'--   Found libusb-1.0, version 1.0.25\n'}
+[18.866693] (-) TimerEvent: {}
+[18.967028] (-) TimerEvent: {}
+[18.977534] (safety_node) StdoutLine: {'line': b'-- Found libusb: /usr/lib/x86_64-linux-gnu/libusb-1.0.so  \n'}
+[18.978524] (safety_node) StdoutLine: {'line': b'-- Found OpenNI: /usr/lib/libOpenNI.so;libusb::libusb (found version "1.5.4.0") \n'}
+[18.978705] (safety_node) StdoutLine: {'line': b'-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)\n'}
+[19.067133] (-) TimerEvent: {}
+[19.167522] (-) TimerEvent: {}
+[19.261102] (safety_node) StdoutLine: {'line': b'-- Found OpenNI2: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb (found version "2.2.0.33") \n'}
+[19.261472] (safety_node) StdoutLine: {'line': b'-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)\n'}
+[19.261721] (safety_node) StderrLine: {'line': b'\x1b[0m** WARNING ** io features related to pcap will be disabled\x1b[0m\n'}
+[19.267661] (-) TimerEvent: {}
+[19.368275] (-) TimerEvent: {}
+[19.468746] (-) TimerEvent: {}
+[19.569178] (-) TimerEvent: {}
+[19.669649] (-) TimerEvent: {}
+[19.770085] (-) TimerEvent: {}
+[19.870520] (-) TimerEvent: {}
+[19.970887] (-) TimerEvent: {}
+[20.071273] (-) TimerEvent: {}
+[20.171758] (-) TimerEvent: {}
+[20.272171] (-) TimerEvent: {}
+[20.372620] (-) TimerEvent: {}
+[20.472979] (-) TimerEvent: {}
+[20.573376] (-) TimerEvent: {}
+[20.673824] (-) TimerEvent: {}
+[20.774274] (-) TimerEvent: {}
+[20.874862] (-) TimerEvent: {}
+[20.975307] (-) TimerEvent: {}
+[21.075646] (-) TimerEvent: {}
+[21.176059] (-) TimerEvent: {}
+[21.276495] (-) TimerEvent: {}
+[21.376895] (-) TimerEvent: {}
+[21.477293] (-) TimerEvent: {}
+[21.577705] (-) TimerEvent: {}
+[21.678120] (-) TimerEvent: {}
+[21.778543] (-) TimerEvent: {}
+[21.878971] (-) TimerEvent: {}
+[21.979386] (-) TimerEvent: {}
+[22.079734] (-) TimerEvent: {}
+[22.165655] (safety_node) StdoutLine: {'line': b'-- Eigen found (include: /usr/include/eigen3, version: 3.4.0)\n'}
+[22.173764] (safety_node) StdoutLine: {'line': b'-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)\n'}
+[22.179863] (-) TimerEvent: {}
+[22.181486] (safety_node) StdoutLine: {'line': b'-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)\n'}
+[22.279970] (-) TimerEvent: {}
+[22.380418] (-) TimerEvent: {}
+[22.480812] (-) TimerEvent: {}
+[22.581222] (-) TimerEvent: {}
+[22.681601] (-) TimerEvent: {}
+[22.781984] (-) TimerEvent: {}
+[22.882427] (-) TimerEvent: {}
+[22.982933] (-) TimerEvent: {}
+[23.083326] (-) TimerEvent: {}
+[23.183804] (-) TimerEvent: {}
+[23.284252] (-) TimerEvent: {}
+[23.384621] (-) TimerEvent: {}
+[23.484987] (-) TimerEvent: {}
+[23.585372] (-) TimerEvent: {}
+[23.685745] (-) TimerEvent: {}
+[23.786177] (-) TimerEvent: {}
+[23.886668] (-) TimerEvent: {}
+[23.987124] (-) TimerEvent: {}
+[24.087559] (-) TimerEvent: {}
+[24.187906] (-) TimerEvent: {}
+[24.288291] (-) TimerEvent: {}
+[24.388771] (-) TimerEvent: {}
+[24.489192] (-) TimerEvent: {}
+[24.589628] (-) TimerEvent: {}
+[24.690062] (-) TimerEvent: {}
+[24.790532] (-) TimerEvent: {}
+[24.890952] (-) TimerEvent: {}
+[24.991294] (-) TimerEvent: {}
+[25.090399] (safety_node) StdoutLine: {'line': b'-- Found Qhull version 8.0.2\n'}
+[25.091388] (-) TimerEvent: {}
+[25.191709] (-) TimerEvent: {}
+[25.292126] (-) TimerEvent: {}
+[25.392491] (-) TimerEvent: {}
+[25.492868] (-) TimerEvent: {}
+[25.593266] (-) TimerEvent: {}
+[25.693685] (-) TimerEvent: {}
+[25.794071] (-) TimerEvent: {}
+[25.894454] (-) TimerEvent: {}
+[25.994980] (-) TimerEvent: {}
+[26.095413] (-) TimerEvent: {}
+[26.195784] (-) TimerEvent: {}
+[26.296197] (-) TimerEvent: {}
+[26.396653] (-) TimerEvent: {}
+[26.497156] (-) TimerEvent: {}
+[26.597587] (-) TimerEvent: {}
+[26.698001] (-) TimerEvent: {}
+[26.798410] (-) TimerEvent: {}
+[26.898848] (-) TimerEvent: {}
+[26.999263] (-) TimerEvent: {}
+[27.099670] (-) TimerEvent: {}
+[27.200072] (-) TimerEvent: {}
+[27.300526] (-) TimerEvent: {}
+[27.401011] (-) TimerEvent: {}
+[27.501415] (-) TimerEvent: {}
+[27.601873] (-) TimerEvent: {}
+[27.702342] (-) TimerEvent: {}
+[27.802841] (-) TimerEvent: {}
+[27.903229] (-) TimerEvent: {}
+[28.003632] (-) TimerEvent: {}
+[28.011373] (safety_node) StdoutLine: {'line': b'-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)\n'}
+[28.103740] (-) TimerEvent: {}
+[28.204163] (-) TimerEvent: {}
+[28.304611] (-) TimerEvent: {}
+[28.405066] (-) TimerEvent: {}
+[28.505565] (-) TimerEvent: {}
+[28.605997] (-) TimerEvent: {}
+[28.706382] (-) TimerEvent: {}
+[28.806849] (-) TimerEvent: {}
+[28.907236] (-) TimerEvent: {}
+[29.007624] (-) TimerEvent: {}
+[29.108107] (-) TimerEvent: {}
+[29.208554] (-) TimerEvent: {}
+[29.308988] (-) TimerEvent: {}
+[29.409641] (-) TimerEvent: {}
+[29.510123] (-) TimerEvent: {}
+[29.610641] (-) TimerEvent: {}
+[29.711021] (-) TimerEvent: {}
+[29.811367] (-) TimerEvent: {}
+[29.911812] (-) TimerEvent: {}
+[30.012250] (-) TimerEvent: {}
+[30.112673] (-) TimerEvent: {}
+[30.213092] (-) TimerEvent: {}
+[30.313450] (-) TimerEvent: {}
+[30.413770] (-) TimerEvent: {}
+[30.514153] (-) TimerEvent: {}
+[30.614674] (-) TimerEvent: {}
+[30.715107] (-) TimerEvent: {}
+[30.795066] (safety_node) StdoutLine: {'line': b'-- looking for PCL_COMMON\n'}
+[30.795909] (safety_node) StdoutLine: {'line': b'-- Found PCL_COMMON: /usr/lib/x86_64-linux-gnu/libpcl_common.so  \n'}
+[30.796468] (safety_node) StdoutLine: {'line': b'-- looking for PCL_KDTREE\n'}
+[30.797094] (safety_node) StdoutLine: {'line': b'-- Found PCL_KDTREE: /usr/lib/x86_64-linux-gnu/libpcl_kdtree.so  \n'}
+[30.797383] (safety_node) StdoutLine: {'line': b'-- looking for PCL_OCTREE\n'}
+[30.798296] (safety_node) StdoutLine: {'line': b'-- Found PCL_OCTREE: /usr/lib/x86_64-linux-gnu/libpcl_octree.so  \n'}
+[30.798578] (safety_node) StdoutLine: {'line': b'-- looking for PCL_SEARCH\n'}
+[30.799534] (safety_node) StdoutLine: {'line': b'-- Found PCL_SEARCH: /usr/lib/x86_64-linux-gnu/libpcl_search.so  \n'}
+[30.799909] (safety_node) StdoutLine: {'line': b'-- looking for PCL_SAMPLE_CONSENSUS\n'}
+[30.801007] (safety_node) StdoutLine: {'line': b'-- Found PCL_SAMPLE_CONSENSUS: /usr/lib/x86_64-linux-gnu/libpcl_sample_consensus.so  \n'}
+[30.801407] (safety_node) StdoutLine: {'line': b'-- looking for PCL_FILTERS\n'}
+[30.802411] (safety_node) StdoutLine: {'line': b'-- Found PCL_FILTERS: /usr/lib/x86_64-linux-gnu/libpcl_filters.so  \n'}
+[30.802858] (safety_node) StdoutLine: {'line': b'-- looking for PCL_2D\n'}
+[30.803335] (safety_node) StdoutLine: {'line': b'-- Found PCL_2D: /usr/include/pcl-1.12  \n'}
+[30.803620] (safety_node) StdoutLine: {'line': b'-- looking for PCL_GEOMETRY\n'}
+[30.804084] (safety_node) StdoutLine: {'line': b'-- Found PCL_GEOMETRY: /usr/include/pcl-1.12  \n'}
+[30.804396] (safety_node) StdoutLine: {'line': b'-- looking for PCL_IO\n'}
+[30.805375] (safety_node) StdoutLine: {'line': b'-- Found PCL_IO: /usr/lib/x86_64-linux-gnu/libpcl_io.so  \n'}
+[30.805830] (safety_node) StdoutLine: {'line': b'-- looking for PCL_FEATURES\n'}
+[30.806956] (safety_node) StdoutLine: {'line': b'-- Found PCL_FEATURES: /usr/lib/x86_64-linux-gnu/libpcl_features.so  \n'}
+[30.807409] (safety_node) StdoutLine: {'line': b'-- looking for PCL_ML\n'}
+[30.808432] (safety_node) StdoutLine: {'line': b'-- Found PCL_ML: /usr/lib/x86_64-linux-gnu/libpcl_ml.so  \n'}
+[30.808694] (safety_node) StdoutLine: {'line': b'-- looking for PCL_SEGMENTATION\n'}
+[30.809322] (safety_node) StdoutLine: {'line': b'-- Found PCL_SEGMENTATION: /usr/lib/x86_64-linux-gnu/libpcl_segmentation.so  \n'}
+[30.809663] (safety_node) StdoutLine: {'line': b'-- looking for PCL_VISUALIZATION\n'}
+[30.810425] (safety_node) StdoutLine: {'line': b'-- Found PCL_VISUALIZATION: /usr/lib/x86_64-linux-gnu/libpcl_visualization.so  \n'}
+[30.810758] (safety_node) StdoutLine: {'line': b'-- looking for PCL_SURFACE\n'}
+[30.811403] (safety_node) StdoutLine: {'line': b'-- Found PCL_SURFACE: /usr/lib/x86_64-linux-gnu/libpcl_surface.so  \n'}
+[30.811654] (safety_node) StdoutLine: {'line': b'-- looking for PCL_REGISTRATION\n'}
+[30.812346] (safety_node) StdoutLine: {'line': b'-- Found PCL_REGISTRATION: /usr/lib/x86_64-linux-gnu/libpcl_registration.so  \n'}
+[30.812675] (safety_node) StdoutLine: {'line': b'-- looking for PCL_KEYPOINTS\n'}
+[30.813577] (safety_node) StdoutLine: {'line': b'-- Found PCL_KEYPOINTS: /usr/lib/x86_64-linux-gnu/libpcl_keypoints.so  \n'}
+[30.813836] (safety_node) StdoutLine: {'line': b'-- looking for PCL_TRACKING\n'}
+[30.814503] (safety_node) StdoutLine: {'line': b'-- Found PCL_TRACKING: /usr/lib/x86_64-linux-gnu/libpcl_tracking.so  \n'}
+[30.814788] (safety_node) StdoutLine: {'line': b'-- looking for PCL_RECOGNITION\n'}
+[30.815219] (-) TimerEvent: {}
+[30.815520] (safety_node) StdoutLine: {'line': b'-- Found PCL_RECOGNITION: /usr/lib/x86_64-linux-gnu/libpcl_recognition.so  \n'}
+[30.815806] (safety_node) StdoutLine: {'line': b'-- looking for PCL_STEREO\n'}
+[30.816456] (safety_node) StdoutLine: {'line': b'-- Found PCL_STEREO: /usr/lib/x86_64-linux-gnu/libpcl_stereo.so  \n'}
+[30.816691] (safety_node) StdoutLine: {'line': b'-- looking for PCL_APPS\n'}
+[30.817453] (safety_node) StdoutLine: {'line': b'-- Found PCL_APPS: /usr/lib/x86_64-linux-gnu/libpcl_apps.so  \n'}
+[30.818598] (safety_node) StdoutLine: {'line': b'-- looking for PCL_IN_HAND_SCANNER\n'}
+[30.819112] (safety_node) StdoutLine: {'line': b'-- Found PCL_IN_HAND_SCANNER: /usr/include/pcl-1.12  \n'}
+[30.819398] (safety_node) StdoutLine: {'line': b'-- looking for PCL_MODELER\n'}
+[30.819833] (safety_node) StdoutLine: {'line': b'-- Found PCL_MODELER: /usr/include/pcl-1.12  \n'}
+[30.820092] (safety_node) StdoutLine: {'line': b'-- looking for PCL_POINT_CLOUD_EDITOR\n'}
+[30.820636] (safety_node) StdoutLine: {'line': b'-- Found PCL_POINT_CLOUD_EDITOR: /usr/include/pcl-1.12  \n'}
+[30.820936] (safety_node) StdoutLine: {'line': b'-- looking for PCL_OUTOFCORE\n'}
+[30.821730] (safety_node) StdoutLine: {'line': b'-- Found PCL_OUTOFCORE: /usr/lib/x86_64-linux-gnu/libpcl_outofcore.so  \n'}
+[30.821976] (safety_node) StdoutLine: {'line': b'-- looking for PCL_PEOPLE\n'}
+[30.822880] (safety_node) StdoutLine: {'line': b'-- Found PCL_PEOPLE: /usr/lib/x86_64-linux-gnu/libpcl_people.so  \n'}
+[30.824072] (safety_node) StdoutLine: {'line': b'-- Found PCL: pcl_common;pcl_kdtree;pcl_octree;pcl_search;pcl_sample_consensus;pcl_filters;pcl_io;pcl_features;pcl_ml;pcl_segmentation;pcl_visualization;pcl_surface;pcl_registration;pcl_keypoints;pcl_tracking;pcl_recognition;pcl_stereo;pcl_apps;pcl_outofcore;pcl_people;Boost::system;Boost::filesystem;Boost::date_time;Boost::iostreams;Boost::serialization;/usr/lib/libOpenNI.so;libusb::libusb;/usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb;VTK::ChartsCore;VTK::CommonColor;VTK::CommonComputationalGeometry;VTK::CommonCore;VTK::CommonDataModel;VTK::CommonExecutionModel;VTK::CommonMath;VTK::CommonMisc;VTK::CommonTransforms;VTK::FiltersCore;VTK::FiltersExtraction;VTK::FiltersGeneral;VTK::FiltersGeometry;VTK::FiltersModeling;VTK::FiltersSources;VTK::ImagingCore;VTK::ImagingSources;VTK::InteractionImage;VTK::InteractionStyle;VTK::InteractionWidgets;VTK::IOCore;VTK::IOGeometry;VTK::IOImage;VTK::IOLegacy;VTK::IOPLY;VTK::RenderingAnnotation;VTK::RenderingCore;VTK::RenderingContext2D;VTK::RenderingLOD;VTK::RenderingFreeType;VTK::ViewsCore;VTK::ViewsContext2D;VTK::RenderingOpenGL2;VTK::GUISupportQt;FLANN::FLANN;QHULL::QHULL  \n'}
+[30.826159] (safety_node) StdoutLine: {'line': b'-- Found pcl_conversions: 2.4.5 (/opt/ros/humble/share/pcl_conversions/cmake)\n'}
+[30.861717] (safety_node) StdoutLine: {'line': b'-- Found ament_lint_auto: 0.12.15 (/opt/ros/humble/share/ament_lint_auto/cmake)\n'}
+[30.915366] (-) TimerEvent: {}
+[30.952483] (safety_node) StdoutLine: {'line': b"-- Found gtest sources under '/opt/ros/humble/src/gtest_vendor': C++ tests using 'Google Test' will be built\n"}
+[31.015516] (-) TimerEvent: {}
+[31.018949] (safety_node) StdoutLine: {'line': b"-- Added test 'cppcheck' to perform static code analysis on C / C++ code\n"}
+[31.020175] (safety_node) StdoutLine: {'line': b'-- Configured cppcheck include dirs: $<BUILD_INTERFACE:/home/m1513/sou/freego_tft/freego_2025_tft/src/scene/safety_node/include>\n'}
+[31.020351] (safety_node) StdoutLine: {'line': b'-- Configured cppcheck exclude dirs and/or files: \n'}
+[31.022785] (safety_node) StdoutLine: {'line': b"-- Added test 'flake8' to check Python code syntax and style conventions\n"}
+[31.025780] (safety_node) StdoutLine: {'line': b"-- Added test 'lint_cmake' to check CMake code style\n"}
+[31.028019] (safety_node) StdoutLine: {'line': b"-- Added test 'pep257' to check Python code against some of the docstring style conventions in PEP 257\n"}
+[31.037008] (safety_node) StdoutLine: {'line': b"-- Added test 'uncrustify' to check C / C++ code style\n"}
+[31.037322] (safety_node) StdoutLine: {'line': b'-- Configured uncrustify additional arguments: \n'}
+[31.039407] (safety_node) StdoutLine: {'line': b"-- Added test 'xmllint' to check XML markup files\n"}
+[31.046984] (safety_node) StdoutLine: {'line': b'-- Configuring done\n'}
+[31.115665] (-) TimerEvent: {}
+[31.216117] (-) TimerEvent: {}
+[31.316597] (-) TimerEvent: {}
+[31.417066] (-) TimerEvent: {}
+[31.495937] (safety_node) StdoutLine: {'line': b'-- Generating done\n'}
+[31.517232] (-) TimerEvent: {}
+[31.591632] (safety_node) StdoutLine: {'line': b'-- Build files have been written to: /home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node\n'}
+[31.615475] (safety_node) CommandEnded: {'returncode': 0}
+[31.618152] (-) TimerEvent: {}
+[31.618544] (safety_node) JobProgress: {'identifier': 'safety_node', 'progress': 'build'}
+[31.619094] (safety_node) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node', '--', '-j16', '-l16'], 'cwd': '/home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node', 'env': OrderedDict([('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'm1513'), ('GIT_ASKPASS', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/extensions/git/dist/askpass.sh'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface/lib:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('HOME', '/home/m1513'), ('OLDPWD', '/home/m1513/sou/freego_tft/freego_2025_tft/src'), ('TERM_PROGRAM_VERSION', '1.124.2'), ('VSCODE_IPC_HOOK_CLI', '/run/user/1000/vscode-ipc-291aef6a-cdd7-4c40-9126-d220a1ce2620.sock'), ('ROS_PYTHON_VERSION', '3'), ('VSCODE_GIT_ASKPASS_MAIN', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/extensions/git/dist/askpass-main.js'), ('VSCODE_GIT_ASKPASS_NODE', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/node'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('WSL_DISTRO_NAME', 'Ubuntu-22.04'), ('WAYLAND_DISPLAY', 'wayland-0'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'm1513'), ('NAME', 'likang'), ('WSL_INTEROP', '/run/WSL/622_interop'), ('PULSE_SERVER', 'unix:/mnt/wslg/PulseServer'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('TERM', 'xterm-256color'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/bin/remote-cli:/home/m1513/.local/bin:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/WireGuard/:/mnt/c/Program Files/nodejs/:/mnt/c/Users/m1513/AppData/Local/hermes/hermes-agent/venv/Scripts:/mnt/c/Users/m1513/AppData/Local/hermes/bin:/mnt/c/Users/m1513/AppData/Local/Microsoft/WindowsApps:/mnt/d/ruanjian/Microsoft VS Code/bin:/mnt/d/ruanjian/cursor/resources/app/bin:/mnt/c/Users/m1513/AppData/Local/hermes/git/cmd:/mnt/c/Users/m1513/AppData/Local/hermes/git/bin:/mnt/c/Users/m1513/AppData/Local/hermes/git/usr/bin:/mnt/c/Users/m1513/AppData/Local/hermes/node:/mnt/c/Users/m1513/AppData/Local/Microsoft/WinGet/Packages/BurntSushi.ripgrep.MSVC_Microsoft.Winget.Source_8wekyb3d8bbwe/ripgrep-15.1.0-x86_64-pc-windows-msvc:/mnt/c/Users/m1513/AppData/Roaming/npm:/mnt/c/Users/m1513/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1.1-full_build/bin:/snap/bin'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('DISPLAY', ':0'), ('LANG', 'C.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-9bf4e05693.sock'), ('TERM_PROGRAM', 'vscode'), ('AMENT_PREFIX_PATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface:/home/m1513/sou/freego_tft/freego_2025_tft/install/common:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('PWD', '/home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node'), ('XDG_DATA_DIRS', '/usr/local/share:/usr/share:/var/lib/snapd/desktop'), ('PYTHONPATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('WSL2_GUI_APPS_ENABLED', '1'), ('HOSTTYPE', 'x86_64'), ('WSLENV', 'VSCODE_WSL_EXT_LOCATION/up'), ('CMAKE_PREFIX_PATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface:/home/m1513/sou/freego_tft/freego_2025_tft/install/common:/opt/ros/humble')]), 'shell': False}
+[31.692522] (safety_node) StdoutLine: {'line': b'[  4%] \x1b[32mBuilding CXX object gtest/CMakeFiles/gtest.dir/src/gtest-all.cc.o\x1b[0m\n'}
+[31.692773] (safety_node) StdoutLine: {'line': b'[  4%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/avoidance_utils.cpp.o\x1b[0m\n'}
+[31.692892] (safety_node) StdoutLine: {'line': b'[  6%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/safety_filter.cpp.o\x1b[0m\n'}
+[31.693624] (safety_node) StdoutLine: {'line': b'[  8%] \x1b[32mBuilding CXX object gtest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o\x1b[0m\n'}
+[31.698732] (safety_node) StdoutLine: {'line': b'[ 10%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/vehicle_footprint.cpp.o\x1b[0m\n'}
+[31.699742] (safety_node) StdoutLine: {'line': b'[ 14%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/obstacle_field.cpp.o\x1b[0m\n'}
+[31.699901] (safety_node) StdoutLine: {'line': b'[ 14%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/safety_params.cpp.o\x1b[0m\n'}
+[31.701527] (safety_node) StdoutLine: {'line': b'[ 18%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/mode_supervisor.cpp.o\x1b[0m\n'}
+[31.701973] (safety_node) StdoutLine: {'line': b'[ 18%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/swept_footprint_checker.cpp.o\x1b[0m\n'}
+[31.703241] (safety_node) StdoutLine: {'line': b'[ 20%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/rolling_local_map.cpp.o\x1b[0m\n'}
+[31.703479] (safety_node) StdoutLine: {'line': b'[ 22%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/output_shaper.cpp.o\x1b[0m\n'}
+[31.709088] (safety_node) StdoutLine: {'line': b'[ 25%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/motion_rollout.cpp.o\x1b[0m\n'}
+[31.711129] (safety_node) StdoutLine: {'line': b'[ 27%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/map_constraint_check.cpp.o\x1b[0m\n'}
+[31.713227] (safety_node) StdoutLine: {'line': b'[ 29%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/emergency_brake.cpp.o\x1b[0m\n'}
+[31.714706] (safety_node) StdoutLine: {'line': b'[ 31%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/perception_utils.cpp.o\x1b[0m\n'}
+[31.720006] (safety_node) StdoutLine: {'line': b'[ 33%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/avoidance_controller.cpp.o\x1b[0m\n'}
+[31.720272] (-) TimerEvent: {}
+[31.823704] (-) TimerEvent: {}
+[31.924238] (-) TimerEvent: {}
+[32.030715] (-) TimerEvent: {}
+[32.131075] (-) TimerEvent: {}
+[32.231464] (-) TimerEvent: {}
+[32.331875] (-) TimerEvent: {}
+[32.434753] (-) TimerEvent: {}
+[32.525641] (safety_node) StdoutLine: {'line': b'[ 35%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/lidar_perception.cpp.o\x1b[0m\n'}
+[32.534886] (-) TimerEvent: {}
+[32.638947] (-) TimerEvent: {}
+[32.739399] (-) TimerEvent: {}
+[32.842598] (-) TimerEvent: {}
+[32.943418] (-) TimerEvent: {}
+[33.044354] (-) TimerEvent: {}
+[33.146936] (-) TimerEvent: {}
+[33.247752] (-) TimerEvent: {}
+[33.321142] (safety_node) StdoutLine: {'line': b'[ 37%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/vehicle_io.cpp.o\x1b[0m\n'}
+[33.347879] (-) TimerEvent: {}
+[33.375044] (safety_node) StdoutLine: {'line': b'[ 39%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/safety_node.cpp.o\x1b[0m\n'}
+[33.448002] (-) TimerEvent: {}
+[33.548606] (-) TimerEvent: {}
+[33.583548] (safety_node) StdoutLine: {'line': b'[ 41%] \x1b[32m\x1b[1mLinking CXX static library libgtest_main.a\x1b[0m\n'}
+[33.637863] (safety_node) StdoutLine: {'line': b'[ 41%] Built target gtest_main\n'}
+[33.648782] (-) TimerEvent: {}
+[33.749245] (-) TimerEvent: {}
+[33.849650] (-) TimerEvent: {}
+[33.950070] (-) TimerEvent: {}
+[34.050451] (-) TimerEvent: {}
+[34.150978] (-) TimerEvent: {}
+[34.251461] (-) TimerEvent: {}
+[34.351924] (-) TimerEvent: {}
+[34.452398] (-) TimerEvent: {}
+[34.552882] (-) TimerEvent: {}
+[34.653429] (-) TimerEvent: {}
+[34.753935] (-) TimerEvent: {}
+[34.854386] (-) TimerEvent: {}
+[34.954862] (-) TimerEvent: {}
+[35.055305] (-) TimerEvent: {}
+[35.155756] (-) TimerEvent: {}
+[35.256217] (-) TimerEvent: {}
+[35.356747] (-) TimerEvent: {}
+[35.457250] (-) TimerEvent: {}
+[35.557651] (-) TimerEvent: {}
+[35.658146] (-) TimerEvent: {}
+[35.758508] (-) TimerEvent: {}
+[35.858890] (-) TimerEvent: {}
+[35.959285] (-) TimerEvent: {}
+[36.059775] (-) TimerEvent: {}
+[36.160174] (-) TimerEvent: {}
+[36.260631] (-) TimerEvent: {}
+[36.361121] (-) TimerEvent: {}
+[36.449186] (safety_node) StdoutLine: {'line': b'[ 43%] \x1b[32m\x1b[1mLinking CXX static library libgtest.a\x1b[0m\n'}
+[36.461275] (-) TimerEvent: {}
+[36.540861] (safety_node) StdoutLine: {'line': b'[ 43%] Built target gtest\n'}
+[36.561332] (-) TimerEvent: {}
+[36.661782] (-) TimerEvent: {}
+[36.762237] (-) TimerEvent: {}
+[36.862759] (-) TimerEvent: {}
+[36.963136] (-) TimerEvent: {}
+[37.063611] (-) TimerEvent: {}
+[37.164056] (-) TimerEvent: {}
+[37.264516] (-) TimerEvent: {}
+[37.364941] (-) TimerEvent: {}
+[37.465337] (-) TimerEvent: {}
+[37.565767] (-) TimerEvent: {}
+[37.666374] (-) TimerEvent: {}
+[37.766867] (-) TimerEvent: {}
+[37.867334] (-) TimerEvent: {}
+[37.967985] (-) TimerEvent: {}
+[38.068481] (-) TimerEvent: {}
+[38.168940] (-) TimerEvent: {}
+[38.269336] (-) TimerEvent: {}
+[38.369755] (-) TimerEvent: {}
+[38.470185] (-) TimerEvent: {}
+[38.570674] (-) TimerEvent: {}
+[38.671129] (-) TimerEvent: {}
+[38.771613] (-) TimerEvent: {}
+[38.872038] (-) TimerEvent: {}
+[38.972456] (-) TimerEvent: {}
+[39.072876] (-) TimerEvent: {}
+[39.173290] (-) TimerEvent: {}
+[39.273731] (-) TimerEvent: {}
+[39.374156] (-) TimerEvent: {}
+[39.474711] (-) TimerEvent: {}
+[39.575231] (-) TimerEvent: {}
+[39.675653] (-) TimerEvent: {}
+[39.776033] (-) TimerEvent: {}
+[39.876494] (-) TimerEvent: {}
+[39.976959] (-) TimerEvent: {}
+[40.077549] (-) TimerEvent: {}
+[40.177972] (-) TimerEvent: {}
+[40.278488] (-) TimerEvent: {}
+[40.378963] (-) TimerEvent: {}
+[40.479395] (-) TimerEvent: {}
+[40.579895] (-) TimerEvent: {}
+[40.680312] (-) TimerEvent: {}
+[40.780756] (-) TimerEvent: {}
+[40.881187] (-) TimerEvent: {}
+[40.981651] (-) TimerEvent: {}
+[41.082115] (-) TimerEvent: {}
+[41.182598] (-) TimerEvent: {}
+[41.283020] (-) TimerEvent: {}
+[41.383441] (-) TimerEvent: {}
+[41.483833] (-) TimerEvent: {}
+[41.584321] (-) TimerEvent: {}
+[41.684733] (-) TimerEvent: {}
+[41.785128] (-) TimerEvent: {}
+[41.885531] (-) TimerEvent: {}
+[41.985944] (-) TimerEvent: {}
+[42.086421] (-) TimerEvent: {}
+[42.186843] (-) TimerEvent: {}
+[42.287289] (-) TimerEvent: {}
+[42.387708] (-) TimerEvent: {}
+[42.488118] (-) TimerEvent: {}
+[42.588487] (-) TimerEvent: {}
+[42.688976] (-) TimerEvent: {}
+[42.789363] (-) TimerEvent: {}
+[42.889836] (-) TimerEvent: {}
+[42.990331] (-) TimerEvent: {}
+[43.090801] (-) TimerEvent: {}
+[43.191202] (-) TimerEvent: {}
+[43.291661] (-) TimerEvent: {}
+[43.392073] (-) TimerEvent: {}
+[43.492515] (-) TimerEvent: {}
+[43.592990] (-) TimerEvent: {}
+[43.693469] (-) TimerEvent: {}
+[43.793915] (-) TimerEvent: {}
+[43.894371] (-) TimerEvent: {}
+[43.994789] (-) TimerEvent: {}
+[44.095162] (-) TimerEvent: {}
+[44.195572] (-) TimerEvent: {}
+[44.295930] (-) TimerEvent: {}
+[44.396330] (-) TimerEvent: {}
+[44.496716] (-) TimerEvent: {}
+[44.597070] (-) TimerEvent: {}
+[44.697459] (-) TimerEvent: {}
+[44.797824] (-) TimerEvent: {}
+[44.898510] (-) TimerEvent: {}
+[44.998895] (-) TimerEvent: {}
+[45.099322] (-) TimerEvent: {}
+[45.199695] (-) TimerEvent: {}
+[45.300017] (-) TimerEvent: {}
+[45.400387] (-) TimerEvent: {}
+[45.500732] (-) TimerEvent: {}
+[45.601125] (-) TimerEvent: {}
+[45.715070] (-) TimerEvent: {}
+[45.815491] (-) TimerEvent: {}
+[45.915803] (-) TimerEvent: {}
+[46.016162] (-) TimerEvent: {}
+[46.116518] (-) TimerEvent: {}
+[46.216910] (-) TimerEvent: {}
+[46.317388] (-) TimerEvent: {}
+[46.417794] (-) TimerEvent: {}
+[46.518244] (-) TimerEvent: {}
+[46.618932] (-) TimerEvent: {}
+[46.719334] (-) TimerEvent: {}
+[46.819697] (-) TimerEvent: {}
+[46.920083] (-) TimerEvent: {}
+[47.020487] (-) TimerEvent: {}
+[47.120896] (-) TimerEvent: {}
+[47.221269] (-) TimerEvent: {}
+[47.321612] (-) TimerEvent: {}
+[47.421899] (-) TimerEvent: {}
+[47.522318] (-) TimerEvent: {}
+[47.622761] (-) TimerEvent: {}
+[47.723142] (-) TimerEvent: {}
+[47.823501] (-) TimerEvent: {}
+[47.923801] (-) TimerEvent: {}
+[48.024190] (-) TimerEvent: {}
+[48.124504] (-) TimerEvent: {}
+[48.224887] (-) TimerEvent: {}
+[48.325259] (-) TimerEvent: {}
+[48.425641] (-) TimerEvent: {}
+[48.525926] (-) TimerEvent: {}
+[48.626295] (-) TimerEvent: {}
+[48.726739] (-) TimerEvent: {}
+[48.827159] (-) TimerEvent: {}
+[48.927552] (-) TimerEvent: {}
+[49.027933] (-) TimerEvent: {}
+[49.128300] (-) TimerEvent: {}
+[49.228667] (-) TimerEvent: {}
+[49.329054] (-) TimerEvent: {}
+[49.429414] (-) TimerEvent: {}
+[49.529784] (-) TimerEvent: {}
+[49.630176] (-) TimerEvent: {}
+[49.730602] (-) TimerEvent: {}
+[49.831196] (-) TimerEvent: {}
+[49.931575] (-) TimerEvent: {}
+[50.031961] (-) TimerEvent: {}
+[50.132359] (-) TimerEvent: {}
+[50.232754] (-) TimerEvent: {}
+[50.333188] (-) TimerEvent: {}
+[50.433510] (-) TimerEvent: {}
+[50.533882] (-) TimerEvent: {}
+[50.634328] (-) TimerEvent: {}
+[50.734783] (-) TimerEvent: {}
+[50.835135] (-) TimerEvent: {}
+[50.935428] (-) TimerEvent: {}
+[51.035805] (-) TimerEvent: {}
+[51.136129] (-) TimerEvent: {}
+[51.236557] (-) TimerEvent: {}
+[51.336922] (-) TimerEvent: {}
+[51.437280] (-) TimerEvent: {}
+[51.537616] (-) TimerEvent: {}
+[51.637967] (-) TimerEvent: {}
+[51.738413] (-) TimerEvent: {}
+[51.838789] (-) TimerEvent: {}
+[51.939183] (-) TimerEvent: {}
+[52.039788] (-) TimerEvent: {}
+[52.140318] (-) TimerEvent: {}
+[52.240691] (-) TimerEvent: {}
+[52.341123] (-) TimerEvent: {}
+[52.441518] (-) TimerEvent: {}
+[52.542001] (-) TimerEvent: {}
+[52.642639] (-) TimerEvent: {}
+[52.743078] (-) TimerEvent: {}
+[52.843472] (-) TimerEvent: {}
+[52.943890] (-) TimerEvent: {}
+[53.044363] (-) TimerEvent: {}
+[53.145081] (-) TimerEvent: {}
+[53.245497] (-) TimerEvent: {}
+[53.345901] (-) TimerEvent: {}
+[53.446310] (-) TimerEvent: {}
+[53.546821] (-) TimerEvent: {}
+[53.647225] (-) TimerEvent: {}
+[53.747676] (-) TimerEvent: {}
+[53.848029] (-) TimerEvent: {}
+[53.948411] (-) TimerEvent: {}
+[54.048784] (-) TimerEvent: {}
+[54.149210] (-) TimerEvent: {}
+[54.249671] (-) TimerEvent: {}
+[54.350086] (-) TimerEvent: {}
+[54.450566] (-) TimerEvent: {}
+[54.550969] (-) TimerEvent: {}
+[54.651396] (-) TimerEvent: {}
+[54.751748] (-) TimerEvent: {}
+[54.852195] (-) TimerEvent: {}
+[54.952685] (-) TimerEvent: {}
+[55.053154] (-) TimerEvent: {}
+[55.118931] (safety_node) StdoutLine: {'line': b'[ 45%] \x1b[32m\x1b[1mLinking CXX static library libsafety_node_lib.a\x1b[0m\n'}
+[55.153292] (-) TimerEvent: {}
+[55.253702] (-) TimerEvent: {}
+[55.354154] (-) TimerEvent: {}
+[55.454564] (-) TimerEvent: {}
+[55.554950] (-) TimerEvent: {}
+[55.655392] (-) TimerEvent: {}
+[55.755787] (-) TimerEvent: {}
+[55.790149] (safety_node) StdoutLine: {'line': b'[ 45%] Built target safety_node_lib\n'}
+[55.834288] (safety_node) StdoutLine: {'line': b'[ 47%] \x1b[32mBuilding CXX object CMakeFiles/test_rolling_local_map.dir/test/test_rolling_local_map.cpp.o\x1b[0m\n'}
+[55.847344] (safety_node) StdoutLine: {'line': b'[ 50%] \x1b[32mBuilding CXX object CMakeFiles/test_map_constraint_check.dir/test/test_map_constraint_check.cpp.o\x1b[0m\n'}
+[55.847617] (safety_node) StdoutLine: {'line': b'[ 52%] \x1b[32mBuilding CXX object CMakeFiles/safety_node_node.dir/src/main.cpp.o\x1b[0m\n'}
+[55.847723] (safety_node) StdoutLine: {'line': b'[ 54%] \x1b[32mBuilding CXX object CMakeFiles/test_motion_rollout.dir/test/test_motion_rollout.cpp.o\x1b[0m\n'}
+[55.847815] (safety_node) StdoutLine: {'line': b'[ 56%] \x1b[32mBuilding CXX object CMakeFiles/test_vehicle_io.dir/test/test_vehicle_io.cpp.o\x1b[0m\n'}
+[55.857287] (safety_node) StdoutLine: {'line': b'[ 58%] \x1b[32mBuilding CXX object CMakeFiles/test_output_shaper.dir/test/test_output_shaper.cpp.o\x1b[0m\n'}
+[55.857803] (-) TimerEvent: {}
+[55.865239] (safety_node) StdoutLine: {'line': b'[ 60%] \x1b[32mBuilding CXX object CMakeFiles/test_avoidance_controller.dir/test/test_avoidance_controller.cpp.o\x1b[0m\n'}
+[55.872063] (safety_node) StdoutLine: {'line': b'[ 62%] \x1b[32mBuilding CXX object CMakeFiles/test_safety_node_io.dir/test/test_safety_node_io.cpp.o\x1b[0m\n'}
+[55.873419] (safety_node) StdoutLine: {'line': b'[ 64%] \x1b[32mBuilding CXX object CMakeFiles/test_perception_utils.dir/test/test_perception_utils.cpp.o\x1b[0m\n'}
+[55.874541] (safety_node) StdoutLine: {'line': b'[ 66%] \x1b[32mBuilding CXX object CMakeFiles/test_lidar_perception.dir/test/test_lidar_perception.cpp.o\x1b[0m\n'}
+[55.891161] (safety_node) StdoutLine: {'line': b'[ 68%] \x1b[32mBuilding CXX object CMakeFiles/test_safety_filter.dir/test/test_safety_filter.cpp.o\x1b[0m\n'}
+[55.899597] (safety_node) StdoutLine: {'line': b'[ 70%] \x1b[32mBuilding CXX object CMakeFiles/test_core_safety.dir/test/test_core_safety.cpp.o\x1b[0m\n'}
+[55.925428] (safety_node) StdoutLine: {'line': b'[ 72%] \x1b[32mBuilding CXX object CMakeFiles/test_t3_sil.dir/test/test_t3_sil.cpp.o\x1b[0m\n'}
+[55.959161] (-) TimerEvent: {}
+[56.059529] (-) TimerEvent: {}
+[56.159892] (-) TimerEvent: {}
+[56.260764] (-) TimerEvent: {}
+[56.361481] (-) TimerEvent: {}
+[56.461986] (-) TimerEvent: {}
+[56.562948] (-) TimerEvent: {}
+[56.666568] (-) TimerEvent: {}
+[56.767005] (-) TimerEvent: {}
+[56.867434] (-) TimerEvent: {}
+[56.968495] (-) TimerEvent: {}
+[57.069449] (-) TimerEvent: {}
+[57.170388] (-) TimerEvent: {}
+[57.271198] (-) TimerEvent: {}
+[57.372156] (-) TimerEvent: {}
+[57.473168] (-) TimerEvent: {}
+[57.574095] (-) TimerEvent: {}
+[57.674938] (-) TimerEvent: {}
+[57.778576] (-) TimerEvent: {}
+[57.879000] (-) TimerEvent: {}
+[57.979523] (-) TimerEvent: {}
+[58.079936] (-) TimerEvent: {}
+[58.182847] (-) TimerEvent: {}
+[58.276481] (safety_node) StdoutLine: {'line': b'[ 75%] \x1b[32m\x1b[1mLinking CXX executable test_output_shaper\x1b[0m\n'}
+[58.286570] (-) TimerEvent: {}
+[58.386992] (-) TimerEvent: {}
+[58.487562] (-) TimerEvent: {}
+[58.588022] (-) TimerEvent: {}
+[58.676708] (safety_node) StdoutLine: {'line': b'[ 77%] \x1b[32m\x1b[1mLinking CXX executable test_motion_rollout\x1b[0m\n'}
+[58.688166] (-) TimerEvent: {}
+[58.731712] (safety_node) StdoutLine: {'line': b'[ 79%] \x1b[32m\x1b[1mLinking CXX executable test_safety_filter\x1b[0m\n'}
+[58.761582] (safety_node) StdoutLine: {'line': b'[ 81%] \x1b[32m\x1b[1mLinking CXX executable test_perception_utils\x1b[0m\n'}
+[58.788290] (-) TimerEvent: {}
+[58.808682] (safety_node) StdoutLine: {'line': b'[ 83%] \x1b[32m\x1b[1mLinking CXX executable test_map_constraint_check\x1b[0m\n'}
+[58.849907] (safety_node) StdoutLine: {'line': b'[ 85%] \x1b[32m\x1b[1mLinking CXX executable test_rolling_local_map\x1b[0m\n'}
+[58.888459] (-) TimerEvent: {}
+[58.988948] (-) TimerEvent: {}
+[59.094651] (-) TimerEvent: {}
+[59.195300] (-) TimerEvent: {}
+[59.211177] (safety_node) StdoutLine: {'line': b'[ 87%] \x1b[32m\x1b[1mLinking CXX executable test_core_safety\x1b[0m\n'}
+[59.222909] (safety_node) StdoutLine: {'line': b'[ 89%] \x1b[32m\x1b[1mLinking CXX executable test_t3_sil\x1b[0m\n'}
+[59.295440] (-) TimerEvent: {}
+[59.365315] (safety_node) StdoutLine: {'line': b'[ 91%] \x1b[32m\x1b[1mLinking CXX executable test_avoidance_controller\x1b[0m\n'}
+[59.395602] (-) TimerEvent: {}
+[59.496033] (-) TimerEvent: {}
+[59.598569] (-) TimerEvent: {}
+[59.699069] (-) TimerEvent: {}
+[59.799552] (-) TimerEvent: {}
+[59.900059] (-) TimerEvent: {}
+[60.000535] (-) TimerEvent: {}
+[60.101095] (-) TimerEvent: {}
+[60.201654] (-) TimerEvent: {}
+[60.302124] (-) TimerEvent: {}
+[60.402562] (-) TimerEvent: {}
+[60.503310] (-) TimerEvent: {}
+[60.604010] (-) TimerEvent: {}
+[60.706248] (-) TimerEvent: {}
+[60.806848] (-) TimerEvent: {}
+[60.907410] (-) TimerEvent: {}
+[61.007840] (-) TimerEvent: {}
+[61.111026] (-) TimerEvent: {}
+[61.211437] (-) TimerEvent: {}
+[61.312298] (-) TimerEvent: {}
+[61.412888] (-) TimerEvent: {}
+[61.513334] (-) TimerEvent: {}
+[61.613813] (-) TimerEvent: {}
+[61.714348] (-) TimerEvent: {}
+[61.819635] (-) TimerEvent: {}
+[61.920028] (-) TimerEvent: {}
+[62.020496] (-) TimerEvent: {}
+[62.071267] (safety_node) StdoutLine: {'line': b'[ 91%] Built target test_safety_filter\n'}
+[62.074099] (safety_node) StdoutLine: {'line': b'[ 91%] Built target test_perception_utils\n'}
+[62.120593] (-) TimerEvent: {}
+[62.189882] (safety_node) StdoutLine: {'line': b'[ 91%] Built target test_map_constraint_check\n'}
+[62.220788] (-) TimerEvent: {}
+[62.321299] (-) TimerEvent: {}
+[62.421804] (-) TimerEvent: {}
+[62.453327] (safety_node) StdoutLine: {'line': b'[ 91%] Built target test_t3_sil\n'}
+[62.471467] (safety_node) StdoutLine: {'line': b'[ 91%] Built target test_output_shaper\n'}
+[62.473985] (safety_node) StdoutLine: {'line': b'[ 91%] Built target test_rolling_local_map\n'}
+[62.510741] (safety_node) StdoutLine: {'line': b'[ 91%] Built target test_core_safety\n'}
+[62.521927] (-) TimerEvent: {}
+[62.622433] (-) TimerEvent: {}
+[62.648979] (safety_node) StdoutLine: {'line': b'[ 91%] Built target test_avoidance_controller\n'}
+[62.672129] (safety_node) StdoutLine: {'line': b'[ 91%] Built target test_motion_rollout\n'}
+[62.722609] (-) TimerEvent: {}
+[62.823110] (-) TimerEvent: {}
+[62.902143] (safety_node) StdoutLine: {'line': b'[ 93%] \x1b[32m\x1b[1mLinking CXX executable safety_node_node\x1b[0m\n'}
+[62.923289] (-) TimerEvent: {}
+[63.023764] (-) TimerEvent: {}
+[63.124197] (-) TimerEvent: {}
+[63.224631] (-) TimerEvent: {}
+[63.325086] (-) TimerEvent: {}
+[63.425592] (-) TimerEvent: {}
+[63.526115] (-) TimerEvent: {}
+[63.626607] (-) TimerEvent: {}
+[63.727107] (-) TimerEvent: {}
+[63.827592] (-) TimerEvent: {}
+[63.928055] (-) TimerEvent: {}
+[64.028497] (-) TimerEvent: {}
+[64.128960] (-) TimerEvent: {}
+[64.229491] (-) TimerEvent: {}
+[64.329940] (-) TimerEvent: {}
+[64.430397] (-) TimerEvent: {}
+[64.530908] (-) TimerEvent: {}
+[64.631380] (-) TimerEvent: {}
+[64.731837] (-) TimerEvent: {}
+[64.832295] (-) TimerEvent: {}
+[64.932773] (-) TimerEvent: {}
+[65.033239] (-) TimerEvent: {}
+[65.133688] (-) TimerEvent: {}
+[65.234172] (-) TimerEvent: {}
+[65.334594] (-) TimerEvent: {}
+[65.435019] (-) TimerEvent: {}
+[65.535506] (-) TimerEvent: {}
+[65.635898] (-) TimerEvent: {}
+[65.738883] (-) TimerEvent: {}
+[65.839413] (-) TimerEvent: {}
+[65.939839] (-) TimerEvent: {}
+[65.977652] (safety_node) StdoutLine: {'line': b'[ 95%] \x1b[32m\x1b[1mLinking CXX executable test_vehicle_io\x1b[0m\n'}
+[66.018283] (safety_node) StdoutLine: {'line': b'[ 97%] \x1b[32m\x1b[1mLinking CXX executable test_lidar_perception\x1b[0m\n'}
+[66.039987] (-) TimerEvent: {}
+[66.140401] (-) TimerEvent: {}
+[66.240910] (-) TimerEvent: {}
+[66.341435] (-) TimerEvent: {}
+[66.441896] (-) TimerEvent: {}
+[66.542338] (-) TimerEvent: {}
+[66.642984] (-) TimerEvent: {}
+[66.743544] (-) TimerEvent: {}
+[66.844182] (-) TimerEvent: {}
+[66.944709] (-) TimerEvent: {}
+[67.045471] (-) TimerEvent: {}
+[67.146102] (-) TimerEvent: {}
+[67.246693] (-) TimerEvent: {}
+[67.347234] (-) TimerEvent: {}
+[67.447643] (-) TimerEvent: {}
+[67.547998] (-) TimerEvent: {}
+[67.648449] (-) TimerEvent: {}
+[67.690869] (safety_node) StdoutLine: {'line': b'[ 97%] Built target safety_node_node\n'}
+[67.748734] (-) TimerEvent: {}
+[67.849166] (-) TimerEvent: {}
+[67.949587] (-) TimerEvent: {}
+[68.050026] (-) TimerEvent: {}
+[68.150567] (-) TimerEvent: {}
+[68.251070] (-) TimerEvent: {}
+[68.351514] (-) TimerEvent: {}
+[68.451840] (-) TimerEvent: {}
+[68.552309] (-) TimerEvent: {}
+[68.652768] (-) TimerEvent: {}
+[68.753359] (-) TimerEvent: {}
+[68.853856] (-) TimerEvent: {}
+[68.954255] (-) TimerEvent: {}
+[69.054687] (-) TimerEvent: {}
+[69.155090] (-) TimerEvent: {}
+[69.255494] (-) TimerEvent: {}
+[69.355864] (-) TimerEvent: {}
+[69.450318] (safety_node) StdoutLine: {'line': b'[ 97%] Built target test_lidar_perception\n'}
+[69.455943] (-) TimerEvent: {}
+[69.556225] (-) TimerEvent: {}
+[69.656629] (-) TimerEvent: {}
+[69.756969] (-) TimerEvent: {}
+[69.857403] (-) TimerEvent: {}
+[69.957897] (-) TimerEvent: {}
+[70.058280] (-) TimerEvent: {}
+[70.065884] (safety_node) StdoutLine: {'line': b'[ 97%] Built target test_vehicle_io\n'}
+[70.158437] (-) TimerEvent: {}
+[70.258920] (-) TimerEvent: {}
+[70.359348] (-) TimerEvent: {}
+[70.459785] (-) TimerEvent: {}
+[70.560205] (-) TimerEvent: {}
+[70.660637] (-) TimerEvent: {}
+[70.761061] (-) TimerEvent: {}
+[70.861439] (-) TimerEvent: {}
+[70.961808] (-) TimerEvent: {}
+[71.062185] (-) TimerEvent: {}
+[71.162710] (-) TimerEvent: {}
+[71.263090] (-) TimerEvent: {}
+[71.363488] (-) TimerEvent: {}
+[71.463988] (-) TimerEvent: {}
+[71.564357] (-) TimerEvent: {}
+[71.664742] (-) TimerEvent: {}
+[71.765145] (-) TimerEvent: {}
+[71.865595] (-) TimerEvent: {}
+[71.965960] (-) TimerEvent: {}
+[72.066386] (-) TimerEvent: {}
+[72.166855] (-) TimerEvent: {}
+[72.267234] (-) TimerEvent: {}
+[72.367668] (-) TimerEvent: {}
+[72.468042] (-) TimerEvent: {}
+[72.568486] (-) TimerEvent: {}
+[72.668957] (-) TimerEvent: {}
+[72.769371] (-) TimerEvent: {}
+[72.869794] (-) TimerEvent: {}
+[72.970257] (-) TimerEvent: {}
+[73.070756] (-) TimerEvent: {}
+[73.171164] (-) TimerEvent: {}
+[73.271564] (-) TimerEvent: {}
+[73.371926] (-) TimerEvent: {}
+[73.472600] (-) TimerEvent: {}
+[73.573079] (-) TimerEvent: {}
+[73.673482] (-) TimerEvent: {}
+[73.773914] (-) TimerEvent: {}
+[73.874349] (-) TimerEvent: {}
+[73.974827] (-) TimerEvent: {}
+[74.075276] (-) TimerEvent: {}
+[74.175687] (-) TimerEvent: {}
+[74.276254] (-) TimerEvent: {}
+[74.376688] (-) TimerEvent: {}
+[74.477077] (-) TimerEvent: {}
+[74.577550] (-) TimerEvent: {}
+[74.677945] (-) TimerEvent: {}
+[74.778412] (-) TimerEvent: {}
+[74.878941] (-) TimerEvent: {}
+[74.979365] (-) TimerEvent: {}
+[75.079796] (-) TimerEvent: {}
+[75.180184] (-) TimerEvent: {}
+[75.280546] (-) TimerEvent: {}
+[75.381035] (-) TimerEvent: {}
+[75.481427] (-) TimerEvent: {}
+[75.581852] (-) TimerEvent: {}
+[75.682289] (-) TimerEvent: {}
+[75.782808] (-) TimerEvent: {}
+[75.883188] (-) TimerEvent: {}
+[75.983642] (-) TimerEvent: {}
+[76.084063] (-) TimerEvent: {}
+[76.184424] (-) TimerEvent: {}
+[76.284775] (-) TimerEvent: {}
+[76.385263] (-) TimerEvent: {}
+[76.485655] (-) TimerEvent: {}
+[76.586045] (-) TimerEvent: {}
+[76.686526] (-) TimerEvent: {}
+[76.786932] (-) TimerEvent: {}
+[76.887361] (-) TimerEvent: {}
+[76.987763] (-) TimerEvent: {}
+[77.088106] (-) TimerEvent: {}
+[77.188458] (-) TimerEvent: {}
+[77.288793] (-) TimerEvent: {}
+[77.389214] (-) TimerEvent: {}
+[77.489575] (-) TimerEvent: {}
+[77.589954] (-) TimerEvent: {}
+[77.690327] (-) TimerEvent: {}
+[77.790699] (-) TimerEvent: {}
+[77.891058] (-) TimerEvent: {}
+[77.991498] (-) TimerEvent: {}
+[78.091876] (-) TimerEvent: {}
+[78.192264] (-) TimerEvent: {}
+[78.292715] (-) TimerEvent: {}
+[78.393088] (-) TimerEvent: {}
+[78.493484] (-) TimerEvent: {}
+[78.593880] (-) TimerEvent: {}
+[78.694283] (-) TimerEvent: {}
+[78.794726] (-) TimerEvent: {}
+[78.895121] (-) TimerEvent: {}
+[78.995483] (-) TimerEvent: {}
+[79.095843] (-) TimerEvent: {}
+[79.196233] (-) TimerEvent: {}
+[79.296592] (-) TimerEvent: {}
+[79.396988] (-) TimerEvent: {}
+[79.497416] (-) TimerEvent: {}
+[79.597793] (-) TimerEvent: {}
+[79.698154] (-) TimerEvent: {}
+[79.798718] (-) TimerEvent: {}
+[79.899077] (-) TimerEvent: {}
+[79.999692] (-) TimerEvent: {}
+[80.100098] (-) TimerEvent: {}
+[80.200474] (-) TimerEvent: {}
+[80.300989] (-) TimerEvent: {}
+[80.401358] (-) TimerEvent: {}
+[80.501699] (-) TimerEvent: {}
+[80.602141] (-) TimerEvent: {}
+[80.702597] (-) TimerEvent: {}
+[80.802994] (-) TimerEvent: {}
+[80.903347] (-) TimerEvent: {}
+[81.003701] (-) TimerEvent: {}
+[81.104098] (-) TimerEvent: {}
+[81.204529] (-) TimerEvent: {}
+[81.304963] (-) TimerEvent: {}
+[81.405411] (-) TimerEvent: {}
+[81.505880] (-) TimerEvent: {}
+[81.606308] (-) TimerEvent: {}
+[81.706815] (-) TimerEvent: {}
+[81.807266] (-) TimerEvent: {}
+[81.907787] (-) TimerEvent: {}
+[82.008271] (-) TimerEvent: {}
+[82.108734] (-) TimerEvent: {}
+[82.209208] (-) TimerEvent: {}
+[82.309641] (-) TimerEvent: {}
+[82.410066] (-) TimerEvent: {}
+[82.510520] (-) TimerEvent: {}
+[82.610913] (-) TimerEvent: {}
+[82.711356] (-) TimerEvent: {}
+[82.811821] (-) TimerEvent: {}
+[82.912260] (-) TimerEvent: {}
+[83.012714] (-) TimerEvent: {}
+[83.113130] (-) TimerEvent: {}
+[83.213563] (-) TimerEvent: {}
+[83.314001] (-) TimerEvent: {}
+[83.414414] (-) TimerEvent: {}
+[83.514829] (-) TimerEvent: {}
+[83.615324] (-) TimerEvent: {}
+[83.715791] (-) TimerEvent: {}
+[83.816209] (-) TimerEvent: {}
+[83.916660] (-) TimerEvent: {}
+[84.017079] (-) TimerEvent: {}
+[84.117486] (-) TimerEvent: {}
+[84.217923] (-) TimerEvent: {}
+[84.318345] (-) TimerEvent: {}
+[84.419004] (-) TimerEvent: {}
+[84.519453] (-) TimerEvent: {}
+[84.619843] (-) TimerEvent: {}
+[84.720188] (-) TimerEvent: {}
+[84.820622] (-) TimerEvent: {}
+[84.921071] (-) TimerEvent: {}
+[85.021525] (-) TimerEvent: {}
+[85.121927] (-) TimerEvent: {}
+[85.222340] (-) TimerEvent: {}
+[85.322797] (-) TimerEvent: {}
+[85.423176] (-) TimerEvent: {}
+[85.523576] (-) TimerEvent: {}
+[85.623896] (-) TimerEvent: {}
+[85.691896] (safety_node) StdoutLine: {'line': b'[100%] \x1b[32m\x1b[1mLinking CXX executable test_safety_node_io\x1b[0m\n'}
+[85.723979] (-) TimerEvent: {}
+[85.824305] (-) TimerEvent: {}
+[85.924736] (-) TimerEvent: {}
+[86.025164] (-) TimerEvent: {}
+[86.125651] (-) TimerEvent: {}
+[86.226082] (-) TimerEvent: {}
+[86.326605] (-) TimerEvent: {}
+[86.427084] (-) TimerEvent: {}
+[86.527593] (-) TimerEvent: {}
+[86.628055] (-) TimerEvent: {}
+[86.728569] (-) TimerEvent: {}
+[86.829017] (-) TimerEvent: {}
+[86.929547] (-) TimerEvent: {}
+[87.030066] (-) TimerEvent: {}
+[87.130626] (-) TimerEvent: {}
+[87.231051] (-) TimerEvent: {}
+[87.331516] (-) TimerEvent: {}
+[87.431956] (-) TimerEvent: {}
+[87.532606] (-) TimerEvent: {}
+[87.633077] (-) TimerEvent: {}
+[87.733497] (-) TimerEvent: {}
+[87.834232] (-) TimerEvent: {}
+[87.934693] (-) TimerEvent: {}
+[88.035160] (-) TimerEvent: {}
+[88.135906] (-) TimerEvent: {}
+[88.236393] (-) TimerEvent: {}
+[88.336810] (-) TimerEvent: {}
+[88.437221] (-) TimerEvent: {}
+[88.537644] (-) TimerEvent: {}
+[88.638066] (-) TimerEvent: {}
+[88.738623] (-) TimerEvent: {}
+[88.839078] (-) TimerEvent: {}
+[88.939481] (-) TimerEvent: {}
+[89.039953] (-) TimerEvent: {}
+[89.140347] (-) TimerEvent: {}
+[89.240774] (-) TimerEvent: {}
+[89.341123] (-) TimerEvent: {}
+[89.441565] (-) TimerEvent: {}
+[89.541976] (-) TimerEvent: {}
+[89.642408] (-) TimerEvent: {}
+[89.742831] (-) TimerEvent: {}
+[89.843203] (-) TimerEvent: {}
+[89.943714] (-) TimerEvent: {}
+[90.044153] (-) TimerEvent: {}
+[90.144707] (-) TimerEvent: {}
+[90.245108] (-) TimerEvent: {}
+[90.345539] (-) TimerEvent: {}
+[90.446257] (-) TimerEvent: {}
+[90.546797] (-) TimerEvent: {}
+[90.647184] (-) TimerEvent: {}
+[90.747543] (-) TimerEvent: {}
+[90.847903] (-) TimerEvent: {}
+[90.948436] (-) TimerEvent: {}
+[91.048843] (-) TimerEvent: {}
+[91.149289] (-) TimerEvent: {}
+[91.249725] (-) TimerEvent: {}
+[91.350237] (-) TimerEvent: {}
+[91.450651] (-) TimerEvent: {}
+[91.551145] (-) TimerEvent: {}
+[91.626505] (safety_node) StdoutLine: {'line': b'[100%] Built target test_safety_node_io\n'}
+[91.648730] (safety_node) CommandEnded: {'returncode': 0}
+[91.649817] (safety_node) JobProgress: {'identifier': 'safety_node', 'progress': 'install'}
+[91.651227] (-) TimerEvent: {}
+[91.660866] (safety_node) Command: {'cmd': ['/usr/bin/cmake', '--install', '/home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node'], 'cwd': '/home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node', 'env': OrderedDict([('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'm1513'), ('GIT_ASKPASS', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/extensions/git/dist/askpass.sh'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface/lib:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('HOME', '/home/m1513'), ('OLDPWD', '/home/m1513/sou/freego_tft/freego_2025_tft/src'), ('TERM_PROGRAM_VERSION', '1.124.2'), ('VSCODE_IPC_HOOK_CLI', '/run/user/1000/vscode-ipc-291aef6a-cdd7-4c40-9126-d220a1ce2620.sock'), ('ROS_PYTHON_VERSION', '3'), ('VSCODE_GIT_ASKPASS_MAIN', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/extensions/git/dist/askpass-main.js'), ('VSCODE_GIT_ASKPASS_NODE', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/node'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('WSL_DISTRO_NAME', 'Ubuntu-22.04'), ('WAYLAND_DISPLAY', 'wayland-0'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'm1513'), ('NAME', 'likang'), ('WSL_INTEROP', '/run/WSL/622_interop'), ('PULSE_SERVER', 'unix:/mnt/wslg/PulseServer'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('TERM', 'xterm-256color'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/home/m1513/.vscode-server/bin/6928394f91b684055b873eecb8bc281365131f1c/bin/remote-cli:/home/m1513/.local/bin:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/WireGuard/:/mnt/c/Program Files/nodejs/:/mnt/c/Users/m1513/AppData/Local/hermes/hermes-agent/venv/Scripts:/mnt/c/Users/m1513/AppData/Local/hermes/bin:/mnt/c/Users/m1513/AppData/Local/Microsoft/WindowsApps:/mnt/d/ruanjian/Microsoft VS Code/bin:/mnt/d/ruanjian/cursor/resources/app/bin:/mnt/c/Users/m1513/AppData/Local/hermes/git/cmd:/mnt/c/Users/m1513/AppData/Local/hermes/git/bin:/mnt/c/Users/m1513/AppData/Local/hermes/git/usr/bin:/mnt/c/Users/m1513/AppData/Local/hermes/node:/mnt/c/Users/m1513/AppData/Local/Microsoft/WinGet/Packages/BurntSushi.ripgrep.MSVC_Microsoft.Winget.Source_8wekyb3d8bbwe/ripgrep-15.1.0-x86_64-pc-windows-msvc:/mnt/c/Users/m1513/AppData/Roaming/npm:/mnt/c/Users/m1513/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1.1-full_build/bin:/snap/bin'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('DISPLAY', ':0'), ('LANG', 'C.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-9bf4e05693.sock'), ('TERM_PROGRAM', 'vscode'), ('AMENT_PREFIX_PATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface:/home/m1513/sou/freego_tft/freego_2025_tft/install/common:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('PWD', '/home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node'), ('XDG_DATA_DIRS', '/usr/local/share:/usr/share:/var/lib/snapd/desktop'), ('PYTHONPATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('WSL2_GUI_APPS_ENABLED', '1'), ('HOSTTYPE', 'x86_64'), ('WSLENV', 'VSCODE_WSL_EXT_LOCATION/up'), ('CMAKE_PREFIX_PATH', '/home/m1513/sou/freego_tft/freego_2025_tft/install/interface:/home/m1513/sou/freego_tft/freego_2025_tft/install/common:/opt/ros/humble')]), 'shell': False}
+[91.669627] (safety_node) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[91.671175] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/lib/libsafety_node_lib.a\n'}
+[91.751349] (-) TimerEvent: {}
+[91.752685] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/lib/safety_node/safety_node_node\n'}
+[91.781411] (safety_node) StdoutLine: {'line': b'-- Set runtime path of "/home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/lib/safety_node/safety_node_node" to ""\n'}
+[91.781674] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include\n'}
+[91.782431] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node\n'}
+[91.783174] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/output_shaper.h\n'}
+[91.783438] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/vehicle_io.h\n'}
+[91.783776] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/rolling_local_map.h\n'}
+[91.784048] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core\n'}
+[91.784789] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/safety_filter.h\n'}
+[91.785070] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/motion_rollout.h\n'}
+[91.785664] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/obstacle_field.h\n'}
+[91.786023] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/avoidance_types.h\n'}
+[91.786308] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/vehicle_footprint.h\n'}
+[91.786768] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/emergency_brake.h\n'}
+[91.787064] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/swept_footprint_checker.h\n'}
+[91.787366] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/safety_params.h\n'}
+[91.787704] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/mode_supervisor.h\n'}
+[91.788084] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/safety_node.h\n'}
+[91.788393] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/avoidance_controller.h\n'}
+[91.788723] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/lidar_perception.h\n'}
+[91.789012] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/perception_utils.h\n'}
+[91.789354] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/map_constraint_check.h\n'}
+[91.789683] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/config\n'}
+[91.791670] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/config/safety_node_debug.rviz\n'}
+[91.792016] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/config/safety_node_params.yaml\n'}
+[91.792875] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/library_path.sh\n'}
+[91.793237] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/library_path.dsv\n'}
+[91.795123] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/ament_index/resource_index/package_run_dependencies/safety_node\n'}
+[91.795970] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/ament_index/resource_index/parent_prefix_path/safety_node\n'}
+[91.796349] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/ament_prefix_path.sh\n'}
+[91.796679] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/ament_prefix_path.dsv\n'}
+[91.797019] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/path.sh\n'}
+[91.797412] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/path.dsv\n'}
+[91.797752] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/local_setup.bash\n'}
+[91.798095] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/local_setup.sh\n'}
+[91.798493] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/local_setup.zsh\n'}
+[91.798866] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/local_setup.dsv\n'}
+[91.799350] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/package.dsv\n'}
+[91.800112] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/ament_index/resource_index/packages/safety_node\n'}
+[91.801272] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/ament_cmake_export_include_directories-extras.cmake\n'}
+[91.801683] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/ament_cmake_export_libraries-extras.cmake\n'}
+[91.802046] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/ament_cmake_export_dependencies-extras.cmake\n'}
+[91.802409] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/safety_nodeConfig.cmake\n'}
+[91.802903] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/safety_nodeConfig-version.cmake\n'}
+[91.803254] (safety_node) StdoutLine: {'line': b'-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/package.xml\n'}
+[91.806003] (safety_node) CommandEnded: {'returncode': 0}
+[91.828354] (safety_node) JobEnded: {'identifier': 'safety_node', 'rc': 0}
+[91.830201] (-) EventReactorShutdown: {}

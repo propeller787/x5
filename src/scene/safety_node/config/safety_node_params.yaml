@@ -1,0 +1,355 @@
+# safety_node 生产默认参数
+# 启动方式：
+#   ros2 run safety_node safety_node_node --ros-args --params-file <本文件>
+#
+# 坐标约定：
+#   - 所有车体几何、障碍物和轨迹默认使用 base_link 坐标系。
+#   - x 正方向为车头方向，y 正方向为车辆左侧，z 正方向向上。
+#   - 距离单位为米（m），时间单位为秒（s），角速度单位为弧度每秒（rad/s）。
+#
+# 调参原则：
+#   1. 先校准真实车体尺寸和传感器外参，再调整安全余量，避免用大余量掩盖标定误差。
+#   2. footprint 余量、障碍物半径和 LocalMap 膨胀会叠加，多个参数同时增大可能造成窄道误封锁。
+#   3. hard_stop_release_distance 应不小于 hard_stop_distance，用于形成释放滞回，防止反复启停。
+#   4. 脱困参数只允许车辆沿预测净空增加的方向低速退出，不会绕过外部障碍和地图硬约束。
+
+/**:
+  ros__parameters:
+    # ── 控制循环 ──
+    # 主安全控制循环频率。40 Hz 对应每周期约 25 ms。
+    # 提高频率可缩短响应时间，但会增加轨迹评估、地图查询和日志发布的 CPU 开销。
+    control_rate_hz: 50.0
+
+    # ── 输入新鲜度与故障保护 ──
+    # 任一必需输入超时、包含非有限值或有效感知源不足时，节点立即输出零速。
+    input_health:
+      # 手柄/上层控制指令距当前时刻的最大允许时延。超过该时间认为控制源失联。
+      control_command_timeout_s: 0.25
+      # 原始摇杆消息的新鲜度。仅新鲜摇杆处于中心死区时，才覆盖仍在衰减的 /handle/control。
+      joystick_timeout_s: 0.25
+      # 原始摇杆中心死区，rocker_x/rocker_y 均满足绝对值不超过该值时触发平滑回中刹停。
+      joystick_deadzone: 5
+      # 轮速反馈距当前时刻的最大允许时延。require_wheel_feedback=true 时超时会触发输入故障急停。
+      wheel_feedback_timeout_s: 0.25
+      # 是否强制要求轮速反馈。生产车辆建议保持 true，仿真单元测试可按需关闭。
+      require_wheel_feedback: true
+      # 单路感知消息及其 TF 变换距当前时刻的最大允许时延。
+      perception_timeout_s: 0.35
+      # 单次 TF 查询最长等待时间。过大可能阻塞控制循环，过小会放大 TF 发布抖动。
+      tf_lookup_timeout_s: 0.02
+      # 保持安全辅助运行所需的最少新鲜感知源数量。
+      # 当前设为 1，允许部分雷达掉线时降级运行；若要求全传感器完备可提高此值。
+      min_fresh_perception_sources: 1
+      # 主避障链路只统计水平雷达（left/right/back），斜雷达默认不参与 INPUT_FAULT。
+      min_fresh_horizontal_sources: 1
+      # 是否要求至少一路斜雷达新鲜；默认 false，斜雷达只作为近距补盲通道。
+      require_tilt_perception: false
+      # 是否要求至少存在有效感知源。关闭后无感知数据也可能输出运动指令，仅限受控测试。
+      require_perception: true
+
+    # ── 最终输出整形 ──
+    output:
+      # 普通急停条件消失后继续保持零速的时间，用于抑制阈值附近的启停振荡。
+      # 经控制器确认安全的 recovery_active 脱困命令会绕过该等待，但仍受速度斜率限制。
+      emergency_release_delay_s: 0.15
+      # 原始摇杆进入中心死区后，最终速度向零收敛的一阶低通时间常数。
+      # 值越大刹停越柔和、停车距离越长；0.30 s 时约 0.90 s 衰减到初值的 5%。
+      neutral_stop_filter_time_constant_s: 0.30
+
+    # ── 多雷达感知预处理 ──
+    perception:
+      # 每个传感器在当前障碍缓存中保留的最大点数，防止异常大帧耗尽内存。
+      max_points_per_source: 30000
+      # 等待写入 Rolling LocalMap 的累计点数上限，超限时淘汰最早数据。
+      max_pending_points: 60000
+
+      # 斜雷达近距补盲通道：默认只进 tilt_field/TTC，不写入 LocalMap。
+      tilt:
+        # pointcloud2：订阅 /perception/*/pointcloud（默认，兼容 bag）
+        # tilt_scan：订阅 /perception/*/scan（interface/TiltObstacleScan，便于 ros2 topic echo）
+        input_type: "pointcloud2"
+        # 在 /safety/debug/tilt_left|right 发布过滤点 + 体素 primitive
+        publish_debug_scan: true
+        enabled: true
+        feed_local_map: false
+        max_range_m: 1.0
+        min_forward_x_m: 0.0
+        roi_x_min_m: -0.3
+        roi_x_max_m: 1.0
+        roi_y_abs_m: 0.45
+        z_filter_threshold: 0.0
+        voxel_size_m: 0.08
+        max_primitives: 48
+
+      # 自车点过滤包络。落在该三维盒体内的点被视为车体、支架或线束反射，不参与避障。
+      # 应与 footprint 膨胀轮廓对齐：后缘 ≈ -rear_offset - back_margin，前缘 ≈ length - rear_offset + front_margin，
+      # 半宽 ≈ max(width_rear/2, width_front/2) + narrow.side_margin，避免 margin 贴体点触发 hard_stop。
+      self_filter:
+        # 是否启用自车包络过滤。
+        enabled: false
+        # 自车过滤盒在 x 方向的后边界（当前几何下膨胀后缘约 -0.31 m，留 ~5 cm 余量）。
+        x_min_m: -0.36
+        # 自车过滤盒在 x 方向的前边界（当前几何下膨胀前缘约 0.94 m，留 ~1 cm 余量）。
+        x_max_m: 1.00
+        # 自车过滤盒左右半宽（后轴半宽 0.34 + narrow side_margin 0.01 = 0.35，留 ~1 cm 余量）。
+        y_abs_m: 0.36
+        # 自车过滤盒最低高度。
+        z_min_m: -0.15
+        # 自车过滤盒最高高度。
+        z_max_m: 0.35
+
+      # 距 base_link 原点过近的点通常是雷达安装边缘或车体反射，按水平半径直接剔除。
+      mount_edge_reject_radius_m: 0.03
+      # 仅用于 PointCloud2：低于该 z 值的点按地面下方噪声剔除。
+      ground_reject_below_z_m: -0.06
+
+    # 倾斜雷达点转换到 base_link 后允许的最大绝对高度，即要求 |z| <= 此值。
+    # 超出范围的高处物体或异常地面点不参与 LocalMap 和 ObstacleField。
+    tilt_z_filter_threshold: 0.0
+
+    # ── RViz2 感知调试输出 ──
+    # 只影响可视化与诊断开销，不改变避障计算结果。
+    debug:
+      perception:
+        # 发布过滤后点云、车体轮廓、障碍 primitive 和最终轨迹 Marker。
+        enabled: true
+        # 调试数据发布频率。无需实时观察时可降低以减少带宽。
+        rate_hz: 5.0
+        # 调试点云最多包含的点数；仅限制显示，不限制内部障碍缓存。
+        max_points: 30000
+
+    # ── 安全模式 ──
+    # 可选值：
+    #   pass_through：仅做绝对限速，不做障碍选择；仅用于受控调试。
+    #   safe_assist：标准 Footprint + LocalMap 安全辅助。
+    #   cruise：安全辅助基础上叠加巡航速度上限。
+    #   narrow：使用下方低净空专用几何与阈值。
+    #   estop：强制零速。
+    mode:
+      # 生产默认使用 narrow，以支持单侧约 4 cm 的已验证窄道场景。
+      default: "narrow"
+
+      # narrow 模式会覆盖同名基础几何/阈值，但不会修改 YAML 中的基础值。
+      narrow:
+        # 车体左右单侧附加安全余量。车宽 0.70 m 时有效半宽为 0.35 + 0.01 = 0.36 m。
+        footprint_side_margin_m: 0.03
+        # 每个激光表面点的等效碰撞半径。1 cm 用于表达测距/离散误差，不把点统一扩成 8 cm 圆。
+        obstacle_radius_m: 0.01
+        # 轨迹最小净空小于等于该值时直接判定硬停候选，不参与排序。
+        hard_stop_distance_m: 0.015
+        # 硬停释放所需净空，应大于 hard_stop_distance_m，用于形成释放滞回。
+        # SIM-034/035：原 20 mm 滞回过大，贴障 ~13 mm 停住后难以通过微动增大净空来解锁；
+        # 收窄至 17 mm（相对 15 mm 硬停仅 2 mm 滞回），便于脱困倒车略增净空后解除 EmergencyBrake。
+        hard_stop_release_distance_m: 0.017
+        # narrow 模式 LocalMap 障碍膨胀半径。与 Footprint 余量和障碍半径叠加生效。
+        local_map_inflation_radius_m: 0.01
+        # LocalMap 单元代价达到该概率时视为致命区域并 veto 轨迹。
+        lethal_threshold: 0.65
+
+    # ── Footprint 轨迹评估、急停与脱困 ──
+    avoidance:
+      # 正常候选轨迹预测时域。越长越保守、计算量越大。
+      horizon_s: 1.2
+      # 轨迹离散步长。越小碰撞检测越细，但轨迹点和计算量增加。
+      dt_s: 0.1
+      # 对期望线速度向零速方向采样的档位数，内部实现最大使用 6 档。
+      speed_samples: 6
+      # 对角速度采样的档位数，内部实现最大使用 5 档。
+      angular_samples: 5
+
+      # 是否启用硬停净空判据（min_clearance <= hard_stop_distance_m 时拒候选/急停/贴障 recovery）。
+      # false 时仍保留 Footprint 几何碰撞、制动包络、LocalMap veto 与侵入型 recovery。
+      hard_stop_clearance_enabled: true
+      # 是否允许 TTC 直接触发急停。生产默认 false：
+      # 主减速依据改为“沿当前轨迹到硬停边界的剩余距离”，TTC 仅保留在日志中用于诊断。
+      # 只有需要兼容旧策略或做 A/B 对比时才建议临时开启。
+      use_ttc_emergency_stop: false
+      # 旧 TTC 急停阈值。仅在 use_ttc_emergency_stop=true 时参与控制。
+      emergency_ttc_s: 0.45
+      # 基础模式的硬停净空。narrow 模式运行时由 mode.narrow 对应值覆盖。
+      hard_stop_distance_m: 0.12
+      # 旧 TTC 恢复阈值，仅在 use_ttc_emergency_stop=true 时生效。
+      emergency_ttc_release_s: 0.70
+      # 基础模式硬停释放净空，需不小于 hard_stop_distance_m。
+      hard_stop_release_distance_m: 0.20
+      # TTC 与净空恢复后必须连续安全的保持时间，满足后才解除 EmergencyBrake 锁存。
+      emergency_clear_hold_s: 0.15
+
+      # 候选排序中角速度误差相对线速度误差的权重。
+      # 增大后更倾向保持驾驶员转向意图，减小后更重视线速度接近程度。
+      safety_filter_angular_weight: 0.30
+      # 正常输出允许的最大线减速度，用于从上一周期输出向安全候选收敛。
+      max_decel_m_s2: 0.8
+      # 风险解除后恢复加速上限，通常小于减速度，使车辆谨慎恢复。
+      max_recover_accel_m_s2: 0.5
+      # 正常输出允许的最大角减速度，用于从上一周期输出向安全候选收敛。
+      max_angular_decel_rad_s2: 2.0
+      # 风险解除后角速度恢复加速上限，通常小于角减速度，使转向恢复更谨慎。
+      max_angular_recover_rad_s2: 2.0
+
+      # 是否启用基于沿轨迹剩余距离的制动速度包络。
+      # true 时会先沿期望直线/圆弧向前扫描，再反算当前允许的最高线速度。
+      braking_envelope_enabled: true
+      # 制动路径最大前视距离。该值应覆盖最高生产速度下的完整停车距离；
+      # 增大该值可让减速区更早开始，但会增加每周期的 Footprint/LocalMap 查询量。
+      braking_lookahead_m: 5.0
+      # 制动路径离散步长。2.5 cm 用于兼顾最近停车位置精度与 40 Hz 实时性；
+      # 减小后停车边界更细，但计算量按比例增加。
+      braking_path_step_m: 0.025
+      # 从发现需要减速到制动真正建立之间的等效延迟，包含控制、通信和执行器响应。
+      # 制动包络还会计入 jerk 建立减速度的积分距离，并额外预留 4 个控制周期用于目标跟踪。
+      braking_reaction_delay_s: 0.10
+      # 正常接近障碍时用于反算速度上限的舒适减速度。
+      # 应小于等于 max_decel_m_s2，使车辆优先平滑停车，最大减速度只作安全兜底。
+      braking_comfort_decel_m_s2: 0.60
+      # 线加速度变化率上限。值越小越平顺，但需要更长减速区；
+      # 制动距离计算会把 jerk 建立时间计入，因此不要只调小该值而不核对前视距离。
+      braking_max_jerk_m_s3: 2.5
+      # 在 hard_stop_distance_m 之外额外预留的停车距离。
+      # 2 cm 用于吸收 2.5 cm 路径离散和低速执行器尾差，仍保持接近最近安全停车位置。
+      braking_stop_buffer_m: 0.02
+
+      # 斜雷达近距 TTC 通道：独立于水平雷达主避障链路，只对前进命令做近距限速/急停。
+      tilt_ttc:
+        enabled: true
+        horizon_s: 0.5
+        max_probe_distance_m: 1.0
+        hard_stop_distance_m: 0.12
+        limiting_distance_m: 0.35
+        release_distance_m: 0.40
+        limiting_ttc_s: 0.55
+        emergency_ttc_s: 0.35
+        emergency_ttc_release_s: 0.50
+        emergency_clear_hold_s: 0.15
+        min_speed_for_ttc_m_s: 0.25
+        obstacle_radius_m: 0.01
+        use_command_velocity_for_ttc: true
+
+      # 候选允许提速前需要持续稳定的时间，避免障碍边缘导致速度跳变。
+      candidate_speed_up_hold_s: 0.30
+
+      # 是否允许当前 Footprint 已被障碍侵入时执行受控低速脱困。
+      recovery_mode_enabled: true
+      # 脱困线速度绝对上限。该值同时受 absolute_max_linear_speed 约束。
+      recovery_max_linear_speed: 0.5
+      # 脱困角速度绝对上限。
+      recovery_max_angular_speed: 0.35
+      # 评估脱困候选净空增益时使用的前视时间。
+      recovery_lookahead_s: 0.35
+      # 手柄线速度和角速度均低于该值时视为没有脱困意图，继续保持停车。
+      recovery_min_command: 0.02
+      # 候选在前视终点至少需要增加的净空。原 5 mm 在贴障 ~13 mm 时几乎无法满足；
+      # 降至 2 mm，仍排除无改善抖动，但允许低速倒车/转向逐步脱困。
+      recovery_min_clearance_improvement_m: 0.002
+      # 脱困全过程允许的瞬时净空回退量，容忍离散计算抖动与倒车首帧前向净空略减。
+      # 原 1 mm 过严，倒车启动时常误判为 blocked。
+      recovery_max_transient_clearance_loss_m: 0.003
+      # true：除驾驶员当前指令外，主动搜索前、后、左右转及组合脱困候选。
+      recovery_auto_select_enabled: false
+      # Footprint 侵入必须持续该时间才进入脱困，过滤单帧噪声；确认期间保持急停。
+      recovery_intrusion_confirm_s: 0.10
+      # 已选脱困候选的最短保持时间。候选变得不安全时会立即终止，不受该保持约束。
+      recovery_candidate_hold_s: 0.30
+      # 单次脱困最长持续时间，超时后锁止停车，直到侵入完全消失后状态复位。
+      # 原 1.5 s 在 SIM-034 中过早进入 aborted_timeout 永久锁死；放宽至 3 s。
+      recovery_timeout_s: 3.0
+      # 实测当前净空连续未增加的最长允许时间，超时进入 aborted_no_progress。
+      recovery_no_progress_timeout_s: 1.0
+      # 脱困命令刚输出后的机械响应宽限期，期间不累计无进展和轮速停滞时间。
+      recovery_motion_grace_s: 0.25
+      # 宽限期后轮速仍无有效响应的最长允许时间，超时进入 aborted_feedback_stall。
+      recovery_feedback_stall_timeout_s: 0.35
+      # 判断线运动已经响应的最小轮速绝对值。
+      recovery_feedback_linear_min_m_s: 0.01
+      # 判断旋转运动已经响应的最小角速度绝对值。
+      recovery_feedback_angular_min_rad_s: 0.03
+
+      # 无论运行模式如何都不能超过的线速度硬上限，2.222 m/s 约等于 8 km/h。
+      absolute_max_linear_speed: 2.222
+      # 无论运行模式如何都不能超过的角速度硬上限。
+      absolute_max_angular_speed: 6.0
+
+    # ── 车体 Footprint 几何（base_link，CCW 凸多边形） ──
+    # use_dual_trapezoid=true：6 顶点双梯形（前段+后段）；false：4 顶点单梯形（length/width_*）。
+    # 后轴处 x = -rear_offset_m；双梯形时车尾后缘锚定 rear_offset，车头 x = rear_offset 反算 + 两段 length。
+    # 膨胀：单梯形为轴对齐 margin；双梯形为逐边法向膨胀（前/后/侧 margin 分边应用）。
+    # narrow 模式仅覆盖 side_margin_m；前后边界仍使用本组基础参数。
+    footprint:
+      # 是否启用物理车体框（physicalPolygon）侵入判定。
+      # true：障碍进入物理轮廓时触发侵入型 recovery，并跳过制动包络。
+      # false：不做侵入检测；仍保留膨胀轮廓轨迹碰撞、proximity 贴障与 LocalMap 约束。
+      intrusion_check_enabled: true
+      # 启用 6 顶点双梯形物理框（生产默认）。
+      use_dual_trapezoid: true
+      # base_link/后轴中心到车尾后缘的距离。
+      rear_offset_m: 0.23
+      # 前梯形（车头 → 分节线，x 向前为前缘）。
+      front_segment:
+        length_m: 0.25
+        width_front_m: 0.34
+        width_rear_m: 0.62
+      # 后梯形（分节线 → 车尾）；width_front_m 须与 front_segment.width_rear_m 一致。
+      rear_segment:
+        length_m: 0.92
+        width_front_m: 0.62
+        width_rear_m: 0.68
+      # 单梯形回退参数（use_dual_trapezoid=false 时生效）。
+      length_m: 1.12
+      width_rear_m: 0.68
+      width_front_m: 0.62
+      width_m: 0.68
+      # 车头方向附加安全余量。
+      front_margin_m: 0.05
+      # 车尾方向附加安全余量。
+      back_margin_m: 0.08
+      # safe_assist/cruise 模式左右单侧余量；narrow 模式由 mode.narrow 覆盖。
+      side_margin_m: 0.03
+      # 基础障碍 primitive 半径；narrow 模式由 mode.narrow.obstacle_radius_m 覆盖。
+      obstacle_radius_default: 0.005
+
+    # ── Rolling LocalMap：空间记忆与轨迹 veto ──
+    # LocalMap 保存短时障碍占据概率，用于补偿瞬时漏检；它不替代当前帧 Footprint 碰撞检查。
+    local_map:
+      # 是否创建和更新局部占据地图。
+      enabled: true
+      # 地图融合更新频率。
+      update_rate_hz: 10.0
+      # 地图 x 方向尺寸。
+      width_m: 6.0
+      # 地图 y 方向尺寸。
+      height_m: 6.0
+      # 栅格分辨率，0.05 m 表示每格 5 cm。减小可提高精度但显著增加内存和查询量。
+      resolution_m: 0.05
+      # 基础模式地图膨胀半径；narrow 模式由 mode.narrow 对应值覆盖。
+      inflation_radius_m: 0.15
+      # 栅格综合代价大于等于该值时判定为致命区域。
+      lethal_threshold: 0.65
+      # 非重建模式下占据概率衰减到一半所需时间。
+      decay_halflife_s: 0.35
+      # 历史命中允许保留的最长时间，超过后从空间记忆中移除。
+      max_hit_age_s: 0.8
+      # 每次传感器命中写入地图的概率权重。
+      observation_weight: 0.85
+      # true：每周期根据当前待融合点重建地图，不保留跨周期概率。
+      # false：启用带衰减的历史空间记忆。
+      rebuild_each_frame: true
+      # 是否发布 /safety/local_map OccupancyGrid。
+      publish_viz: true
+      # LocalMap 可视化发布频率。
+      viz_rate_hz: 5.0
+      # 地图融合阶段允许的点云最高 z 值；感知前处理可能已经用更严格阈值过滤。
+      tilt_z_threshold: 0.5
+      # 是否把体素化 obstacle primitive 中心再次写入地图。
+      # 默认 false，避免原始点与 primitive 重复累计占据概率。
+      integrate_primitives: false
+      # integrate_primitives=true 时 primitive 中心的观测权重。
+      primitive_observation_weight: 0.6
+
+    # ── Map 硬约束：Footprint 选速后的最终裁判 ──
+    map_constraint:
+      # 是否对候选轨迹执行 LocalMap 查询。
+      enabled: true
+      # true：候选轨迹触及 lethal 栅格时直接淘汰；所有安全候选被否决时急停。
+      veto_on_lethal: true
+      # true：检查轨迹中车体中心、四角和 Footprint 内部采样点；false 时仅检查中心。
+      check_footprint_corners: true

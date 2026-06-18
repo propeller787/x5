@@ -1,0 +1,6 @@
+# srv/VehicleBindStatus.srv
+---
+string user_id
+int16 status           # 状态0未绑定 1绑定 2变更
+string privacy_policy  # 用勾选的隐私协议 逗号分隔
+bool success           # 是否成功 

@@ -1,0 +1,269 @@
+-- The C compiler identification is GNU 11.4.0
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)
+-- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter 
+-- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)
+-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)
+-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+-- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)
+-- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.2")  
+-- Found FastRTPS: /opt/ros/humble/include  
+-- Using RMW implementation 'rmw_fastrtps_cpp' as default
+-- Looking for pthread.h
+-- Looking for pthread.h - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Found geometry_msgs: 4.9.1 (/opt/ros/humble/share/geometry_msgs/cmake)
+-- Found interface: 0.0.0 (/home/m1513/sou/freego_tft/freego_2025_tft/install/interface/share/interface/cmake)
+-- Found nav_msgs: 4.9.1 (/opt/ros/humble/share/nav_msgs/cmake)
+-- Found visualization_msgs: 4.9.1 (/opt/ros/humble/share/visualization_msgs/cmake)
+-- Found tf2: 0.25.20 (/opt/ros/humble/share/tf2/cmake)
+-- Found tf2_ros: 0.25.20 (/opt/ros/humble/share/tf2_ros/cmake)
+-- Found tf2_geometry_msgs: 0.25.20 (/opt/ros/humble/share/tf2_geometry_msgs/cmake)
+-- Found eigen3_cmake_module: 0.1.1 (/opt/ros/humble/share/eigen3_cmake_module/cmake)
+-- Found Eigen3: TRUE (found version "3.4.0") 
+-- Ensuring Eigen3 include directory is part of orocos-kdl CMake target
+-- Found common: 0.0.0 (/home/m1513/sou/freego_tft/freego_2025_tft/install/common/share/common/cmake)
+-- Checking for module 'eigen3'
+--   Found eigen3, version 3.4.0
+-- Found Eigen: /usr/include/eigen3 (Required is at least version "3.1") 
+-- Eigen found (include: /usr/include/eigen3, version: 3.4.0)
+-- Found Boost: /usr/lib/x86_64-linux-gnu/cmake/Boost-1.74.0/BoostConfig.cmake (found suitable version "1.74.0", minimum required is "1.65.0") found components: system filesystem date_time iostreams serialization 
+-- Checking for module 'flann'
+--   Found flann, version 1.9.1
+-- Found FLANN: /usr/lib/x86_64-linux-gnu/libflann_cpp.so  
+-- FLANN found (include: /usr/include, lib: /usr/lib/x86_64-linux-gnu/libflann_cpp.so)
+-- Found GLEW: /usr/lib/x86_64-linux-gnu/libGLEW.so  
+-- Found OpenGL: /usr/lib/x86_64-linux-gnu/libOpenGL.so  found components: OpenGL GLX 
+-- Found MPI_C: /usr/lib/x86_64-linux-gnu/libmpi.so (found version "3.1") 
+-- Found MPI: TRUE (found version "3.1") found components: C 
+-- Found JsonCpp: /usr/lib/x86_64-linux-gnu/libjsoncpp.so (found suitable version "1.9.5", minimum required is "0.7.0") 
+-- Found ZLIB: /usr/lib/x86_64-linux-gnu/libz.so (found version "1.2.11") 
+-- Found PNG: /usr/lib/x86_64-linux-gnu/libpng.so (found version "1.6.37") 
+-- Found Eigen3: /usr/include/eigen3 (found version "3.4.0") 
+-- Found X11: /usr/include   
+-- Looking for XOpenDisplay in /usr/lib/x86_64-linux-gnu/libX11.so;/usr/lib/x86_64-linux-gnu/libXext.so
+-- Looking for XOpenDisplay in /usr/lib/x86_64-linux-gnu/libX11.so;/usr/lib/x86_64-linux-gnu/libXext.so - found
+-- Looking for gethostbyname
+-- Looking for gethostbyname - found
+-- Looking for connect
+-- Looking for connect - found
+-- Looking for remove
+-- Looking for remove - found
+-- Looking for shmat
+-- Looking for shmat - found
+-- Looking for IceConnectionNumber in ICE
+-- Looking for IceConnectionNumber in ICE - found
+-- Found EXPAT: /usr/lib/x86_64-linux-gnu/libexpat.so (found version "2.4.7") 
+-- Found double-conversion: /usr/lib/x86_64-linux-gnu/libdouble-conversion.so  
+-- Found LZ4: /usr/lib/x86_64-linux-gnu/liblz4.so (found version "1.9.3") 
+-- Found LZMA: /usr/lib/x86_64-linux-gnu/liblzma.so (found version "5.2.5") 
+-- Found JPEG: /usr/lib/x86_64-linux-gnu/libjpeg.so (found version "80") 
+-- Found TIFF: /usr/lib/x86_64-linux-gnu/libtiff.so (found version "4.3.0")  
+-- Found Freetype: /usr/lib/x86_64-linux-gnu/libfreetype.so (found version "2.11.1") 
+-- Found utf8cpp: /usr/include/utf8cpp  
+-- Checking for module 'libusb-1.0'
+--   Found libusb-1.0, version 1.0.25
+-- Found libusb: /usr/lib/x86_64-linux-gnu/libusb-1.0.so  
+-- Found OpenNI: /usr/lib/libOpenNI.so;libusb::libusb (found version "1.5.4.0") 
+-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+-- Found OpenNI2: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb (found version "2.2.0.33") 
+-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)
+[0m** WARNING ** io features related to pcap will be disabled[0m
+-- Eigen found (include: /usr/include/eigen3, version: 3.4.0)
+-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)
+-- Found Qhull version 8.0.2
+-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+-- looking for PCL_COMMON
+-- Found PCL_COMMON: /usr/lib/x86_64-linux-gnu/libpcl_common.so  
+-- looking for PCL_KDTREE
+-- Found PCL_KDTREE: /usr/lib/x86_64-linux-gnu/libpcl_kdtree.so  
+-- looking for PCL_OCTREE
+-- Found PCL_OCTREE: /usr/lib/x86_64-linux-gnu/libpcl_octree.so  
+-- looking for PCL_SEARCH
+-- Found PCL_SEARCH: /usr/lib/x86_64-linux-gnu/libpcl_search.so  
+-- looking for PCL_SAMPLE_CONSENSUS
+-- Found PCL_SAMPLE_CONSENSUS: /usr/lib/x86_64-linux-gnu/libpcl_sample_consensus.so  
+-- looking for PCL_FILTERS
+-- Found PCL_FILTERS: /usr/lib/x86_64-linux-gnu/libpcl_filters.so  
+-- looking for PCL_2D
+-- Found PCL_2D: /usr/include/pcl-1.12  
+-- looking for PCL_GEOMETRY
+-- Found PCL_GEOMETRY: /usr/include/pcl-1.12  
+-- looking for PCL_IO
+-- Found PCL_IO: /usr/lib/x86_64-linux-gnu/libpcl_io.so  
+-- looking for PCL_FEATURES
+-- Found PCL_FEATURES: /usr/lib/x86_64-linux-gnu/libpcl_features.so  
+-- looking for PCL_ML
+-- Found PCL_ML: /usr/lib/x86_64-linux-gnu/libpcl_ml.so  
+-- looking for PCL_SEGMENTATION
+-- Found PCL_SEGMENTATION: /usr/lib/x86_64-linux-gnu/libpcl_segmentation.so  
+-- looking for PCL_VISUALIZATION
+-- Found PCL_VISUALIZATION: /usr/lib/x86_64-linux-gnu/libpcl_visualization.so  
+-- looking for PCL_SURFACE
+-- Found PCL_SURFACE: /usr/lib/x86_64-linux-gnu/libpcl_surface.so  
+-- looking for PCL_REGISTRATION
+-- Found PCL_REGISTRATION: /usr/lib/x86_64-linux-gnu/libpcl_registration.so  
+-- looking for PCL_KEYPOINTS
+-- Found PCL_KEYPOINTS: /usr/lib/x86_64-linux-gnu/libpcl_keypoints.so  
+-- looking for PCL_TRACKING
+-- Found PCL_TRACKING: /usr/lib/x86_64-linux-gnu/libpcl_tracking.so  
+-- looking for PCL_RECOGNITION
+-- Found PCL_RECOGNITION: /usr/lib/x86_64-linux-gnu/libpcl_recognition.so  
+-- looking for PCL_STEREO
+-- Found PCL_STEREO: /usr/lib/x86_64-linux-gnu/libpcl_stereo.so  
+-- looking for PCL_APPS
+-- Found PCL_APPS: /usr/lib/x86_64-linux-gnu/libpcl_apps.so  
+-- looking for PCL_IN_HAND_SCANNER
+-- Found PCL_IN_HAND_SCANNER: /usr/include/pcl-1.12  
+-- looking for PCL_MODELER
+-- Found PCL_MODELER: /usr/include/pcl-1.12  
+-- looking for PCL_POINT_CLOUD_EDITOR
+-- Found PCL_POINT_CLOUD_EDITOR: /usr/include/pcl-1.12  
+-- looking for PCL_OUTOFCORE
+-- Found PCL_OUTOFCORE: /usr/lib/x86_64-linux-gnu/libpcl_outofcore.so  
+-- looking for PCL_PEOPLE
+-- Found PCL_PEOPLE: /usr/lib/x86_64-linux-gnu/libpcl_people.so  
+-- Found PCL: pcl_common;pcl_kdtree;pcl_octree;pcl_search;pcl_sample_consensus;pcl_filters;pcl_io;pcl_features;pcl_ml;pcl_segmentation;pcl_visualization;pcl_surface;pcl_registration;pcl_keypoints;pcl_tracking;pcl_recognition;pcl_stereo;pcl_apps;pcl_outofcore;pcl_people;Boost::system;Boost::filesystem;Boost::date_time;Boost::iostreams;Boost::serialization;/usr/lib/libOpenNI.so;libusb::libusb;/usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb;VTK::ChartsCore;VTK::CommonColor;VTK::CommonComputationalGeometry;VTK::CommonCore;VTK::CommonDataModel;VTK::CommonExecutionModel;VTK::CommonMath;VTK::CommonMisc;VTK::CommonTransforms;VTK::FiltersCore;VTK::FiltersExtraction;VTK::FiltersGeneral;VTK::FiltersGeometry;VTK::FiltersModeling;VTK::FiltersSources;VTK::ImagingCore;VTK::ImagingSources;VTK::InteractionImage;VTK::InteractionStyle;VTK::InteractionWidgets;VTK::IOCore;VTK::IOGeometry;VTK::IOImage;VTK::IOLegacy;VTK::IOPLY;VTK::RenderingAnnotation;VTK::RenderingCore;VTK::RenderingContext2D;VTK::RenderingLOD;VTK::RenderingFreeType;VTK::ViewsCore;VTK::ViewsContext2D;VTK::RenderingOpenGL2;VTK::GUISupportQt;FLANN::FLANN;QHULL::QHULL  
+-- Found pcl_conversions: 2.4.5 (/opt/ros/humble/share/pcl_conversions/cmake)
+-- Found ament_lint_auto: 0.12.15 (/opt/ros/humble/share/ament_lint_auto/cmake)
+-- Found gtest sources under '/opt/ros/humble/src/gtest_vendor': C++ tests using 'Google Test' will be built
+-- Added test 'cppcheck' to perform static code analysis on C / C++ code
+-- Configured cppcheck include dirs: $<BUILD_INTERFACE:/home/m1513/sou/freego_tft/freego_2025_tft/src/scene/safety_node/include>
+-- Configured cppcheck exclude dirs and/or files: 
+-- Added test 'flake8' to check Python code syntax and style conventions
+-- Added test 'lint_cmake' to check CMake code style
+-- Added test 'pep257' to check Python code against some of the docstring style conventions in PEP 257
+-- Added test 'uncrustify' to check C / C++ code style
+-- Configured uncrustify additional arguments: 
+-- Added test 'xmllint' to check XML markup files
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/m1513/sou/freego_tft/freego_2025_tft/build/safety_node
+[  4%] [32mBuilding CXX object gtest/CMakeFiles/gtest.dir/src/gtest-all.cc.o[0m
+[  4%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/avoidance_utils.cpp.o[0m
+[  6%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/safety_filter.cpp.o[0m
+[  8%] [32mBuilding CXX object gtest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o[0m
+[ 10%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/vehicle_footprint.cpp.o[0m
+[ 14%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/obstacle_field.cpp.o[0m
+[ 14%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/safety_params.cpp.o[0m
+[ 18%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/mode_supervisor.cpp.o[0m
+[ 18%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/swept_footprint_checker.cpp.o[0m
+[ 20%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/rolling_local_map.cpp.o[0m
+[ 22%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/output_shaper.cpp.o[0m
+[ 25%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/motion_rollout.cpp.o[0m
+[ 27%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/map_constraint_check.cpp.o[0m
+[ 29%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/core/emergency_brake.cpp.o[0m
+[ 31%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/perception_utils.cpp.o[0m
+[ 33%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/avoidance_controller.cpp.o[0m
+[ 35%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/lidar_perception.cpp.o[0m
+[ 37%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/vehicle_io.cpp.o[0m
+[ 39%] [32mBuilding CXX object CMakeFiles/safety_node_lib.dir/src/safety_node.cpp.o[0m
+[ 41%] [32m[1mLinking CXX static library libgtest_main.a[0m
+[ 41%] Built target gtest_main
+[ 43%] [32m[1mLinking CXX static library libgtest.a[0m
+[ 43%] Built target gtest
+[ 45%] [32m[1mLinking CXX static library libsafety_node_lib.a[0m
+[ 45%] Built target safety_node_lib
+[ 47%] [32mBuilding CXX object CMakeFiles/test_rolling_local_map.dir/test/test_rolling_local_map.cpp.o[0m
+[ 50%] [32mBuilding CXX object CMakeFiles/test_map_constraint_check.dir/test/test_map_constraint_check.cpp.o[0m
+[ 52%] [32mBuilding CXX object CMakeFiles/safety_node_node.dir/src/main.cpp.o[0m
+[ 54%] [32mBuilding CXX object CMakeFiles/test_motion_rollout.dir/test/test_motion_rollout.cpp.o[0m
+[ 56%] [32mBuilding CXX object CMakeFiles/test_vehicle_io.dir/test/test_vehicle_io.cpp.o[0m
+[ 58%] [32mBuilding CXX object CMakeFiles/test_output_shaper.dir/test/test_output_shaper.cpp.o[0m
+[ 60%] [32mBuilding CXX object CMakeFiles/test_avoidance_controller.dir/test/test_avoidance_controller.cpp.o[0m
+[ 62%] [32mBuilding CXX object CMakeFiles/test_safety_node_io.dir/test/test_safety_node_io.cpp.o[0m
+[ 64%] [32mBuilding CXX object CMakeFiles/test_perception_utils.dir/test/test_perception_utils.cpp.o[0m
+[ 66%] [32mBuilding CXX object CMakeFiles/test_lidar_perception.dir/test/test_lidar_perception.cpp.o[0m
+[ 68%] [32mBuilding CXX object CMakeFiles/test_safety_filter.dir/test/test_safety_filter.cpp.o[0m
+[ 70%] [32mBuilding CXX object CMakeFiles/test_core_safety.dir/test/test_core_safety.cpp.o[0m
+[ 72%] [32mBuilding CXX object CMakeFiles/test_t3_sil.dir/test/test_t3_sil.cpp.o[0m
+[ 75%] [32m[1mLinking CXX executable test_output_shaper[0m
+[ 77%] [32m[1mLinking CXX executable test_motion_rollout[0m
+[ 79%] [32m[1mLinking CXX executable test_safety_filter[0m
+[ 81%] [32m[1mLinking CXX executable test_perception_utils[0m
+[ 83%] [32m[1mLinking CXX executable test_map_constraint_check[0m
+[ 85%] [32m[1mLinking CXX executable test_rolling_local_map[0m
+[ 87%] [32m[1mLinking CXX executable test_core_safety[0m
+[ 89%] [32m[1mLinking CXX executable test_t3_sil[0m
+[ 91%] [32m[1mLinking CXX executable test_avoidance_controller[0m
+[ 91%] Built target test_safety_filter
+[ 91%] Built target test_perception_utils
+[ 91%] Built target test_map_constraint_check
+[ 91%] Built target test_t3_sil
+[ 91%] Built target test_output_shaper
+[ 91%] Built target test_rolling_local_map
+[ 91%] Built target test_core_safety
+[ 91%] Built target test_avoidance_controller
+[ 91%] Built target test_motion_rollout
+[ 93%] [32m[1mLinking CXX executable safety_node_node[0m
+[ 95%] [32m[1mLinking CXX executable test_vehicle_io[0m
+[ 97%] [32m[1mLinking CXX executable test_lidar_perception[0m
+[ 97%] Built target safety_node_node
+[ 97%] Built target test_lidar_perception
+[ 97%] Built target test_vehicle_io
+[100%] [32m[1mLinking CXX executable test_safety_node_io[0m
+[100%] Built target test_safety_node_io
+-- Install configuration: ""
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/lib/libsafety_node_lib.a
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/lib/safety_node/safety_node_node
+-- Set runtime path of "/home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/lib/safety_node/safety_node_node" to ""
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/output_shaper.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/vehicle_io.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/rolling_local_map.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/safety_filter.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/motion_rollout.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/obstacle_field.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/avoidance_types.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/vehicle_footprint.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/emergency_brake.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/core/swept_footprint_checker.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/safety_params.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/mode_supervisor.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/safety_node.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/avoidance_controller.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/lidar_perception.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/perception_utils.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/include/safety_node/map_constraint_check.h
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/config
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/config/safety_node_debug.rviz
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/config/safety_node_params.yaml
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/library_path.sh
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/library_path.dsv
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/ament_index/resource_index/package_run_dependencies/safety_node
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/ament_index/resource_index/parent_prefix_path/safety_node
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/ament_prefix_path.sh
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/ament_prefix_path.dsv
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/path.sh
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/environment/path.dsv
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/local_setup.bash
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/local_setup.sh
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/local_setup.zsh
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/local_setup.dsv
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/package.dsv
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/ament_index/resource_index/packages/safety_node
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/ament_cmake_export_include_directories-extras.cmake
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/ament_cmake_export_libraries-extras.cmake
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/ament_cmake_export_dependencies-extras.cmake
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/safety_nodeConfig.cmake
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/cmake/safety_nodeConfig-version.cmake
+-- Installing: /home/m1513/sou/freego_tft/freego_2025_tft/install/safety_node/share/safety_node/package.xml

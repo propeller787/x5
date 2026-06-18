@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package vehicle.ecu.up;
+
+//控制器/ECU上报
+message VehicleEcuUp {
+  string sn = 2;           //车辆唯一标识
+  string model = 3;       //车辆销售型号 FREEGO X5 Air
+  int64 timestamp = 4;      // 毫秒时间戳
+  
+  repeated ECU ecu = 10;   //控制器/ECU列表
+}
+
+message ECU {
+  string ecu = 1;   //控制器/ECU名称 PDC/MC/HT等
+  string ecu_hardware_code = 2;  // ECU硬件编号
+  string current_version = 3; //当前版本号
+}

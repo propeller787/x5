@@ -1,16 +1,17 @@
-syntax = "proto3";  // 必须指定proto3语法，和interface中car_status.proto保持一致
+syntax = "proto3";
 
-// 定义命名空间（对应C++的namespace vehicle::cmd::exe）
 package vehicle.cmd.exe;
 
-// 服务端下发给设备的控制指令
+//控制设备
 message VehicleCmdExe {
-  string vin = 3;            // 车辆VIN码（必填，设备唯一标识）
-  int32 model = 4;           // 车辆型号（0=X5，1=X6，自定义枚举）
-  int64 timestamp = 5;       // 指令下发时间戳（毫秒级）
-  string user_id = 6;        // 下发指令的用户ID
-  string cmd_id = 10;        // 指令唯一ID（全局唯一，用于回执匹配）
-  string cmd = 11;           // 指令内容（格式："cmd_type,param"，如"0,1"=回充开始）
-  int32 ttl = 12;            // 指令有效期（秒，超时未执行则失效）
-  string params = 20;        // 扩展参数（JSON格式，预留字段）
+  string sn = 3;           //车辆唯一标识
+  string model = 4;       //车辆销售型号FREEGO X5 Air
+  int64 timestamp = 5;      // 毫秒时间戳
+  string user_id = 6;       //控制的用户id
+
+  string cmd_id = 10;        // 控制指令唯一ID（App生成）
+  string cmd = 11;           // 指令
+  int32 ttl = 12;       //指令有效时间单位毫秒
+
+  string params = 20;   //控制参数
 }
