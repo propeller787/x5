@@ -18,6 +18,7 @@ constexpr const char *appControlTopic = "/app/control";                    // ap
 constexpr const char *carWheelSpeedTopic = "/car/speed";                   // 车辆底盘信息
 constexpr const char *carWheelSpeedStaTopic = "/wheel/twist";              // 车辆底盘信息
 constexpr const char *carEncoderTopic = "/car/encoder";                    // 车辆电机圈数
+constexpr const char *wheelOdomTopic = "/sensor/wheel_odom";               // 轮速计里程计 nav_msgs/Odometry
 constexpr const char *healthDataTopic = "/sensor/health/data";             // 健康计信息
 constexpr const char *healthTftDataTopic = "/sensor/tft/health/data";      // tft健康计信息
 constexpr const char *sensorTftChargingStatusTopic = "/sensor/recharge/charging_status";
