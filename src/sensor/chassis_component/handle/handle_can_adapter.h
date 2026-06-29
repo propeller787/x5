@@ -9,6 +9,8 @@
 #include <muduo/net/EventLoop.h>
 #include <thread>
 #include <can_msgs/msg/frame.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <cstdint>
 #include <unordered_set>
 #include <atomic>
 namespace sensor::chassis {
@@ -131,6 +133,43 @@ private:
 
     // 发布CAN数据到话题
     void publishCanFrame(const std::string& dev, int fid, muduo::net::Buffer& buffer);
+
+    /** 左右轮编码器计数更新后发布 /car/encoder 并积分里程计 */
+    void publishEncoderAndOdometry();
+    void updateWheelOdometryFromEncoders();
+    static int32_t encoderCountToMsgField(int64_t raw);
+
+    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr wheel_odom_pub_;
+
+    double wheel_radius_m_{0.126};
+    double wheel_separation_m_{0.58};
+    double counts_per_revolution_{278511.0};
+    double m_per_count_{0.0};  // (2*pi*radius) / counts_per_rev 预计算
+    std::string wheel_odom_frame_id_;
+    std::string wheel_odom_child_frame_id_;
+
+    int64_t latest_left_count_{0};
+    int64_t latest_right_count_{0};
+    bool encoder_valid_{false};
+
+    int64_t prev_left_count_{0};
+    int64_t prev_right_count_{0};
+    bool wheel_odom_initialized_{false};
+
+    double odom_x_{0.0};
+    double odom_y_{0.0};
+    double odom_theta_{0.0};
+    rclcpp::Time last_wheel_odom_stamp_;
+    bool have_wheel_odom_last_stamp_{false};
+
+    // EMA 滤波后的速度
+    double filtered_vx_{0.0};
+    double filtered_omega_{0.0};
+
+    // 时变协方差累积量（随行驶距离增长）
+    double pose_cov_xx_{0.0};
+    double pose_cov_yy_{0.0};
+    double pose_cov_yaw_{0.0};
 };
 
 }

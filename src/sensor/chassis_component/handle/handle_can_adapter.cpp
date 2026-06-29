@@ -3,11 +3,17 @@
 #include "../../global.h"
 #include "sensor_utils.hpp"
 #include <linux/can.h>
+#include <cmath>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 
 using namespace sensor::chassis;
 using namespace sensor::utils;
+
+namespace {
+constexpr double kPi = 3.14159265358979323846;
+} // namespace
 
 HandleCanAdapter::HandleCanAdapter(std::unordered_map<std::string, std::shared_ptr<CanTransreceiver>> devs,
                                    ModeTypeCallback mode_type_callback) 
@@ -87,6 +93,22 @@ HandleCanAdapter::HandleCanAdapter(std::unordered_map<std::string, std::shared_p
     RCLCPP_INFO(logger_, "CAN data publisher created on /can/frames (SensorDataQoS, KEEP_LAST(50)), filter %s, %zu ids",
                 can_publish_filter_enabled_ ? "ENABLED" : "DISABLED",
                 can_publish_id_filter_.size());
+
+    this->declare_parameter("wheel_odom_wheel_radius_m", 0.126);
+    this->declare_parameter("wheel_odom_wheel_separation_m", 0.612);
+    // 16383 * 17 编码器计数 / 圈
+    this->declare_parameter("wheel_odom_counts_per_revolution", 278511.0);
+    this->declare_parameter("wheel_odom_frame_id", std::string("odom"));
+    this->declare_parameter("wheel_odom_child_frame_id", std::string("base_link"));
+    wheel_radius_m_ = this->get_parameter("wheel_odom_wheel_radius_m").as_double();
+    wheel_separation_m_ = this->get_parameter("wheel_odom_wheel_separation_m").as_double();
+    counts_per_revolution_ = this->get_parameter("wheel_odom_counts_per_revolution").as_double();
+    m_per_count_ = (2.0 * kPi * wheel_radius_m_) / counts_per_revolution_;
+    wheel_odom_frame_id_ = this->get_parameter("wheel_odom_frame_id").as_string();
+    wheel_odom_child_frame_id_ = this->get_parameter("wheel_odom_child_frame_id").as_string();
+    wheel_odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(wheelOdomTopic, 10);
+    RCLCPP_INFO(logger_, "Wheel odometry publisher on %s (radius=%.4fm separation=%.4fm counts/rev=%.1f)",
+                wheelOdomTopic, wheel_radius_m_, wheel_separation_m_, counts_per_revolution_);
 }
 
 void HandleCanAdapter::handleUCVersionRequest(const std::shared_ptr<interface::srv::SystemVersion::Request> request,
@@ -202,14 +224,11 @@ void HandleCanAdapter::onReceive217Info(const std::string &, int fid, muduo::net
 void HandleCanAdapter::onReceive21aInfo(const std::string &, int fid, muduo::net::Buffer &buffer) {
     struct odrive_count_t obj;
     int retv = odrive_count_unpack(&obj, (const uint8_t *)(buffer.peek()), buffer.readableBytes());
-    auto message = interface::msg::Encoder();
-    message.header.stamp = this->now();
-    message.header.frame_id = "base_link";
-    message.left_wheel_count = obj.count0;
-    message.right_wheel_count = obj.count1;
-    control_car_encoder_pubs_->publish(message);
-    // std::cout << " HandleCanAdapter::onReceive21aInfo 左 " << obj.count0
-    //           << " 右 " << obj.count1 << std::endl;
+    (void)retv;
+    latest_left_count_ = obj.count0;
+    latest_right_count_ = obj.count1;
+    encoder_valid_ = true;
+    publishEncoderAndOdometry();
 }
 void HandleCanAdapter::onReceive21cInfo(const std::string &, int fid, muduo::net::Buffer &buffer) {
     struct odrive_vel_estimate_t obj;
@@ -899,4 +918,132 @@ void HandleCanAdapter::publishCanFrame(const std::string& dev, int fid, muduo::n
         RCLCPP_DEBUG(logger_, "/can/frames published=%u dropped=%u",
                      cnt, can_publish_dropped_.load(std::memory_order_relaxed));
     }
+}
+
+int32_t HandleCanAdapter::encoderCountToMsgField(int64_t raw) {
+    if (raw > std::numeric_limits<int32_t>::max()) {
+        return std::numeric_limits<int32_t>::max();
+    }
+    if (raw < std::numeric_limits<int32_t>::min()) {
+        return std::numeric_limits<int32_t>::min();
+    }
+    return static_cast<int32_t>(raw);
+}
+
+void HandleCanAdapter::publishEncoderAndOdometry() {
+    if (!encoder_valid_) {
+        return;
+    }
+    interface::msg::Encoder message;
+    message.header.stamp = this->now();
+    message.header.frame_id = "base_link";
+    message.left_wheel_count = encoderCountToMsgField(latest_left_count_);
+    message.right_wheel_count = encoderCountToMsgField(latest_right_count_);
+    control_car_encoder_pubs_->publish(message);
+    updateWheelOdometryFromEncoders();
+}
+
+void HandleCanAdapter::updateWheelOdometryFromEncoders() {
+    if (!encoder_valid_) {
+        return;
+    }
+    if (wheel_separation_m_ <= 1e-9 || counts_per_revolution_ <= 1e-9) {
+        RCLCPP_WARN_THROTTLE(logger_, *this->get_clock(), 5000,
+                             "wheel_odom: invalid wheel_separation_m or counts_per_revolution");
+        return;
+    }
+
+    const auto stamp = this->now();
+
+    if (!wheel_odom_initialized_) {
+        prev_left_count_ = latest_left_count_;
+        prev_right_count_ = latest_right_count_;
+        wheel_odom_initialized_ = true;
+        last_wheel_odom_stamp_ = stamp;
+        have_wheel_odom_last_stamp_ = true;
+
+        nav_msgs::msg::Odometry odom;
+        odom.header.stamp = stamp;
+        odom.header.frame_id = wheel_odom_frame_id_;
+        odom.child_frame_id = wheel_odom_child_frame_id_;
+        odom.pose.pose.position.x = odom_x_;
+        odom.pose.pose.position.y = odom_y_;
+        odom.pose.pose.position.z = 0.0;
+        const double half_theta = odom_theta_ * 0.5;
+        odom.pose.pose.orientation.x = 0.0;
+        odom.pose.pose.orientation.y = 0.0;
+        odom.pose.pose.orientation.z = std::sin(half_theta);
+        odom.pose.pose.orientation.w = std::cos(half_theta);
+        odom.twist.twist.linear.x = 0.0;
+        odom.twist.twist.angular.z = 0.0;
+        wheel_odom_pub_->publish(odom);
+        return;
+    }
+
+    const int64_t dl = latest_left_count_ - prev_left_count_;
+    const int64_t dr = latest_right_count_ - prev_right_count_;
+    prev_left_count_ = latest_left_count_;
+    prev_right_count_ = latest_right_count_;
+
+    const double ds_l = static_cast<double>(dl) * m_per_count_;
+    const double ds_r = static_cast<double>(dr) * m_per_count_;
+    const double ds = (ds_l + ds_r) * 0.5;
+    const double dtheta = (ds_r - ds_l) / wheel_separation_m_;
+
+    const double theta_mid = odom_theta_ + dtheta * 0.5;
+    odom_x_ += ds * std::cos(theta_mid);
+    odom_y_ += ds * std::sin(theta_mid);
+    odom_theta_ += dtheta;
+
+    double vx = 0.0;
+    double omega = 0.0;
+    if (have_wheel_odom_last_stamp_) {
+        const double dt = (stamp - last_wheel_odom_stamp_).seconds();
+        if (dt > 1e-6 && dt < 1.0) {
+            vx = ds / dt;
+            omega = dtheta / dt;
+        }
+    }
+    last_wheel_odom_stamp_ = stamp;
+    have_wheel_odom_last_stamp_ = true;
+
+    // EMA 低通滤波平滑速度
+    constexpr double kEmaAlpha = 0.3;
+    filtered_vx_ = kEmaAlpha * vx + (1.0 - kEmaAlpha) * filtered_vx_;
+    filtered_omega_ = kEmaAlpha * omega + (1.0 - kEmaAlpha) * filtered_omega_;
+
+    // 时变协方差：随行驶距离线性增长
+    const double dist_step = std::abs(ds) + std::abs(dtheta) * wheel_separation_m_ * 0.5;
+    constexpr double kTransDrift = 0.002;   // 位置漂移率 2mm / 每行驶米
+    constexpr double kRotDrift  = 0.01;     // 角度漂移率 0.01rad / 每行驶米
+    pose_cov_xx_  += kTransDrift * dist_step;
+    pose_cov_yy_  += kTransDrift * dist_step;
+    pose_cov_yaw_ += kRotDrift  * dist_step;
+
+    nav_msgs::msg::Odometry odom;
+    odom.header.stamp = stamp;
+    odom.header.frame_id = wheel_odom_frame_id_;
+    odom.child_frame_id = wheel_odom_child_frame_id_;
+    odom.pose.pose.position.x = odom_x_;
+    odom.pose.pose.position.y = odom_y_;
+    odom.pose.pose.position.z = 0.0;
+    const double half_theta = odom_theta_ * 0.5;
+    odom.pose.pose.orientation.x = 0.0;
+    odom.pose.pose.orientation.y = 0.0;
+    odom.pose.pose.orientation.z = std::sin(half_theta);
+    odom.pose.pose.orientation.w = std::cos(half_theta);
+    odom.twist.twist.linear.x = filtered_vx_;
+    odom.twist.twist.linear.y = 0.0;
+    odom.twist.twist.linear.z = 0.0;
+    odom.twist.twist.angular.x = 0.0;
+    odom.twist.twist.angular.y = 0.0;
+    odom.twist.twist.angular.z = filtered_omega_;
+
+    odom.pose.covariance[0] = 0.001 + pose_cov_xx_;
+    odom.pose.covariance[7] = 0.001 + pose_cov_yy_;
+    odom.pose.covariance[35] = 0.001 + pose_cov_yaw_;
+    odom.twist.covariance[0] = 0.05;
+    odom.twist.covariance[35] = 0.05;
+
+    wheel_odom_pub_->publish(odom);
 }

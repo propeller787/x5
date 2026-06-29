@@ -88,3 +88,8 @@ recorder:
 can_adapter:
   ros__parameters:
     vx_max_val: 1.67  # 最大线速度（m/s），用于速度限制。默认值：6.0 / 3.6 = 1.67 m/s (约 6 km/h)
+    wheel_odom_wheel_radius_m: 0.126
+    wheel_odom_wheel_separation_m: 0.612
+    wheel_odom_counts_per_revolution: 278511.0  # 16383 * 17 编码器计数/圈
+    wheel_odom_frame_id: "odom"
+    wheel_odom_child_frame_id: "base_link"
