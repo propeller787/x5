@@ -12,8 +12,12 @@
 #include "global.h"
 #include "gps.hpp"
 #include "imu.hpp"
+#include "bluetooth.hpp"
+#include "bluetooth_ble.hpp"
 #include "sensor_data_recorder.hpp"
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/executors/multi_threaded_executor.hpp>
+#include <thread>
 int main(int argc, char *argv[]) {
     auto logger = rclcpp::get_logger("sensor");
     RCLCPP_INFO(logger, "sensor start!");
@@ -27,36 +31,93 @@ int main(int argc, char *argv[]) {
     // This should be called once per process.
     rclcpp::init(argc, argv);
 
-    // Create an executor that will be responsible for execution of callbacks for a set of nodes.
-    // With this version, all callbacks will be called from within this thread (the main one).
-    rclcpp::executors::SingleThreadedExecutor exec;
+    // 使用多线程 executor，让各节点的默认 mutually-exclusive callback group 可被
+    // 分配到不同线程运行；这样 SensorDataRecorder 高频回调不会再阻塞 chassis 心跳定时器。
+    // 线程数取节点数 + 余量；避免使用过多线程造成上下文切换。
+    size_t exec_threads = std::min<size_t>(4, std::thread::hardware_concurrency());
+    rclcpp::executors::MultiThreadedExecutor exec(rclcpp::ExecutorOptions(), exec_threads);
     rclcpp::NodeOptions options;
 
-    auto global = sensor::Global::getInstance();
-    exec.add_node(global->node_);
-    // Add some nodes to the executor which provide work for the executor during its "spin" function.
-    // An example of available work is executing a subscription callback, or a timer callback.
+    sensor::Global* global = nullptr;
+    std::shared_ptr<sensor::chassis::ChassisComponent> chassis = nullptr;
+    std::shared_ptr<sensor::gps::GpsComponent> gps = nullptr;
+    std::shared_ptr<sensor::camera::CameraComponent> camera = nullptr;
+    std::shared_ptr<sensor::imu::ImuComponent> imu = nullptr;
+    std::shared_ptr<sensor::recorder::SensorDataRecorder> recorder = nullptr;
+    std::shared_ptr<sensor::bluetooth::BluetoothComponent> bluetooth = nullptr;
+    std::shared_ptr<sensor::bluetooth::_3568::BluetoothBleComponent> bluetooth_ble = nullptr;
+    try {
+        global = sensor::Global::getInstance();
+    } catch (...) {
+        RCLCPP_ERROR(logger, "Failed to create global node");
+    }
+    if (global) {
+        exec.add_node(global->node_);
+    }
 
-    auto chassis = std::make_shared<sensor::chassis::ChassisComponent>(options);
-    exec.add_node(chassis);
+    try {
+        chassis = std::make_shared<sensor::chassis::ChassisComponent>(options);
+    } catch (...) {
+        RCLCPP_ERROR(logger, "Failed to create chassis node");
+    }
+    if (chassis) {
+        exec.add_node(chassis);
+    }
 
-    auto gps = std::make_shared<sensor::gps::GpsComponent>(options);
-    exec.add_node(gps);
-
-    auto camera = std::make_shared<sensor::camera::CameraComponent>(options);
-    exec.add_node(camera);
+    try {
+        gps = std::make_shared<sensor::gps::GpsComponent>(options);
+    } catch (...) {
+        RCLCPP_ERROR(logger, "Failed to create gps node");
+    }
+    if (gps) {
+        exec.add_node(gps);
+    }
     
-    auto imu = std::make_shared<sensor::imu::ImuComponent>(options);
-    exec.add_node(imu);
-    // 创建数据录制组件 - 同步录制camera、imu、gps、can数据
-    auto recorder = std::make_shared<sensor::recorder::SensorDataRecorder>(options);
-    exec.add_node(recorder);
-    
-    // spin will block until work comes in, execute work as it becomes available, and keep blocking.
-    // It will only be interrupted by Ctrl-C.
+    try {
+        camera = std::make_shared<sensor::camera::CameraComponent>(options);
+    } catch (...) {
+        RCLCPP_ERROR(logger, "Failed to create camera node");
+    }
+    if (camera) {
+        exec.add_node(camera);
+    }
+    try {
+        imu = std::make_shared<sensor::imu::ImuComponent>(options);
+    } catch (...) {
+        RCLCPP_ERROR(logger, "Failed to create imu node");
+    }
+    if (imu) {
+        exec.add_node(imu);
+    }
+
+    try {
+        recorder = std::make_shared<sensor::recorder::SensorDataRecorder>(options);
+    } catch (...) {
+        RCLCPP_ERROR(logger, "Failed to create recorder node");
+    }
+    if (recorder) {
+        exec.add_node(recorder);
+    }
+
+    // try {
+    //     bluetooth = std::make_shared<sensor::bluetooth::BluetoothComponent>(options);
+    // } catch (...) {
+    //     RCLCPP_ERROR(logger, "Failed to create bluetooth node");
+    // }
+    // if (bluetooth) {
+    //     exec.add_node(bluetooth);
+    // }
+
+    try {
+        bluetooth_ble = std::make_shared<sensor::bluetooth::_3568::BluetoothBleComponent>(options);
+    } catch (...) {
+        RCLCPP_ERROR(logger, "Failed to create bluetooth BLE node");
+    }
+    if (bluetooth_ble) {
+        exec.add_node(bluetooth_ble);
+    }
+
     exec.spin();
-
     rclcpp::shutdown();
-
     return 0;
 }

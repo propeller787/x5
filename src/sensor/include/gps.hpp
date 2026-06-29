@@ -1,6 +1,7 @@
 #pragma once
-#include "../gps_component/cs8/gps_module.h"
+// #include "../gps_component/cs8/gps_module.h"
 // #include "../gps_component/f9k/gps_module.h"
+#include "../gps_component/lc760z/gps_module.h"
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <utils/topic.h>
@@ -19,6 +20,7 @@ private:
 private:
     rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr gpsPubPtr_;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imuPubPtr_;
-    std::shared_ptr<sensor::gps::cs8::GPSModule> gps_module_;
+    std::shared_ptr<sensor::gps::lc760z::GPSModule> gps_module_;
+    std::string gps_port_;
 };
 }

@@ -37,20 +37,23 @@ find_package(common REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(can_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_storage REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(interface REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 # find_package(qxwz-pssdk-1.24.1-20240924-zqwl-ubuntu-production-release REQUIRED)
 
 file(GLOB car_src "chassis_component/*.cpp" "chassis_component/chassis/*.cpp" "chassis_component/chassis/*.c"
   "chassis_component/handle/*.cpp" "chassis_component/handle/*.c" "chassis_component/dbc/*.c")
 add_library(chassis_component SHARED  ${car_src})
-ament_target_dependencies(chassis_component rclcpp can_msgs rosbag2_cpp rosbag2_storage interface common visualization_msgs)
+ament_target_dependencies(chassis_component rclcpp can_msgs rosbag2_cpp rosbag2_storage interface common visualization_msgs std_msgs)
 target_link_libraries(chassis_component)
 rclcpp_components_register_nodes(chassis_component "sensor::chassis::ChassisComponent")
 
-file(GLOB gps_src "gps_component/*.cpp" "gps_component/cs8/*.cpp")
+file(GLOB gps_src "gps_component/*.cpp" "gps_component/lc760z/*.cpp")
 add_library(gps_component SHARED  ${gps_src})
 ament_target_dependencies(gps_component rclcpp interface common )
 rclcpp_components_register_nodes(gps_component "sensor::gps::GpsComponent")
@@ -66,29 +69,39 @@ pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
 
 file(GLOB camera_src "camera_component/*.cpp" "camera_component/v4l2/*.c")
 add_library(camera_component SHARED  ${camera_src})
-ament_target_dependencies(camera_component rclcpp interface common ffmpeg_image_transport_msgs)
+ament_target_dependencies(camera_component rclcpp interface common ffmpeg_image_transport_msgs std_srvs)
 # 链接FFmpeg库
 target_link_libraries(camera_component PkgConfig::LIBAV)
 rclcpp_components_register_nodes(camera_component "sensor::camera::CameraComponent")
 
-file(GLOB imu_src "imu_component/*.cpp")
+file(GLOB imu_src "imu_component/jy61P.cpp")
 add_library(imu_component SHARED  ${imu_src})
-ament_target_dependencies(imu_component rclcpp interface common sensor_msgs tf2)
+ament_target_dependencies(imu_component rclcpp rclcpp_components interface common sensor_msgs tf2)
 rclcpp_components_register_nodes(imu_component "sensor::imu::ImuComponent")
 
 file(GLOB recorder_src "sensor_data_recorder/*.cpp")
 add_library(recorder_component SHARED ${recorder_src})
 ament_target_dependencies(recorder_component rclcpp interface common rosbag2_cpp rosbag2_storage 
                           sensor_msgs ffmpeg_image_transport_msgs can_msgs std_srvs)
+target_link_libraries(recorder_component yaml-cpp)
 rclcpp_components_register_nodes(recorder_component "sensor::recorder::SensorDataRecorder")
+
+file(GLOB bluetooth_src "bluetooth_component/*.cpp")
+add_library(bluetooth_component SHARED ${bluetooth_src})
+ament_target_dependencies(bluetooth_component rclcpp rclcpp_components interface common std_msgs)
+# 链接 GLib 和 GIO 库
+pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0 gio-2.0)
+target_link_libraries(bluetooth_component PkgConfig::GLIB)
+rclcpp_components_register_nodes(bluetooth_component "sensor::bluetooth::BluetoothComponent")
+rclcpp_components_register_nodes(bluetooth_component "sensor::bluetooth::_3568::BluetoothBleComponent")
 
 include(../common/cmake/add3rd.cmake)
 add3rds(utils muduo)
 
 add_executable(sensor main.cpp global.cpp)
 ament_target_dependencies(sensor rclcpp rclcpp_components) 
-target_link_libraries(sensor camera_component gps_component chassis_component imu_component recorder_component muduo_net muduo_base utils)
-install(TARGETS sensor gps_component chassis_component camera_component imu_component recorder_component
+target_link_libraries(sensor camera_component gps_component chassis_component imu_component recorder_component bluetooth_component muduo_net muduo_base utils)
+install(TARGETS sensor gps_component chassis_component camera_component imu_component recorder_component bluetooth_component
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})
@@ -96,6 +109,12 @@ install(TARGETS sensor gps_component chassis_component camera_component imu_comp
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gtest REQUIRED)
+
+  # IMU 组件核心业务测试（转换函数、验证逻辑、Madgwick 融合）
+  ament_add_gtest(test_imu_component test/test_imu_component.cpp)
+  ament_target_dependencies(test_imu_component rclcpp)
 endif()
 
 ament_package()

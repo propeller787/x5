@@ -28,7 +28,7 @@ static bool data_invalid_reported = false;
 ImuComponent::ImuComponent(const rclcpp::NodeOptions& options) 
     : rclcpp::Node("imu", options),
       device_fd_(-1),
-      device_path_("/dev/mpu6050"),
+      device_path_("/dev/mpu6500"),
       publish_rate_(10.0),
       enable_temperature_(true),
       orientation_initialized_(false),
@@ -43,14 +43,14 @@ ImuComponent::ImuComponent(const rclcpp::NodeOptions& options)
     RCLCPP_INFO(logger, "IMU Component starting...");
     
     // 声明参数
-    this->declare_parameter("device_path", device_path_);
+    this->declare_parameter("imu_device_path", "/dev/mpu6500");
     this->declare_parameter("publish_rate", publish_rate_);
     this->declare_parameter("enable_temperature", enable_temperature_);
     this->declare_parameter("madgwick_beta", static_cast<double>(madgwick_beta_));
     this->declare_parameter("madgwick_sample_freq", static_cast<double>(madgwick_sample_freq_));
     
     // 获取参数
-    device_path_ = this->get_parameter("device_path").as_string();
+    device_path_ = this->get_parameter("imu_device_path").as_string();
     publish_rate_ = this->get_parameter("publish_rate").as_double();
     enable_temperature_ = this->get_parameter("enable_temperature").as_bool();
     madgwick_beta_ = static_cast<float>(this->get_parameter("madgwick_beta").as_double());
@@ -64,7 +64,9 @@ ImuComponent::ImuComponent(const rclcpp::NodeOptions& options)
     RCLCPP_INFO(logger, "Temperature enabled: %s", enable_temperature_ ? "true" : "false");
     
     // 设置设备
-    setupDevice();
+    if (!setupDevice()) {
+        return;
+    }
     
     // 创建发布器
     imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>(imuTopic, 10);
@@ -85,10 +87,13 @@ ImuComponent::~ImuComponent() {
     }
 }
 
-void ImuComponent::setupDevice() {
+bool ImuComponent::setupDevice() {
     auto logger = rclcpp::get_logger("sensor::imu");
-    
-    device_fd_ = open(device_path_.c_str(), O_RDWR);
+    // device_path_ = "/dev/mpu6050";
+    // device_fd_ = open(device_path_.c_str(), O_RDWR);
+    // device_path_ = "/dev/mpu6500";
+    device_fd_ = open(device_path_.c_str(), O_RDONLY);
+    RCLCPP_INFO(logger, "Device path: %s", device_path_.c_str());    
     if (device_fd_ < 0) {
         RCLCPP_ERROR(logger, "Failed to open device: %s", device_path_.c_str());
         
@@ -104,8 +109,7 @@ void ImuComponent::setupDevice() {
             }
             device_not_found_reported = true;
         }
-        
-        throw std::runtime_error("Cannot open MPU6050 device");
+        return false;
     }
     
     // 设备打开成功，重置错误状态
@@ -128,6 +132,7 @@ void ImuComponent::setupDevice() {
     }
     
     RCLCPP_INFO(logger, "Successfully opened device: %s", device_path_.c_str());
+    return true;
 }
 
 void ImuComponent::onTimer() {
@@ -141,10 +146,62 @@ void ImuComponent::readImuData() {
     auto* global = sensor::Global::getInstance();
     
     // 参考mpu6050Demo.c，使用数组缓冲区读取7个数据
-    signed int buffer[7]; // 用于存储从MPU6050读取的7个原始数据（gx,gy,gz,ax,ay,az,temp）
-    
-    int ret = read(device_fd_, buffer, sizeof(buffer));
-    
+    // signed int buffer[7]; // 用于存储从MPU6050读取的7个原始数据（gx,gy,gz,ax,ay,az,temp）
+    // int ret = read(device_fd_, buffer, sizeof(buffer));
+    // if(ret == 0){
+    //     // 提取原始ADC值，按照mpu6050Demo.c的顺序
+    //     imu_data_.gyro_x = buffer[0];    // X轴陀螺仪原始ADC值
+    //     imu_data_.gyro_y = buffer[1];    // Y轴陀螺仪原始ADC值
+    //     imu_data_.gyro_z = buffer[2];    // Z轴陀螺仪原始ADC值
+    //     imu_data_.accel_x = buffer[3];   // X轴加速度计原始ADC值
+    //     imu_data_.accel_y = buffer[4];   // Y轴加速度计原始ADC值
+    //     imu_data_.accel_z = buffer[5];   // Z轴加速度计原始ADC值
+    //     imu_data_.temperature = buffer[6]; // 温度原始ADC值
+        
+    //     // 转换数据
+    //     imu_values_.gyro_x = convertGyroToDegreesPerSecond(imu_data_.gyro_x);
+    //     imu_values_.gyro_y = convertGyroToDegreesPerSecond(imu_data_.gyro_y);
+    //     imu_values_.gyro_z = convertGyroToDegreesPerSecond(imu_data_.gyro_z);
+        
+    //     imu_values_.accel_x = convertAccelToG(imu_data_.accel_x);
+    //     imu_values_.accel_y = convertAccelToG(imu_data_.accel_y);
+    //     imu_values_.accel_z = convertAccelToG(imu_data_.accel_z);
+        
+    //     imu_values_.temperature = convertTempToCelsius_6050(imu_data_.temperature);
+    // }
+
+    // 读取mpu6500数据
+    typedef struct {
+        int16_t ax;
+        int16_t ay;
+        int16_t az;
+        int16_t gx;
+        int16_t gy;
+        int16_t gz;
+        int16_t temp;
+    } mpu6500_data_t;
+    mpu6500_data_t d;
+    ssize_t n = read(device_fd_, &d, sizeof(d));
+    if(n == sizeof(d)) {
+        imu_data_.gyro_x = d.gx;    // X轴陀螺仪原始ADC值
+        imu_data_.gyro_y = d.gy;    // Y轴陀螺仪原始ADC值
+        imu_data_.gyro_z = d.gz;    // Z轴陀螺仪原始ADC值
+        imu_data_.accel_x = d.ax;   // X轴加速度计原始ADC值
+        imu_data_.accel_y = d.ay;   // Y轴加速度计原始ADC值
+        imu_data_.accel_z = d.az;   // Z轴加速度计原始ADC值
+        imu_data_.temperature = d.temp; // 温度原始ADC值
+        
+        // 转换数据
+        imu_values_.gyro_x = convertGyroToDegreesPerSecond(imu_data_.gyro_x);
+        imu_values_.gyro_y = convertGyroToDegreesPerSecond(imu_data_.gyro_y);
+        imu_values_.gyro_z = convertGyroToDegreesPerSecond(imu_data_.gyro_z);
+        
+        imu_values_.accel_x = convertAccelToG(imu_data_.accel_x);
+        imu_values_.accel_y = convertAccelToG(imu_data_.accel_y);
+        imu_values_.accel_z = convertAccelToG(imu_data_.accel_z);
+        
+        imu_values_.temperature = convertTempToCelsius_6500(imu_data_.temperature);
+    }
     // 检查读取结果
     // if (ret != static_cast<int>(sizeof(buffer))) {
     //     consecutive_read_failures++;
@@ -199,27 +256,7 @@ void ImuComponent::readImuData() {
     //     }
     //     current_error_code = 0; // 清除错误状态
     // }
-    if(ret == 0){
-        // 提取原始ADC值，按照mpu6050Demo.c的顺序
-        imu_data_.gyro_x = buffer[0];    // X轴陀螺仪原始ADC值
-        imu_data_.gyro_y = buffer[1];    // Y轴陀螺仪原始ADC值
-        imu_data_.gyro_z = buffer[2];    // Z轴陀螺仪原始ADC值
-        imu_data_.accel_x = buffer[3];   // X轴加速度计原始ADC值
-        imu_data_.accel_y = buffer[4];   // Y轴加速度计原始ADC值
-        imu_data_.accel_z = buffer[5];   // Z轴加速度计原始ADC值
-        imu_data_.temperature = buffer[6]; // 温度原始ADC值
-        
-        // 转换数据
-        imu_values_.gyro_x = convertGyroToDegreesPerSecond(imu_data_.gyro_x);
-        imu_values_.gyro_y = convertGyroToDegreesPerSecond(imu_data_.gyro_y);
-        imu_values_.gyro_z = convertGyroToDegreesPerSecond(imu_data_.gyro_z);
-        
-        imu_values_.accel_x = convertAccelToG(imu_data_.accel_x);
-        imu_values_.accel_y = convertAccelToG(imu_data_.accel_y);
-        imu_values_.accel_z = convertAccelToG(imu_data_.accel_z);
-        
-        imu_values_.temperature = convertTempToCelsius(imu_data_.temperature);
-    }
+
 }
 
 // 辅助函数：检查IMU数据有效性
@@ -315,8 +352,11 @@ float ImuComponent::convertAccelToG(int32_t adc_value) {
     return static_cast<float>(adc_value) / 2048.0f;
 }
 
-float ImuComponent::convertTempToCelsius(int32_t adc_value) {
+float ImuComponent::convertTempToCelsius_6050(int32_t adc_value) {
     return ((static_cast<float>(adc_value) - 25.0f) / 326.8f) + 25.0f;
+}
+float ImuComponent::convertTempToCelsius_6500(int32_t adc_value) {
+    return (static_cast<float>(adc_value) / 333.87f) + 21.0f;
 }
 
 float ImuComponent::invSqrt(float x) {
@@ -435,25 +475,24 @@ void ImuComponent::updateOrientation() {
     orientation_.setY(q2_);
     orientation_.setZ(q3_);
     
+#ifndef NDEBUG
     // 计算并打印欧拉角（单位：度）
     float roll, pitch, yaw;
-    
-    // 四元数 → 欧拉角转换
+
     roll  = std::atan2(2.0f * (q0_ * q1_ + q2_ * q3_),
                        1.0f - 2.0f * (q1_ * q1_ + q2_ * q2_));
     pitch = std::asin(2.0f * (q0_ * q2_ - q3_ * q1_));
     yaw   = std::atan2(2.0f * (q0_ * q3_ + q1_ * q2_),
                        1.0f - 2.0f * (q2_ * q2_ + q3_ * q3_));
-    
-    // 转换为角度
+
     const float RAD2DEG = 57.29578f;
     roll  *= RAD2DEG;
     pitch *= RAD2DEG;
     yaw   *= RAD2DEG;
-    
-    // 打印欧拉角
-    RCLCPP_DEBUG(logger, "Euler Angles - Roll: %.2f°, Pitch: %.2f°, Yaw: %.2f°", 
+
+    RCLCPP_DEBUG(logger, "Euler Angles - Roll: %.2f°, Pitch: %.2f°, Yaw: %.2f°",
                 roll, pitch, yaw);
+#endif
     
     orientation_initialized_ = true;
 }

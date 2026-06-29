@@ -21,16 +21,20 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <interface/srv/key_value_int.hpp>
+#include <interface/srv/scene_controls.hpp>
+#include <interface/srv/system_version.hpp>
 #include <linux/can.h>
 #include <linux/can/raw.h>
 #include <map>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/empty.hpp>
+#include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/int32.hpp>
 #include <utils/topic.h>
 #include <visualization_msgs/msg/marker_array.hpp>
-const float VX_MAX_VAL = 6.0 / 3.6;
+const float VX_MAX_VAL = 8.0 / 3.6;
 // const float VX_MAX_VAL = 0.18;
 namespace sensor::chassis {
 
@@ -41,6 +45,9 @@ class CanAdapter : public rclcpp::Node {
     CanAdapter(std::unordered_map<std::string, std::shared_ptr<CanTransreceiver>> devs, const std::string &adapter_name);
     void canSend(std::string dev, int frameid, muduo::net::Buffer &buf);
     void canSendLoog(std::string dev, int frameid);
+    /** 设置 CAN 通信使能：false 时停止收发，用于 OTA 升级等场景 */
+    void setCanEnabled(bool enabled) { can_enabled_ = enabled; }
+    bool isCanEnabled() const { return can_enabled_; }
 
   public:
     virtual void sendCarInfo() = 0;
@@ -51,15 +58,21 @@ class CanAdapter : public rclcpp::Node {
     virtual void onReceiveGnssMessage(const interface::msg::Gnss::SharedPtr msg) = 0;
     virtual void onReceiveControlMessage(const geometry_msgs::msg::Twist::SharedPtr msg) = 0;
     virtual void onRechargeStatusMessage(const interface::msg::RechargeStatus::SharedPtr msg) = 0;
-    void onReceiveHealthMessage(const interface::msg::Health::SharedPtr msg);
-    void onReceiveNarrowMessage(const std_msgs::msg::Empty::SharedPtr msg);
+    
     virtual void onRecieveSpeedbumpMessage(const visualization_msgs::msg::MarkerArray::SharedPtr msg) = 0;
     virtual void onRecievePaDaoMessage(const std::shared_ptr<std_msgs::msg::Int32> msg) = 0;
+
     // void onReceiveColourScreenMessage(const interface::msg::ColourScreen::SharedPtr msg);
     // void onReceiveGearMessage(const interface::msg::Gear::SharedPtr msg);
-
+    void onReceiveHealthMessage(const interface::msg::Health::SharedPtr msg);
+    void onReceiveNarrowMessage(const std_msgs::msg::Empty::SharedPtr msg);
     void onReceiveAudioMessage(const std_msgs::msg::Int32::SharedPtr msg);
+    void onReceiveTftTouchEventMessage(const std_msgs::msg::Bool::SharedPtr msg);
+    void onReceiveLightTypeMessage(const std_msgs::msg::Int32::SharedPtr msg);
 
+    void onReceiveCarModeMessage(const std_msgs::msg::Int32::SharedPtr msg);
+    void onReceiveSoundSwitchMessage(const std_msgs::msg::Int32::SharedPtr msg);
+    void onReceiveLanguageMessage(const std_msgs::msg::Int32::SharedPtr msg);
   public:
     /**
      * @brief 限幅 int 型
@@ -95,7 +108,9 @@ class CanAdapter : public rclcpp::Node {
 
   protected:
     std::unordered_map<std::string, std::shared_ptr<CanTransreceiver>> can_devs_;
+    bool can_enabled_{true};  ///< CAN 通信使能，OTA 升级时置 false
     rclcpp::Logger logger_;
+    std::string bluetooth_mac_;
     double vx_max_val_; // 添加成员变量
     std::unordered_map<std::string, rclcpp::Publisher<interface::msg::Objects>::SharedPtr> radar_obj_pubs_;
     // std::unordered_map<std::string, rclcpp::Subscription<interface::msg::Gnss>::SharedPtr> gnss_subs_;
@@ -114,6 +129,7 @@ class CanAdapter : public rclcpp::Node {
     rclcpp::Subscription<interface::msg::Health>::SharedPtr health_subs_;
     // 发送车辆信息
     rclcpp::Publisher<interface::msg::CarInfo>::SharedPtr car_info_pubs_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr recharge_charging_status_pub_;
     rclcpp::Subscription<interface::msg::RechargeStatus>::SharedPtr recharge_status_subs_;
     // 减速带数据接收
     rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr speedbump_subs_;
@@ -126,15 +142,40 @@ class CanAdapter : public rclcpp::Node {
     // 上坡事件播报
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr uppd_pubs_;
     rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr narrow_sub_;
+    // 弹窗播报
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr popup_pubs_;
 
     // 设置状态
     rclcpp::Client<interface::srv::KeyValueInt>::SharedPtr mode_enable_client_;
+    rclcpp::Client<interface::srv::SceneControls>::SharedPtr scene_helpcar_client_;  // 帮助功能服务客户端
+    rclcpp::Client<interface::srv::SceneControls>::SharedPtr scene_standard_client_;  // 标准功能服务客户端
+    rclcpp::Client<interface::srv::SceneControls>::SharedPtr scene_bluetooth_client_;  // 蓝牙功能服务客户端
+
     // 音频发送
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr audio_sub_;
+    // TFT触摸事件
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr tft_touch_event_sub_;
     // 舞蹈秀开始
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr dance_puts_;
     // 摇杆
     rclcpp::Publisher<interface::msg::Joystick>::SharedPtr joystick_pubs_;
+    // 灯效类型
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr light_type_sub_;
+    // 物理按键失效发布 1 驻车失败 2 解除驻车失败 3 助行失败
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr physical_button_failure_pubs_;
+    // 安全功能开启/关闭发布 1 开启 0 关闭
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr safety_function_pubs_;
+    // 巡航模式开启/关闭发布 1 开启 0 关闭
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr cruise_mode_pubs_;
+    // 车辆模式切换 1 舒适 2 运动
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr car_mode_sub_;
+    // 声音开关 1 打开 0 关闭
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr sound_switch_sub_;
+    // 语言 0 中文 1 英文
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr language_sub_;
+
+    // 巡航模式开启/关闭发布 1 开启 0 关闭
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr gear_pubs_;
 };
 
 } // namespace sensor::chassis

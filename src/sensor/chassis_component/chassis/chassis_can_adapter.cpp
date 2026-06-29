@@ -1,4 +1,5 @@
 #include "chassis_can_adapter.h"
+#include "../../global.h"
 #include "sensor_utils.hpp"
 #include <linux/can.h>
 #include <linux/can/raw.h>
@@ -144,9 +145,9 @@ void ChassisCanAdapter::onReceive284Info(const std::string&, int fid, muduo::net
     // 组合字节，形成709F
     int combined = ((byte2 << 8) | byte1);
     double estimeat = estimateCapacityFromVoltage(combined / 1000);
-    int ele = (int)estimeat;
-    electricquantity_ = (int)estimeat;
-    remainingmileage_ = 30 * estimeat / 100;
+    int ele = mapBatteryPercent(estimeat);
+    electricquantity_ = ele;
+    remainingmileage_ = calcRemainingMileage(sensor::Global::getInstance()->getBatteryCapacity(), ele);
     canSend("can0", (0x80028400 | CAN_EFF_FLAG), buffer);
 }
 

@@ -39,6 +39,34 @@ BU_: receive send
 BO_ 3221225472 VECTOR__INDEPENDENT_SIG_MSG: 0 Vector__XXX
  SG_ surplus_capacity : 0|16@1+ (1,0) [0|65535] "" Vector__XXX
 
+BO_ 2147485960 car_setting: 8 Vector__XXX
+ SG_ language : 16|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ voice_ctrl : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ mode_type : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147484200 bluetooth_mac: 8 Vector__XXX
+ SG_ mac : 0|64@1+ (1,0) [0|1.84467440737096E+019] "" Vector__XXX
+
+BO_ 2147484201 up_setting: 8 Vector__XXX
+ SG_ voice_ctrl : 8|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ mode_type : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+
+BO_ 2147484276 brake_shoe: 8 Vector__XXX
+ SG_ error_code : 0|32@1+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 2147484275 brake_error1: 8 Vector__XXX
+ SG_ error_code : 0|32@1+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 2147484199 uc_version: 8 Vector__XXX
+ SG_ version_data : 32|32@1+ (1,0) [0|4294967295] "" Vector__XXX
+ SG_ software_version : 16|16@1+ (1,0) [0|65535] "" Vector__XXX
+ SG_ hardware_version : 0|16@1+ (1,0) [0|65535] "" Vector__XXX
+
+BO_ 2147484189 db_version: 8 Vector__XXX
+ SG_ version_data : 32|32@1+ (1,0) [0|4294967295] "" Vector__XXX
+ SG_ software_version : 16|16@1+ (1,0) [0|65535] "" Vector__XXX
+ SG_ hardware_version : 0|16@1+ (1,0) [0|65535] "" Vector__XXX
+
 BO_ 2147485442 ota_upper: 8 Vector__XXX
  SG_ ota_data : 0|64@1- (1,0) [-9.22337203685478E+018|9.22337203685478E+018] "" Vector__XXX
 
@@ -148,11 +176,17 @@ BO_ 2147484197 key_status: 8 Vector__XXX
  SG_ sos : 0|8@1- (1,0) [-128|127] "" Vector__XXX
 
 BO_ 2147484194 ves_infor: 8 Vector__XXX
+ SG_ bluetooth_ctrl : 24|8@1- (1,0) [-128|127] "" Vector__XXX
  SG_ lock_switch : 16|8@1- (1,0) [-128|127] "" Vector__XXX
  SG_ get_charging : 8|8@1- (1,0) [-128|127] "" Vector__XXX
  SG_ get_gear : 0|8@1- (1,0) [-128|127] "" Vector__XXX
 
 BO_ 2147484193 heart: 8 Vector__XXX
+ SG_ max_gear : 40|8@1- (1,0) [0|0] "" Vector__XXX
+ SG_ language : 32|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ sign_status : 24|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ fafety_status : 16|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ mode_type : 8|8@1- (1,0) [-128|127] "" Vector__XXX
  SG_ heart_beat : 0|8@1- (1,0) [0|0] "" Vector__XXX
 
 BO_ 2147484186 count: 8 Vector__XXX

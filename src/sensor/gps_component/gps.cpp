@@ -12,7 +12,10 @@ GpsComponent::GpsComponent(const rclcpp::NodeOptions& options)
     auto logger = rclcpp::get_logger("sensor::gps");
     RCLCPP_INFO(logger, "sersor::gps start !");
     auto loop = GpsReceiverThread.startLoop();
-    gps_module_ = std::make_shared<sensor::gps::cs8::GPSModule>("/dev/ttyS5", loop);
+    /* cs8：/dev/ttyS5  lc760z:/dev/ttyAS3  */
+    declare_parameter("gps_device_path", "ttyS5");
+    get_parameter("gps_device_path", gps_port_);
+    gps_module_ = std::make_shared<sensor::gps::lc760z::GPSModule>(gps_port_, loop);
     gps_module_->setGpsCallback(std::bind(&GpsComponent::GpsData, this, _1));
     // gps_module_->setImuCallback(std::bind(&GpsComponent::ImuData, this, _1));
     gpsPubPtr_ = this->create_publisher<sensor_msgs::msg::NavSatFix>(gpsTopic, 30);

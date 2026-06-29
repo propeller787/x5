@@ -9,6 +9,37 @@
 
 namespace sensor::utils {
 
+// 显示电量 = 100% * (实际电量% - 10%) / 90%，10% 以下显示 0%，100% 以上显示 100%
+static inline int mapBatteryPercent(double actual_percent)
+{
+    if (actual_percent <= 10.0) {
+        return 0;
+    }
+    if (actual_percent >= 100.0) {
+        return 100;
+    }
+    return static_cast<int>(100.0 * (actual_percent - 10.0) / 90.0);
+}
+
+// SN 电池容量对应最大里程: 10->10km, 20->20km, 30->30km，未知容量默认 10km
+static inline int normalizeBatteryCapacity(int capacity)
+{
+    if (capacity == 20 || capacity == 30) {
+        return capacity;
+    }
+    return 10;
+}
+
+static inline int calcRemainingMileage(int battery_capacity, int electric_percent)
+{
+    if (electric_percent < 0) {
+        electric_percent = 0;
+    } else if (electric_percent > 100) {
+        electric_percent = 100;
+    }
+    return normalizeBatteryCapacity(battery_capacity) * electric_percent / 100;
+}
+
 class CommandExecutor {
 public:
     explicit CommandExecutor(rclcpp::Logger logger)

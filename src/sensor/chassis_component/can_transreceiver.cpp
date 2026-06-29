@@ -122,8 +122,24 @@ CanTransreceiver::~CanTransreceiver()
 
 void CanTransreceiver::start()
 {
-    loop_->runInLoop([&] { chnl_->enableReading(); });
+    loop_->runInLoop([this] { chnl_->enableReading(); });
     RCLCPP_INFO(logger_, "can socket %s channel start enableReading!", can_dev_.c_str());
+}
+
+void CanTransreceiver::stop()
+{
+    loop_->runInLoop([this] {
+        chnl_->disableReading();
+        RCLCPP_INFO(logger_, "can socket %s channel disabled (upgrade prepare)", can_dev_.c_str());
+    });
+}
+
+void CanTransreceiver::resume()
+{
+    loop_->runInLoop([this] {
+        chnl_->enableReading();
+        RCLCPP_INFO(logger_, "can socket %s channel resumed", can_dev_.c_str());
+    });
 }
 
 void CanTransreceiver::filter(std::map<unsigned uint16_t, unsigned int> canIdMap)
@@ -254,9 +270,7 @@ void CanTransreceiver::onDataReceived()
     }
 
     muduo::net::Buffer buffer;
-    for (size_t i = 0; i < frame.len; i++) {
-        buffer.appendInt8(frame.data[i]);
-    }
+    buffer.append(frame.data, frame.len);
     // if (can_dev_ == "can0") {
     signal_.call(frame.can_id & CAN_EFF_MASK, buffer);
     // RCLCPP_INFO(logger_, "can socket %s recv fid: %05x : %05x, fsz:%d  done!", can_dev_.c_str(), (frame.can_id & CAN_EFF_MASK), frame.can_id, frame.len);

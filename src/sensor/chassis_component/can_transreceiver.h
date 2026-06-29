@@ -18,6 +18,10 @@ public:
     CanTransreceiver(std::string dev, muduo::net::EventLoop* loop);
     ~CanTransreceiver();
     void start();
+    /** 暂停 CAN 接收（用于 OTA 升级等场景） */
+    void stop();
+    /** 恢复 CAN 接收 */
+    void resume();
 
     void filter();
     void filter(std::map<uint16_t, unsigned int> canIdMap);

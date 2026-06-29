@@ -1,17 +1,33 @@
 #pragma once
 #include "../../global.h"
+#include "../../include/define.h"
 #include "../can_adapter.h"
 #include "../can_transreceiver.h"
+#include <interface/srv/bluetooth_mac.hpp>
+#include <interface/msg/bluetooth_status.hpp>
 #include "../dbc/odrive.h"
 #include <muduo/net/EventLoop.h>
 #include <thread>
 #include <can_msgs/msg/frame.hpp>
+#include <unordered_set>
+#include <atomic>
 namespace sensor::chassis {
+#define BLUETOOTH_CTRL_2 2   // 蓝牙控制模式
+#define BLUETOOTH_CTRL_3 3   // 蓝牙控制模式
 #define HANDLE_FRAME_ID (0x801400u)
-#define ZQZY 1
+
+typedef struct SystemVersionRequest {
+    std::string hardware_version;
+    std::string software_version;
+    std::string version_data;
+} SystemVersionRequest;
+
 class HandleCanAdapter : public CanAdapter {
 public:
-    explicit HandleCanAdapter(std::unordered_map<std::string, std::shared_ptr<CanTransreceiver>> devs);
+    using ModeTypeCallback = std::function<sensor::ModeType()>;  // 获取模式类型的回调函数类型
+    
+    explicit HandleCanAdapter(std::unordered_map<std::string, std::shared_ptr<CanTransreceiver>> devs,
+                             ModeTypeCallback mode_type_callback = nullptr);
     virtual void onReceiveCanMessage(const std::string& dev, int fid, muduo::net::Buffer& buffer) override;
     virtual void onReceiveGnssMessage(const interface::msg::Gnss::SharedPtr msg) override;
     virtual void onReceiveControlMessage(const geometry_msgs::msg::Twist::SharedPtr msg) override;
@@ -35,6 +51,8 @@ private:
     void onReceive201Info(const std::string&, int fid, muduo::net::Buffer& buffer);
     void onReceive301Info(const std::string&, int fid, muduo::net::Buffer& buffer);
     void onReceive226Info(const std::string&, int fid, muduo::net::Buffer& buffer);
+    void onReceive229Info(const std::string&, int fid, muduo::net::Buffer& buffer);
+    void onReceive228Info(const std::string&, int fid, muduo::net::Buffer& buffer);
 
     void onReceive101Info(const std::string&, int fid, muduo::net::Buffer& buffer);
     void onReceive100Info(const std::string&, int fid, muduo::net::Buffer& buffer);
@@ -42,12 +60,26 @@ private:
     void onReceive270Info(const std::string&, int fid, muduo::net::Buffer& buffer);
     void onReceive271Info(const std::string&, int fid, muduo::net::Buffer& buffer);
     void onReceive272Info(const std::string&, int fid, muduo::net::Buffer& buffer);
+    void onReceive273Info(const std::string&, int fid, muduo::net::Buffer& buffer);
+    void onReceive274Info(const std::string&, int fid, muduo::net::Buffer& buffer);
     void onReceive27FInfo(const std::string&, int fid, muduo::net::Buffer& buffer);
 
     void onReceive280Info(const std::string&, int fid, muduo::net::Buffer& buffer);
     void onReceive281Info(const std::string&, int fid, muduo::net::Buffer& buffer);
     void onReceive282Info(const std::string&, int fid, muduo::net::Buffer& buffer);
+
+    void onReceive21DInfo(const std::string&, int fid, muduo::net::Buffer& buffer);
+    void onReceive227Info(const std::string&, int fid, muduo::net::Buffer& buffer);
     void send90108();
+
+    // 系统版本
+    void handleUCVersionRequest(const std::shared_ptr<interface::srv::SystemVersion::Request> request,
+                                std::shared_ptr<interface::srv::SystemVersion::Response> response);
+    void handleDBVersionRequest(const std::shared_ptr<interface::srv::SystemVersion::Request> request,
+                                std::shared_ptr<interface::srv::SystemVersion::Response> response);
+    void handleBluetoothMacRequest(const std::shared_ptr<interface::srv::BluetoothMac::Request> request,
+                                    std::shared_ptr<interface::srv::BluetoothMac::Response> response);
+    void handleBluetoothStatusMessage(const interface::msg::BluetoothStatus::SharedPtr msg);
 
 private:
     using CanMessageUnpackFunction = std::function<void(const std::string& dev, int fid, muduo::net::Buffer& buffer)>;
@@ -63,12 +95,40 @@ private:
     bool speedbump_flag_ { false };
     bool podao_flag_ { false };
     bool uppd_flag_ { false };
+    // 线充状态 原子操作
+    std::atomic_bool line_charging_status_ { false };
+    // 倒车状态 true 倒车 false 前进(静止)
+    std::atomic_bool reverse_status_ { false };
     // 有速度时为true 原子操作
     std::atomic_bool speed_status_ { true };
-    
+    // 获取模式类型的回调函数
+    ModeTypeCallback mode_type_callback_;
+    rclcpp::Service<interface::srv::SystemVersion>::SharedPtr uc_version_service_;
+    SystemVersionRequest uc_version_request_;
+    rclcpp::Service<interface::srv::SystemVersion>::SharedPtr db_version_service_;
+    SystemVersionRequest db_version_request_;
+
+    // 接收蓝牙mac地址
+    rclcpp::Service<interface::srv::BluetoothMac>::SharedPtr bluetooth_mac_service_;
+    std::string bluetooth_mac_ {""};
+
+    // 接收蓝牙状态 bluetoothStatusTopic
+    rclcpp::Subscription<interface::msg::BluetoothStatus>::SharedPtr bluetooth_status_sub_;
+    // 基站充电状态 true 充电 false 未充电
+    bool charging_status_ { false };
+    // 电压
+    int16_t voltage_ { 0 };
+
     // CAN数据发布器 - 用于实时发布CAN数据到话题供recorder订阅
     rclcpp::Publisher<can_msgs::msg::Frame>::SharedPtr can_frame_publisher_;
-    
+    // 帧 ID 白名单（CAN_EFF_MASK 后的 ID）。空 = 发布所有；非空 = 仅发布列表中的 ID。
+    // 通过参数 record.can_publish_frame_ids（int 数组）配置。
+    std::unordered_set<uint32_t> can_publish_id_filter_;
+    bool can_publish_filter_enabled_{false};
+    // 节流统计：每秒丢弃数（被过滤）与发布数，仅做采样日志。
+    std::atomic<uint32_t> can_publish_count_{0};
+    std::atomic<uint32_t> can_publish_dropped_{0};
+
     // 发布CAN数据到话题
     void publishCanFrame(const std::string& dev, int fid, muduo::net::Buffer& buffer);
 };

@@ -1,0 +1,90 @@
+# Sensor 模块统一配置文件
+# 
+# 使用方法：
+# 每个组件通过 config_file 参数指定此文件路径，并使用对应的命名空间前缀加载配置
+#
+# 组件命名空间前缀：
+# - camera 组件: "camera"
+# - h264 组件: "h264"  
+# - imu 组件: "imu"
+# - recorder 组件: "recorder" (但参数使用 record.* 和 verify_camera.*)
+# - can_adapter 组件: "can_adapter"
+#
+# 注意：由于 recorder 组件使用的参数名是 record.* 和 verify_camera.*（不带 recorder 前缀），
+# 所以需要在 recorder 命名空间下直接定义这些参数
+
+# ============================================
+# Camera 组件配置
+# 加载方式: loadFromYaml(file, "camera")
+# 参数访问: camera.device_path
+# ============================================
+camera:
+  ros__parameters:
+    device_path: "/dev/video25"  # 相机设备路径，例如 /dev/video0, /dev/video25
+
+# ============================================
+# H264 视频发布器配置
+# 加载方式: loadFromYaml(file, "h264")
+# 参数访问: h264.width, h264.height, h264.fps, h264.publish_fps, h264.segment_duration_sec
+# 注意: record.directory 是共享参数，在 recorder 命名空间下定义
+# ============================================
+h264:
+  ros__parameters:
+    width: 1920                    # 视频宽度（像素）
+    height: 1080                   # 视频高度（像素）
+    fps: 30                        # 捕获帧率（Hz）
+    publish_fps: 30                # 发布帧率（Hz），通常小于等于捕获帧率
+    segment_duration_sec: 60       # H264 文件分段时长（秒），超过此时长会创建新文件
+
+# ============================================
+# IMU 组件配置
+# 加载方式: loadFromYaml(file, "imu")
+# 参数访问: imu.device_path, imu.publish_rate, imu.enable_temperature, etc.
+# ============================================
+imu:
+  ros__parameters:
+    device_path: "/dev/mpu6050"    # IMU 设备路径，例如 /dev/mpu6050
+    publish_rate: 10.0             # 数据发布频率（Hz）
+    enable_temperature: true       # 是否启用温度数据发布
+    madgwick_beta: 0.1             # Madgwick 滤波器 beta 参数（融合参数）
+    madgwick_sample_freq: 10.0     # Madgwick 滤波器采样频率（Hz），通常与发布频率一致
+
+# ============================================
+# 数据录制器配置
+# 加载方式: loadFromYaml(file, "recorder")
+# 参数访问: record.* 和 verify_camera.*（不带 recorder 前缀）
+# 注意：由于代码中使用的是 record.* 和 verify_camera.*，所以这里直接定义这些参数
+# ============================================
+recorder:
+  ros__parameters:
+    # 录制文件存储目录（H264 和 recorder 共享）
+    record:
+      directory: "./bags"                    # 录制文件存储目录
+      bag_prefix: "sensor_data"              # Sensor 数据 bag 文件前缀
+      max_duration_minutes: 1                 # 每个 bag 文件的最大时长（分钟）
+      max_size_mb: 1024                      # 每个 bag 文件的最大大小（MB）
+      auto_start: true                        # 启动时是否自动开始录制
+      
+      # 雷达数据录制配置
+      lidar:
+        bag_prefix: "lidar_data"              # 雷达数据 bag 文件前缀
+        max_duration_minutes: 2               # 每个雷达 bag 文件的最大时长（分钟）
+        max_size_mb: 1024                    # 每个雷达 bag 文件的最大大小（MB）
+        auto_start: true                     # 启动时是否自动开始雷达数据录制
+      
+      retention_minutes: 30                  # 文件保留时长（分钟），超过此时长的文件会被自动清理
+    
+    # 验证模式配置
+    verify_camera:
+      enable: false                          # 是否启用相机数据验证（解码 H264 为图片）
+      image_dir: "./verify_images"           # 验证图片保存目录
+      frame_interval: 30                     # 保存图片的帧间隔（每 N 帧保存一张图片）
+
+# ============================================
+# CAN 适配器配置
+# 加载方式: loadFromYaml(file, "can_adapter")
+# 参数访问: can_adapter.vx_max_val
+# ============================================
+can_adapter:
+  ros__parameters:
+    vx_max_val: 1.67  # 最大线速度（m/s），用于速度限制。默认值：6.0 / 3.6 = 1.67 m/s (约 6 km/h)

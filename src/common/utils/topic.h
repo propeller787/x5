@@ -46,10 +46,6 @@ constexpr const char *rightTiltLaserTopic = "/scan/right_tilt";
 constexpr const char *backLaserTopic = "/scan/back";
 constexpr const char *leftTiltPointTopice = "/perception/left_tilt/pointcloud";
 constexpr const char *rightTiltPointTopice = "/perception/right_tilt/pointcloud";
-constexpr const char *leftTiltScanTopic = "/perception/left_tilt/scan";
-constexpr const char *rightTiltScanTopic = "/perception/right_tilt/scan";
-constexpr const char *leftTiltDebugScanTopic = "/safety/debug/tilt_left";
-constexpr const char *rightTiltDebugScanTopic = "/safety/debug/tilt_right";
 
 // 物理按键失效发布 1 驻车失败 2 解除驻车失败 3 助行失败
 constexpr const char *physicalButtonFailureTopic = "/vlago/physical/button/failure";
@@ -57,6 +53,8 @@ constexpr const char *physicalButtonFailureTopic = "/vlago/physical/button/failu
 constexpr const char *safetyFunctionTopic = "/vlago/safety/function";
 // 巡航模式开启/关闭发布 1 开启 0 关闭
 constexpr const char *cruiseModeTopic = "/vlago/cruise/mode";
+// 挡位
+constexpr const char *gearTopic = "/vlago/gear";
 
 
 // 场景辅助测试相关topic
@@ -170,6 +168,7 @@ constexpr const char *tftModeTopic = "/vlago/tft/mode";
 constexpr const char *tftCarModeTopic = "/vlago/tft/car/mode";  // 切换车辆模式 1 舒适 2 运动
 constexpr const char *tftSoundSwitchTopic = "/vlago/tft/sound/switch"; // 设置声音开关 1 打开 0 关闭
 constexpr const char *tftLanguageTopic = "/vlago/tft/language"; // 中英文 0 中文 1 英文
+constexpr const char *tftMaxGearTopic = "/vlago/tft/max_gear"; // 最高挡位
 // tft屏触摸事件
 constexpr const char *tftTouchEventTopic = "/vlago/tft/touch/event";
 constexpr const char *tftJoystickEventTopic = "/tft/joystick/event";
@@ -180,6 +179,7 @@ constexpr const char *lightTypeTopic = "/vlago/light/type";
 constexpr const char *popupTypeTopic = "/vlago/popup/type";
 // 错误码topic
 constexpr const char* errorEventTopic = "/error_events";
+
 
 //ota相关
 constexpr const char *otaSystemUpgradePrepare = "/system/upgrade_prepare";

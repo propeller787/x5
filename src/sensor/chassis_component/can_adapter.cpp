@@ -5,11 +5,14 @@
 
 using namespace sensor::chassis;
 using namespace sensor::utils;
+namespace {
+constexpr int kTftRemoteFrame909 = 0x909;
+}
 
 CanAdapter::CanAdapter(std::unordered_map<std::string, std::shared_ptr<CanTransreceiver>> devs, const std::string &adapter_name)
     : rclcpp::Node(adapter_name), can_devs_(devs), logger_(rclcpp::get_logger(adapter_name)) {
     // 声明并初始化参数
-    this->declare_parameter("vx_max_val", 6.0 / 3.6);
+    this->declare_parameter("vx_max_val", 8.0 / 3.6);
     vx_max_val_ = this->get_parameter("vx_max_val").as_double();
 
     using namespace std::placeholders;
@@ -34,27 +37,52 @@ CanAdapter::CanAdapter(std::unordered_map<std::string, std::shared_ptr<CanTransr
     health_subs_ =
         this->create_subscription<interface::msg::Health>(std::string(healthDataTopic), 10, std::bind(&CanAdapter::onReceiveHealthMessage, this, _1));
     car_info_pubs_ = this->create_publisher<interface::msg::CarInfo>(std::string(carInfoTopic), 10);
+    recharge_charging_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(std::string(sensorTftChargingStatusTopic), 10);
     health_pubs_ = this->create_publisher<interface::msg::HealthStart>(std::string(sensorhandleControlTopic), 10);
     recharge_status_subs_ = this->create_subscription<interface::msg::RechargeStatus>(std::string(rechargeStatusTopic), 10,
                                                                                       std::bind(&CanAdapter::onRechargeStatusMessage, this, _1));
     speedbump_subs_ = this->create_subscription<visualization_msgs::msg::MarkerArray>(std::string(perSpeedbumpTopic), 10,
                                                                                       std::bind(&CanAdapter::onRecieveSpeedbumpMessage, this, _1));
     podao_subs_ = this->create_subscription<std_msgs::msg::Int32>(std::string(perPoDaoTopic), 10, std::bind(&CanAdapter::onRecievePaDaoMessage, this, _1));
-    narrow_sub_ = this->create_subscription<std_msgs::msg::Empty>(std::string("/narrow/end"), 10, std::bind(&CanAdapter::onReceiveNarrowMessage, this, _1));
+    light_type_sub_ = this->create_subscription<std_msgs::msg::Int32>(std::string(lightTypeTopic), 10, std::bind(&CanAdapter::onReceiveLightTypeMessage, this, _1));
+
+    car_mode_sub_ = this->create_subscription<std_msgs::msg::Int32>(std::string(tftCarModeTopic), 10, std::bind(&CanAdapter::onReceiveCarModeMessage, this, _1));
+    sound_switch_sub_ = this->create_subscription<std_msgs::msg::Int32>(std::string(tftSoundSwitchTopic), 10, std::bind(&CanAdapter::onReceiveSoundSwitchMessage, this, _1));
+    language_sub_ = this->create_subscription<std_msgs::msg::Int32>(std::string(tftLanguageTopic), 10, std::bind(&CanAdapter::onReceiveLanguageMessage, this, _1));
     speedbump_pubs_ = this->create_publisher<std_msgs::msg::Int32>(std::string(speedbumpAlarmTopic), 10);
     podao_pubs_ = this->create_publisher<std_msgs::msg::Int32>(std::string(downhillAlarmTopic), 10);
     uppd_pubs_ = this->create_publisher<std_msgs::msg::Int32>(std::string(uphillAlarmTopic), 10);
-    dance_puts_ = this->create_publisher<std_msgs::msg::Int32>(std::string(sceneKeyDanceTopic), 10);
-
+    //dance_puts_ = this->create_publisher<std_msgs::msg::Int32>(std::string(sceneKeyDanceTopic), 10);
+    narrow_sub_ = this->create_subscription<std_msgs::msg::Empty>(std::string("/narrow/end"), 10, std::bind(&CanAdapter::onReceiveNarrowMessage, this, _1));
+    
     mode_enable_client_ = this->create_client<interface::srv::KeyValueInt>(vlagoModeEnableService);
-
+    scene_helpcar_client_ = this->create_client<interface::srv::SceneControls>(manageHelpcarService);
+    scene_standard_client_ = this->create_client<interface::srv::SceneControls>(manageStandardService);
+    scene_bluetooth_client_ = this->create_client<interface::srv::SceneControls>(manageBluetoothService);
+    
     audio_sub_ = this->create_subscription<std_msgs::msg::Int32>(audioTopic, 10, std::bind(&CanAdapter::onReceiveAudioMessage, this, _1));
+    tft_touch_event_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+        std::string(tftTouchEventTopic), 10, std::bind(&CanAdapter::onReceiveTftTouchEventMessage, this, _1));
     joystick_pubs_ = this->create_publisher<interface::msg::Joystick>(std::string(joystickTopic), 10);
+
+    //popup_pubs_ = this->create_publisher<std_msgs::msg::Int32>(std::string(popupTypeTopic), 2);
+    physical_button_failure_pubs_ = this->create_publisher<std_msgs::msg::Int32>(std::string(physicalButtonFailureTopic), 10);
+    safety_function_pubs_ = this->create_publisher<std_msgs::msg::Int32>(std::string(safetyFunctionTopic), 10);
+    cruise_mode_pubs_ = this->create_publisher<std_msgs::msg::Int32>(std::string(cruiseModeTopic), 10);
+    gear_pubs_ = this->create_publisher<std_msgs::msg::Int32>(std::string(gearTopic), 10);
+
+    
 }
 
-void CanAdapter::canSend(std::string dev, int frameid, muduo::net::Buffer &buf) { can_devs_[dev]->send(frameid, buf); }
+void CanAdapter::canSend(std::string dev, int frameid, muduo::net::Buffer &buf) {
+    if (!can_enabled_) return;
+    can_devs_[dev]->send(frameid, buf);
+}
 
-void CanAdapter::canSendLoog(std::string dev, int frameid) { can_devs_[dev]->sendLoog(frameid); }
+void CanAdapter::canSendLoog(std::string dev, int frameid) {
+    if (!can_enabled_) return;
+    can_devs_[dev]->sendLoog(frameid);
+}
 
 void CanAdapter::speedDistribution(float vx, float w, int &pcmd_a, int &pcmd_b) {
     float car_width = 0.58f;        // 代步车两轮间距 m
@@ -122,11 +150,11 @@ void CanAdapter::ZqSpeedDistribution(float vx, float w, float &cmd_a, float &cmd
     w = -w;
     float car_width = 0.595f;       // 代步车两轮间距 m
     float k_radps2rpm = 9.5492967f; // rad/s -> rpm 系数
-    float radius = 0.120f;          // 轮子的半径 m
+    float radius = 0.1268f;          // 轮子的半径 m
     float gear_ratio = 17.00f;      // 电机减速机减速比
-    if (vx > this->get_parameter("vx_max_val").as_double()) {
-        vx = this->get_parameter("vx_max_val").as_double();
-    }
+    // if (vx > this->get_parameter("vx_max_val").as_double()) {
+    //     vx = this->get_parameter("vx_max_val").as_double();
+    // }
     // 速度分配 负号和电机安装有关
     float v_a = 1.0f * vx - w * car_width * 0.5f;
     float v_b = 1.0f * vx + w * car_width * 0.5f;
@@ -138,7 +166,7 @@ void CanAdapter::ZqSpeedDistribution(float vx, float w, float &cmd_a, float &cmd
 
 void CanAdapter::ZqDistributionSpeed(float cmd_a, float cmd_b, float &pvx, float &pw) {
     float car_width = 0.595f;  // 代步车两轮间距 m
-    float radius = 0.120f;     // 轮子的半径 m
+    float radius = 0.1268f;     // 轮子的半径 m
     float gear_ratio = 17.00f; // 电机减速机减速比
 
     // 计算电机转速对应的线速度
@@ -150,9 +178,9 @@ void CanAdapter::ZqDistributionSpeed(float cmd_a, float cmd_b, float &pvx, float
     pw = (v_a - v_b) / car_width;
 
     // 如果线速度超过最大值，进行限制
-    if (pvx > this->get_parameter("vx_max_val").as_double()) {
-        pvx = this->get_parameter("vx_max_val").as_double();
-    }
+    // if (pvx > this->get_parameter("vx_max_val").as_double()) {
+    //     pvx = this->get_parameter("vx_max_val").as_double();
+    // }
 }
 
 void CanAdapter::onReceiveHealthMessage(const interface::msg::Health::SharedPtr msg) {
@@ -187,4 +215,72 @@ void CanAdapter::onReceiveAudioMessage(const std_msgs::msg::Int32::SharedPtr msg
     buffer.append(data, 8);
     canSend("can0", (ODRIVE_AUDIO_FRAME_ID | CAN_EFF_FLAG), buffer);
     RCLCPP_INFO(logger_, "Send audio type: %d", obj.audio_type);
+}
+
+void CanAdapter::onReceiveTftTouchEventMessage(const std_msgs::msg::Bool::SharedPtr msg) {
+    if (!msg) {
+        return;
+    }
+    canSendLoog("can0", (kTftRemoteFrame909 | CAN_EFF_FLAG));
+    RCLCPP_INFO(logger_, "Receive tft touch event: %s, send 0x909 remote frame", msg->data ? "true" : "false");
+}
+
+void CanAdapter::onReceiveLightTypeMessage(const std_msgs::msg::Int32::SharedPtr msg) {
+    odrive_colour_screen_k_t obj;
+    obj.light_status = 1;
+    obj.light_mode = msg->data;
+    uint8_t data[8];
+    odrive_colour_screen_k_pack(data, &obj, 8);
+    muduo::net::Buffer buffer;
+    buffer.append(data, 8);
+    canSend("can0", (ODRIVE_COLOUR_SCREEN_K_FRAME_ID | CAN_EFF_FLAG), buffer);
+    RCLCPP_INFO(logger_, "Send light type: %d", obj.light_mode);
+}
+
+void CanAdapter::onReceiveCarModeMessage(const std_msgs::msg::Int32::SharedPtr msg) {
+    RCLCPP_INFO(logger_, "Receive car mode: %d", msg->data);
+    odrive_car_setting_t obj;
+    if (msg->data == 0xFF) { // 系统初始化获取车辆模式和声音开关
+        obj.mode_type = 0xFF;
+        obj.voice_ctrl = 0xFF;
+        uint8_t data[8];
+        odrive_car_setting_pack(data, &obj, 8);
+        muduo::net::Buffer buffer;
+        buffer.append(data, 8);
+        canSend("can0", (ODRIVE_CAR_SETTING_FRAME_ID | CAN_EFF_FLAG), buffer);
+        return;
+    }
+    obj.mode_type = msg->data;
+    obj.voice_ctrl = 0xFF;
+    obj.language = 0xFF;
+    uint8_t data[8];
+    odrive_car_setting_pack(data, &obj, 8);
+    muduo::net::Buffer buffer;
+    buffer.append(data, 8);
+    canSend("can0", (ODRIVE_CAR_SETTING_FRAME_ID | CAN_EFF_FLAG), buffer);
+}
+
+void CanAdapter::onReceiveSoundSwitchMessage(const std_msgs::msg::Int32::SharedPtr msg) {
+    RCLCPP_INFO(logger_, "Receive sound switch: %d", msg->data);
+    odrive_car_setting_t obj;
+    obj.voice_ctrl = msg->data;
+    obj.mode_type = 0xFF;
+    obj.language = 0xFF;
+    uint8_t data[8];
+    odrive_car_setting_pack(data, &obj, 8);
+    muduo::net::Buffer buffer;
+    buffer.append(data, 8);
+    canSend("can0", (ODRIVE_CAR_SETTING_FRAME_ID | CAN_EFF_FLAG), buffer);
+}
+void CanAdapter::onReceiveLanguageMessage(const std_msgs::msg::Int32::SharedPtr msg) {
+    RCLCPP_INFO(logger_, "Receive language: %d", msg->data);
+    odrive_car_setting_t obj;
+    obj.language = msg->data;
+    obj.voice_ctrl = 0xFF;
+    obj.mode_type = 0xFF;
+    uint8_t data[8];
+    odrive_car_setting_pack(data, &obj, 8);
+    muduo::net::Buffer buffer;
+    buffer.append(data, 8);
+    canSend("can0", (ODRIVE_CAR_SETTING_FRAME_ID | CAN_EFF_FLAG), buffer);
 }

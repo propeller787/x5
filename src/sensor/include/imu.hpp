@@ -21,7 +21,7 @@ public:
     ~ImuComponent();
 
 private:
-    void setupDevice();
+    bool setupDevice();
     void readImuData();
     void publishImuData();
     void onTimer();
@@ -29,7 +29,8 @@ private:
     // MPU6050 数据转换函数
     float convertGyroToDegreesPerSecond(int32_t adc_value);
     float convertAccelToG(int32_t adc_value);
-    float convertTempToCelsius(int32_t adc_value);
+    float convertTempToCelsius_6050(int32_t adc_value);
+    float convertTempToCelsius_6500(int32_t adc_value);
     
     // 姿态融合函数
     void updateOrientation();
@@ -63,7 +64,15 @@ private:
         float accel_x, accel_y, accel_z; // 加速度 (g)
         float temperature;              // 温度 (°C)
     } imu_values_;
-    
+
+    struct ImuValues_JY61P{
+        float gyro_x, gyro_y, gyro_z;  // 角速度 (°/S)
+        float accel_x, accel_y, accel_z; // 加速度 (g)
+        float roll, pitch, yaw;          // 欧拉角 (°)
+        float temperature;              // 温度 (°C)
+        float q0, q1, q2, q3;           // 四元数 (w, x, y, z)
+    } imu_values_jy61p_;
+      
     // 配置参数
     double publish_rate_;  // 发布频率 (Hz)
     bool enable_temperature_ = false; // 是否发布温度数据

@@ -90,7 +90,7 @@ public:
     int get_tty_fd();
 
 private:
-    bool _is_block;
+    bool _is_block = true;
     bool serial_port_init();
     void termios_options(termios& tios, const OpenOptions& options);
     std::string _path;
