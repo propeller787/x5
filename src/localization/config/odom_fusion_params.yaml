@@ -1,0 +1,9 @@
+odom_fusion_node:
+  ros__parameters:
+    input:
+      chassis_twist_topic: "/wheel/twist"
+      imu_topic: "/sensor/imu/data"
+    output:
+      fused_odom_topic: "/odom/fused"
+      odom_frame_id: "odom"
+      base_link_frame_id: "base_link"

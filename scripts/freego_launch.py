@@ -1,3 +1,5 @@
+import os
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
@@ -81,6 +83,11 @@ def generate_launch_description():
             'start_ydlidar',
             default_value='false',
             description='Enable/disable ydlidar Tmini node'
+        ),
+        DeclareLaunchArgument(
+            'start_odom_fusion',
+            default_value='true',
+            description='Enable/disable odom fusion node'
         ),
         # Sensor节点（条件启动）
         Node(
@@ -366,5 +373,19 @@ def generate_launch_description():
             respawn_delay=2.0,
             arguments=['/home/opt/freego/scripts/yisbot_o1.urdf'],
             condition=IfCondition(LaunchConfiguration('start_lidar'))
+        ),
+        # Odom fusion节点
+        Node(
+            package='localization',
+            executable='odom_fusion_node',
+            name='odom_fusion_node',
+            output='screen',
+            respawn=True,
+            respawn_delay=2.0,
+            arguments=['--ros-args', '--log-level', 'WARN'],
+            parameters=[os.path.join(
+                get_package_share_directory('localization'),
+                'config', 'odom_fusion_params.yaml')],
+            condition=IfCondition(LaunchConfiguration('start_odom_fusion'))
         )
     ])

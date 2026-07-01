@@ -44,6 +44,7 @@ find_package(rosbag2_storage REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(interface REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 # find_package(qxwz-pssdk-1.24.1-20240924-zqwl-ubuntu-production-release REQUIRED)
 
@@ -77,7 +78,7 @@ rclcpp_components_register_nodes(camera_component "sensor::camera::CameraCompone
 
 file(GLOB imu_src "imu_component/jy61P.cpp")
 add_library(imu_component SHARED  ${imu_src})
-ament_target_dependencies(imu_component rclcpp rclcpp_components interface common sensor_msgs tf2)
+ament_target_dependencies(imu_component rclcpp rclcpp_components interface common sensor_msgs tf2 geometry_msgs)
 rclcpp_components_register_nodes(imu_component "sensor::imu::ImuComponent")
 
 file(GLOB recorder_src "sensor_data_recorder/*.cpp")

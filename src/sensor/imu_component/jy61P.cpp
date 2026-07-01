@@ -30,11 +30,31 @@ ImuComponent::ImuComponent(const rclcpp::NodeOptions& options)
     this->declare_parameter("imu_device_path", "/dev/ttyS3");
     this->declare_parameter("publish_rate", publish_rate_);
     this->declare_parameter("enable_temperature", enable_temperature_);
+    this->declare_parameter("madgwick_beta", 0.1);
+    this->declare_parameter("madgwick_sample_freq", 200.0);
+    this->declare_parameter("zero_vel_linear_threshold", 0.02);
+    this->declare_parameter("zero_vel_angular_threshold", 0.02);
+    this->declare_parameter("zero_vel_duration", 0.5);
+    this->declare_parameter("accel_variance_threshold", 0.001);
+    this->declare_parameter("min_calibration_interval", 30.0);
+    this->declare_parameter("gyro_bias_ema_alpha", 0.001);
+    this->declare_parameter("enable_zero_vel_calib", true);
+    this->declare_parameter("chassis_twist_topic", std::string("/wheel/twist"));
     
     // 获取参数
     device_path_ = this->get_parameter("imu_device_path").as_string();
     publish_rate_ = this->get_parameter("publish_rate").as_double();
     enable_temperature_ = this->get_parameter("enable_temperature").as_bool();
+    madgwick_beta_ = static_cast<float>(this->get_parameter("madgwick_beta").as_double());
+    madgwick_sample_freq_ = static_cast<float>(this->get_parameter("madgwick_sample_freq").as_double());
+    zero_vel_linear_threshold_ = this->get_parameter("zero_vel_linear_threshold").as_double();
+    zero_vel_angular_threshold_ = this->get_parameter("zero_vel_angular_threshold").as_double();
+    zero_vel_duration_ = this->get_parameter("zero_vel_duration").as_double();
+    accel_variance_threshold_ = this->get_parameter("accel_variance_threshold").as_double();
+    min_calibration_interval_ = this->get_parameter("min_calibration_interval").as_double();
+    gyro_bias_ema_alpha_ = this->get_parameter("gyro_bias_ema_alpha").as_double();
+    enable_zero_vel_calib_ = this->get_parameter("enable_zero_vel_calib").as_bool();
+    chassis_twist_topic_ = this->get_parameter("chassis_twist_topic").as_string();
     
     RCLCPP_INFO(logger, "Device path: %s", device_path_.c_str());
     RCLCPP_INFO(logger, "Publish rate: %.1f Hz", publish_rate_);
@@ -54,7 +74,12 @@ ImuComponent::ImuComponent(const rclcpp::NodeOptions& options)
     // 创建定时器
     auto timer_period = std::chrono::milliseconds(static_cast<int>(1000.0 / publish_rate_));
     timer_ = this->create_wall_timer(timer_period, std::bind(&ImuComponent::onTimer, this));
-    
+
+    // 订阅底盘速度反馈（获取速度信息用于零速检测）
+    chassis_twist_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+        chassis_twist_topic_, 10,
+        std::bind(&ImuComponent::chassisTwistCallback, this, std::placeholders::_1));
+
     RCLCPP_INFO(logger, "JY61 IMU Component initialized successfully!");
 }
 
@@ -116,6 +141,37 @@ bool ImuComponent::setupDevice() {
 
 void ImuComponent::onTimer() {
     readImuData();
+
+    // 维护加速度幅值历史（方差计算用，使用 jy61p 数据）
+    double accel_mag = std::sqrt(
+        imu_values_jy61p_.accel_x * imu_values_jy61p_.accel_x +
+        imu_values_jy61p_.accel_y * imu_values_jy61p_.accel_y +
+        imu_values_jy61p_.accel_z * imu_values_jy61p_.accel_z);
+    accel_mag_history_.push_back(accel_mag);
+    if (accel_mag_history_.size() > kAccelWindowSize) {
+        accel_mag_history_.pop_front();
+    }
+
+    // 零速检测与陀螺仪bias校准
+    if (enable_zero_vel_calib_) {
+        bool zero_vel = detectZeroVelocity();
+
+        if (zero_vel && !in_zero_vel_) {
+            RCLCPP_INFO(rclcpp::get_logger("sensor::imu"),
+                "Zero-velocity ENTER | bias x=%.4f y=%.4f z=%.4f deg/s",
+                gyro_x_bias_, gyro_y_bias_, gyro_z_bias_);
+        } else if (!zero_vel && in_zero_vel_) {
+            RCLCPP_INFO(rclcpp::get_logger("sensor::imu"),
+                "Zero-velocity EXIT  | bias x=%.4f y=%.4f z=%.4f deg/s",
+                gyro_x_bias_, gyro_y_bias_, gyro_z_bias_);
+        }
+        in_zero_vel_ = zero_vel;
+
+        if (zero_vel) {
+            calibrateGyroBias();
+        }
+    }
+
     publishImuData();
 }
 
@@ -266,10 +322,11 @@ void ImuComponent::publishImuData() {
     imu_msg.header.stamp = now;
     imu_msg.header.frame_id = "imu_link";
     
-    // 角速度 (rad/s) - 从 imu_values_jy61p_ 获取并转换
-    imu_msg.angular_velocity.x = imu_values_jy61p_.gyro_x * M_PI / 180.0;
-    imu_msg.angular_velocity.y = imu_values_jy61p_.gyro_y * M_PI / 180.0;
-    imu_msg.angular_velocity.z = imu_values_jy61p_.gyro_z * M_PI / 180.0;
+    // 角速度 (rad/s) - 从 imu_values_jy61p_ 获取并转换，减去零速校准bias
+    const double deg2rad = M_PI / 180.0;
+    imu_msg.angular_velocity.x = (imu_values_jy61p_.gyro_x - gyro_x_bias_) * deg2rad;
+    imu_msg.angular_velocity.y = (imu_values_jy61p_.gyro_y - gyro_y_bias_) * deg2rad;
+    imu_msg.angular_velocity.z = (imu_values_jy61p_.gyro_z - gyro_z_bias_) * deg2rad;
     
     // 线性加速度 (m/s²) - 从 imu_values_jy61p_ 获取并转换
     imu_msg.linear_acceleration.x = imu_values_jy61p_.accel_x * 9.81;
@@ -335,11 +392,73 @@ bool ImuComponent::isValidImuData() {
     }
     
     // 检查加速度是否在合理范围内（±16g）
-    if (std::abs(imu_values_jy61p_.accel_x) > 16.0f || 
-        std::abs(imu_values_jy61p_.accel_y) > 16.0f || 
+    if (std::abs(imu_values_jy61p_.accel_x) > 16.0f ||
+        std::abs(imu_values_jy61p_.accel_y) > 16.0f ||
         std::abs(imu_values_jy61p_.accel_z) > 16.0f) {
         return false;
     }
-    
+
     return true;
+}
+
+void ImuComponent::chassisTwistCallback(const geometry_msgs::msg::TwistStamped::SharedPtr msg) {
+    latest_wheel_vx_ = msg->twist.linear.x;
+    latest_wheel_vyaw_ = msg->twist.angular.z;
+}
+
+bool ImuComponent::detectZeroVelocity() {
+    auto now = this->now();
+
+    bool speed_below_threshold =
+        std::abs(latest_wheel_vx_) < zero_vel_linear_threshold_ &&
+        std::abs(latest_wheel_vyaw_) < zero_vel_angular_threshold_;
+    if (speed_below_threshold) {
+        if (!stationary_candidate_) {
+            stationary_candidate_ = true;
+            stationary_start_time_ = now;
+        }
+    } else {
+        stationary_candidate_ = false;
+        return false;
+    }
+
+    double stationary_duration = (now - stationary_start_time_).seconds();
+    if (stationary_duration < zero_vel_duration_) {
+        return false;
+    }
+
+    if (accel_mag_history_.size() < kAccelWindowSize) {
+        return false;
+    }
+
+    double mean = 0.0;
+    for (double v : accel_mag_history_) {
+        mean += v;
+    }
+    mean /= static_cast<double>(accel_mag_history_.size());
+
+    double variance = 0.0;
+    for (double v : accel_mag_history_) {
+        double d = v - mean;
+        variance += d * d;
+    }
+    variance /= static_cast<double>(accel_mag_history_.size());
+
+    if (variance > accel_variance_threshold_) {
+        return false;
+    }
+
+    if ((now - last_calibration_time_).seconds() < min_calibration_interval_) {
+        return false;
+    }
+
+    return true;
+}
+
+void ImuComponent::calibrateGyroBias() {
+    const double alpha = gyro_bias_ema_alpha_;
+    gyro_x_bias_ = alpha * imu_values_jy61p_.gyro_x + (1.0 - alpha) * gyro_x_bias_;
+    gyro_y_bias_ = alpha * imu_values_jy61p_.gyro_y + (1.0 - alpha) * gyro_y_bias_;
+    gyro_z_bias_ = alpha * imu_values_jy61p_.gyro_z + (1.0 - alpha) * gyro_z_bias_;
+    last_calibration_time_ = this->now();
 }
