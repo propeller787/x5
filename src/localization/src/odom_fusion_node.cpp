@@ -43,6 +43,9 @@ OdomFusionNode::OdomFusionNode(const rclcpp::NodeOptions& options)
   odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
       fused_odom_topic_, 10);
 
+  // 创建 tf broadcaster
+  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+
   // 创建 reset 服务
   reset_srv_ = this->create_service<std_srvs::srv::Trigger>(
       "~/reset",
@@ -80,6 +83,7 @@ void OdomFusionNode::imuCallback(sensor_msgs::msg::Imu::SharedPtr msg) {
 
   last_stamp_ = stamp;
   publishOdometry(stamp);
+  publishTransform(stamp);
 }
 
 void OdomFusionNode::publishOdometry(const rclcpp::Time& stamp) {
@@ -103,6 +107,25 @@ void OdomFusionNode::publishOdometry(const rclcpp::Time& stamp) {
   msg.twist.twist.angular.z = vyaw_;
 
   odom_pub_->publish(msg);
+}
+
+void OdomFusionNode::publishTransform(const rclcpp::Time& stamp) {
+  geometry_msgs::msg::TransformStamped tf;
+  tf.header.stamp = stamp;
+  tf.header.frame_id = odom_frame_id_;
+  tf.child_frame_id = base_link_frame_id_;
+  tf.transform.translation.x = x_;
+  tf.transform.translation.y = y_;
+  tf.transform.translation.z = 0.0;
+
+  tf2::Quaternion q;
+  q.setRPY(0, 0, yaw_);
+  tf.transform.rotation.x = q.x();
+  tf.transform.rotation.y = q.y();
+  tf.transform.rotation.z = q.z();
+  tf.transform.rotation.w = q.w();
+
+  tf_broadcaster_->sendTransform(tf);
 }
 
 void OdomFusionNode::reset() {

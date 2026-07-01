@@ -6,6 +6,7 @@
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <tf2/LinearMath/Quaternion.h>
+#include <tf2_ros/transform_broadcaster.h>
 
 namespace localization {
 
@@ -18,6 +19,7 @@ private:
   void imuCallback(sensor_msgs::msg::Imu::SharedPtr msg);
   void twistCallback(geometry_msgs::msg::TwistStamped::SharedPtr msg);
   void publishOdometry(const rclcpp::Time& stamp);
+  void publishTransform(const rclcpp::Time& stamp);
   void reset();
 
   // 订阅
@@ -26,6 +28,7 @@ private:
 
   // 发布
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
   // Reset 服务
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;
