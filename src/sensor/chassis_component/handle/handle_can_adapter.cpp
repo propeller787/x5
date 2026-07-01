@@ -94,21 +94,27 @@ HandleCanAdapter::HandleCanAdapter(std::unordered_map<std::string, std::shared_p
                 can_publish_filter_enabled_ ? "ENABLED" : "DISABLED",
                 can_publish_id_filter_.size());
 
+    this->declare_parameter("wheel_odom_enabled", false);
     this->declare_parameter("wheel_odom_wheel_radius_m", 0.126);
     this->declare_parameter("wheel_odom_wheel_separation_m", 0.612);
     // 16383 * 17 编码器计数 / 圈
     this->declare_parameter("wheel_odom_counts_per_revolution", 278511.0);
     this->declare_parameter("wheel_odom_frame_id", std::string("odom"));
     this->declare_parameter("wheel_odom_child_frame_id", std::string("base_link"));
+    wheel_odom_enabled_ = this->get_parameter("wheel_odom_enabled").as_bool();
     wheel_radius_m_ = this->get_parameter("wheel_odom_wheel_radius_m").as_double();
     wheel_separation_m_ = this->get_parameter("wheel_odom_wheel_separation_m").as_double();
     counts_per_revolution_ = this->get_parameter("wheel_odom_counts_per_revolution").as_double();
     m_per_count_ = (2.0 * kPi * wheel_radius_m_) / counts_per_revolution_;
     wheel_odom_frame_id_ = this->get_parameter("wheel_odom_frame_id").as_string();
     wheel_odom_child_frame_id_ = this->get_parameter("wheel_odom_child_frame_id").as_string();
-    wheel_odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(wheelOdomTopic, 10);
-    RCLCPP_INFO(logger_, "Wheel odometry publisher on %s (radius=%.4fm separation=%.4fm counts/rev=%.1f)",
-                wheelOdomTopic, wheel_radius_m_, wheel_separation_m_, counts_per_revolution_);
+    if (wheel_odom_enabled_) {
+        wheel_odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(wheelOdomTopic, 30);
+        RCLCPP_INFO(logger_, "Wheel odometry publisher on %s (radius=%.4fm separation=%.4fm counts/rev=%.1f)",
+                    wheelOdomTopic, wheel_radius_m_, wheel_separation_m_, counts_per_revolution_);
+    } else {
+        RCLCPP_INFO(logger_, "Wheel odometry disabled; /car/encoder remains active");
+    }
 }
 
 void HandleCanAdapter::handleUCVersionRequest(const std::shared_ptr<interface::srv::SystemVersion::Request> request,
@@ -223,8 +229,15 @@ void HandleCanAdapter::onReceive217Info(const std::string &, int fid, muduo::net
 
 void HandleCanAdapter::onReceive21aInfo(const std::string &, int fid, muduo::net::Buffer &buffer) {
     struct odrive_count_t obj;
-    int retv = odrive_count_unpack(&obj, (const uint8_t *)(buffer.peek()), buffer.readableBytes());
-    (void)retv;
+    const auto payload_size = buffer.readableBytes();
+    const int retv = odrive_count_unpack(&obj, reinterpret_cast<const uint8_t *>(buffer.peek()), payload_size);
+    if (retv != 0) {
+        RCLCPP_WARN_THROTTLE(logger_, *this->get_clock(), 5000,
+                             "wheel_odom: failed to unpack encoder frame 0x%x, size=%zu, ret=%d",
+                             fid, payload_size, retv);
+        return;
+    }
+
     latest_left_count_ = obj.count0;
     latest_right_count_ = obj.count1;
     encoder_valid_ = true;
@@ -930,6 +943,16 @@ int32_t HandleCanAdapter::encoderCountToMsgField(int64_t raw) {
     return static_cast<int32_t>(raw);
 }
 
+int64_t HandleCanAdapter::encoderDeltaCounts(int32_t current, int32_t previous) {
+    const uint32_t current_u = static_cast<uint32_t>(current);
+    const uint32_t previous_u = static_cast<uint32_t>(previous);
+    const uint32_t delta_u = current_u - previous_u;
+    if (delta_u <= static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
+        return static_cast<int64_t>(delta_u);
+    }
+    return static_cast<int64_t>(delta_u) - (static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) + 1LL);
+}
+
 void HandleCanAdapter::publishEncoderAndOdometry() {
     if (!encoder_valid_) {
         return;
@@ -940,10 +963,15 @@ void HandleCanAdapter::publishEncoderAndOdometry() {
     message.left_wheel_count = encoderCountToMsgField(latest_left_count_);
     message.right_wheel_count = encoderCountToMsgField(latest_right_count_);
     control_car_encoder_pubs_->publish(message);
-    updateWheelOdometryFromEncoders();
+    if (wheel_odom_enabled_) {
+        updateWheelOdometryFromEncoders();
+    }
 }
 
 void HandleCanAdapter::updateWheelOdometryFromEncoders() {
+    if (!wheel_odom_enabled_ || !wheel_odom_pub_) {
+        return;
+    }
     if (!encoder_valid_) {
         return;
     }
@@ -980,8 +1008,8 @@ void HandleCanAdapter::updateWheelOdometryFromEncoders() {
         return;
     }
 
-    const int64_t dl = latest_left_count_ - prev_left_count_;
-    const int64_t dr = latest_right_count_ - prev_right_count_;
+    const int64_t dl = encoderDeltaCounts(latest_left_count_, prev_left_count_);
+    const int64_t dr = encoderDeltaCounts(latest_right_count_, prev_right_count_);
     prev_left_count_ = latest_left_count_;
     prev_right_count_ = latest_right_count_;
 

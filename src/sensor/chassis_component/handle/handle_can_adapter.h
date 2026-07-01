@@ -138,9 +138,11 @@ private:
     void publishEncoderAndOdometry();
     void updateWheelOdometryFromEncoders();
     static int32_t encoderCountToMsgField(int64_t raw);
+    static int64_t encoderDeltaCounts(int32_t current, int32_t previous);
 
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr wheel_odom_pub_;
 
+    bool wheel_odom_enabled_{false};
     double wheel_radius_m_{0.126};
     double wheel_separation_m_{0.58};
     double counts_per_revolution_{278511.0};
@@ -148,12 +150,12 @@ private:
     std::string wheel_odom_frame_id_;
     std::string wheel_odom_child_frame_id_;
 
-    int64_t latest_left_count_{0};
-    int64_t latest_right_count_{0};
+    int32_t latest_left_count_{0};
+    int32_t latest_right_count_{0};
     bool encoder_valid_{false};
 
-    int64_t prev_left_count_{0};
-    int64_t prev_right_count_{0};
+    int32_t prev_left_count_{0};
+    int32_t prev_right_count_{0};
     bool wheel_odom_initialized_{false};
 
     double odom_x_{0.0};

@@ -92,4 +92,4 @@ can_adapter:
     wheel_odom_wheel_separation_m: 0.612
     wheel_odom_counts_per_revolution: 278511.0  # 16383 * 17 编码器计数/圈
     wheel_odom_frame_id: "odom"
-    wheel_odom_child_frame_id: "base_link"
+    wheel_odom_child_frame_id: "imu_link"
