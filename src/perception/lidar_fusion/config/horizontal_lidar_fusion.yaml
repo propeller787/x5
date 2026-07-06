@@ -1,0 +1,45 @@
+horizontal_lidar_fusion:
+  ros__parameters:
+    left_scan_topic: "/scan/left"
+    right_scan_topic: "/scan/right"
+    back_scan_topic: "/scan/back"
+    imu_topic: "/sensor/imu/data"
+
+    output_cloud_topic: "/perception/lidar_fusion/points"
+    left_debug_cloud_topic: "/perception/lidar_fusion/debug/left"
+    right_debug_cloud_topic: "/perception/lidar_fusion/debug/right"
+    back_debug_cloud_topic: "/perception/lidar_fusion/debug/back"
+    target_frame: "base_link"
+
+    # Actual system rates: IMU 100 Hz, horizontal lidars 10 Hz.
+    imu_frequency: 100.0
+    lidar_frequency: 10.0
+    fallback_scan_time_sec: 0.1
+
+    # sync_queue_size / sync_slop_sec are legacy (kept for YAML compatibility);
+    # the node now fuses on a timer from the freshest available scan per source.
+    sync_queue_size: 30
+    sync_slop_sec: 0.08
+
+    # Timer-driven fusion. A lidar whose latest scan is older than max_scan_age_sec
+    # is treated as dropped; fusion still runs while >= min_sources remain fresh.
+    max_scan_age_sec: 0.20
+    min_sources: 1
+    fusion_frequency: 10.0
+
+    deskew_enabled: true
+    drop_if_imu_missing: false
+    allow_imu_nearest_fallback: true
+    max_imu_gap_sec: 0.05
+    imu_buffer_sec: 3.0
+
+    publish_debug_clouds: false
+    transform_timeout_sec: 0.05
+
+    # Per-device software timestamp calibration offsets.
+    left_time_offset_sec: 0.0
+    right_time_offset_sec: 0.0
+    back_time_offset_sec: 0.0
+
+    # Empty means use each IMU message header.frame_id.
+    imu_frame_id: ""

@@ -1,0 +1,8 @@
+<library path="rebuild_obstacle_layer">
+  <class type="wheelchair_obstacle::RebuildObstacleLayer" base_class_type="nav2_costmap_2d::Layer">
+    <description>
+      每周期整图重建的 ObstacleLayer 变体（方案 B）：每个更新周期先清空本层栅格，
+      再用当前帧点云重建，使障碍物离开后立即消失。
+    </description>
+  </class>
+</library>

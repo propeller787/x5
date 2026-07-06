@@ -1,0 +1,226 @@
+# 轮椅 MPPI 集成所用的 Nav2 controller_server + local_costmap 配置。
+#
+# local_costmap 直接通过原生 nav2 的 ObstacleLayer + InflationLayer 消费经过滤的障碍物
+# 点云（来自 obstacle_cloud_filter_node 的 /perception/obstacle_points）。此前自研的
+# rolling_local_costmap_node + OccupancyGridLayer 适配器已移除：标记、清除、足迹清除与膨胀
+# 现在全部由 nav2 在此处完成。
+
+controller_server:
+  ros__parameters:
+    use_sim_time: false
+    controller_frequency: 20.0
+    odom_topic: "/odom/fused"
+    controller_plugins: ["FollowPath"]
+
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.05
+      movement_time_allowance: 2.0
+
+    general_goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.10
+      yaw_goal_tolerance: 0.20
+      stateful: true
+
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+      # 1.1.20 的 setMotionModel 区分大小写：必须为 DiffDrive / Omni / Ackermann。
+      motion_model: "DiffDrive"
+
+      # 20 Hz 控制器 -> model_dt 必须 >= 控制周期；此处取相等。
+      model_dt: 0.05
+      time_steps: 40
+      batch_size: 1200
+      iteration_count: 1
+
+      # 速度包络必须覆盖最高挡位（挡位），否则 MPPI / ConstraintCritic 会钳制从
+      # /handle/control 镜像过来的意图，高挡位永远达不到指令速度。挡位表（最大 v / 最大 w）：
+      #   1: 0.560 / 0.780   2: 1.125 / 0.945
+      #   3: 1.687 / 1.102   4: 2.249 / 1.260
+      # 设置为略高于挡位 4。倒车（vx_min）与前进幅值相同，使按挡位缩放的倒车意图不被裁剪；
+      # 若倒车应限制得更低以保安全，可收紧此值。
+      # 注意：1.1.20 的 ConstraintCritic 只强制速度界限，不强制加速度（ax/ay/az）。加速度
+      # 整形在上游的 cmd_vel 安全门中完成。
+      vx_max: 2.30
+      vx_min: -2.30
+      vy_max: 0.0
+      wz_max: 1.30
+
+      # 更宽的采样标准差，使 MPPI 能在 rollout 时域内探索到更高的最高速度；在车上调参。
+      vx_std: 0.35
+      vy_std: 0.0
+      wz_std: 0.35
+
+      temperature: 0.30
+      gamma: 0.015
+      retry_attempt_limit: 1
+      regenerate_noises: false
+      # 打开后，MPPI 会把候选轨迹与最优轨迹（“Optimal Trajectory”命名空间）发布到
+      # /controller_server/trajectories(visualization_msgs/MarkerArray)，并把跟踪的
+      # 局部路径发布到 /controller_server/transformed_global_plan(nav_msgs/Path)，
+      # 供 RViz2 显示 MPPI 的输出路径。会略增 CPU，仅用于调试。
+      visualize: true
+
+      TrajectoryVisualizer:
+        trajectory_step: 5
+        time_step: 3
+
+      # 1.1.20 没有 TrajectoryValidator 插件体系；最优轨迹的校验由各 critic 自身处理。
+
+      critics:
+        - "ConstraintCritic"
+        - "CostCritic"
+        - "GoalCritic"
+        - "GoalAngleCritic"
+        - "PathAlignCritic"
+        - "PathFollowCritic"
+        - "PathAngleCritic"
+        - "PreferForwardCritic"
+        - "VelocityDeadbandCritic"
+
+      ConstraintCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0
+
+      # consider_footprint=true，因为 base_link 位于靠后位置（前悬伸 f=0.935，后悬伸
+      # r=0.2）：内切圆近似仅约 0.20 m（受后部限制），会使很长的前部得不到保护。
+      # 全多边形检测更耗 CPU：若 controller_frequency 掉到 20 Hz 以下，请减小
+      # batch_size/time_steps 或调高 CostCritic.trajectory_point_step。
+      CostCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.0
+        critical_cost: 300.0
+        collision_cost: 1000000.0
+        consider_footprint: true
+        near_goal_distance: 0.5
+        inflation_layer_name: "inflation_layer"
+
+      GoalCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0
+        threshold_to_consider: 1.0
+
+      GoalAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 1.5
+        threshold_to_consider: 0.5
+
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 8.0
+        max_path_occupancy_ratio: 0.10
+        trajectory_point_step: 4
+        threshold_to_consider: 0.4
+        offset_from_furthest: 8
+        use_path_orientations: false
+
+      PathFollowCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        offset_from_furthest: 5
+        threshold_to_consider: 0.8
+
+      PathAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 1.5
+        offset_from_furthest: 4
+        threshold_to_consider: 0.4
+        max_angle_to_furthest: 1.0
+        # 1.1.20 读取 forward_preference（bool），而非 1.4.x 的 "mode"（int）。
+        # vx_min<0 允许倒车；forward_preference=true 偏好前进。
+        forward_preference: true
+
+      PreferForwardCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 1.0
+        threshold_to_consider: 0.5
+
+      VelocityDeadbandCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 20.0
+        deadband_velocities: [0.03, 0.0, 0.03]
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: false
+      update_frequency: 10.0
+      publish_frequency: 10.0
+      global_frame: "odom"
+      robot_base_frame: "base_link"
+      transform_tolerance: 0.10
+
+      rolling_window: true
+      # 以机器人为中心、对称的滚动窗口（与 odom 对齐）。若 MPPI 需要更多前向预视，可对称放大。
+      # 注意：width/height 在 nav2 costmap_2d 中是整数参数 —— 不要写成 4.0（double），否则
+      # Costmap2DROS 会因 InvalidParameterType 中止。
+      # 6x6 滚动窗口 -> 每个方向 3 m 范围（与 obstacle_max_range 3.0 匹配），使 MPPI 能看得
+      # 够远，从而在高挡位下刹车。
+      # 更大 = 更多 CPU/RAM；若循环无法保持 20 Hz，则退回到 4。
+      width: 6
+      height: 6
+      resolution: 0.05
+      always_send_full_costmap: true
+      track_unknown_space: false
+
+      # 实测车体：前悬伸 f=0.935，后悬伸 r=0.2，半宽 w=0.34（base_link 位于驱动轮轴上，因此
+      # 原点位于靠后位置）。
+      footprint: "[[0.935, 0.34], [0.935, -0.34], [-0.2, -0.34], [-0.2, 0.34]]"
+      footprint_padding: 0.02
+
+      plugins: ["obstacle_layer", "inflation_layer"]
+
+      # 方案 B：每周期整图重建的 ObstacleLayer 变体（wheelchair_obstacle 包内的自定义插件）。
+      # 每个更新周期先清空本层栅格再用当前帧重建，使障碍物离开后立即消失（不依赖射线是否
+      # 恰好穿过旧格子）。直接从经过滤的障碍物点云进行标记/清除，上游的
+      # obstacle_cloud_filter_node 已完成 range/z/ROI/自遮挡/孤立点/体素滤波。
+      # 注意：整图重建会丢失时间记忆，单帧漏检会导致障碍瞬时闪烁；若实测出现闪烁，
+      # 需退回原生 ObstacleLayer 或引入时间衰减（keep_time）策略。
+      obstacle_layer:
+        plugin: "wheelchair_obstacle::RebuildObstacleLayer"
+        enabled: true
+        footprint_clearing_enabled: true
+        combination_method: 1              # 1 = 取最大值
+        observation_sources: obstacle_cloud
+        obstacle_cloud:
+          topic: /perception/obstacle_points
+          data_type: "PointCloud2"
+          sensor_frame: "base_link"        # 合并点云的公共坐标系；射线清除的原点
+          marking: true
+          clearing: true
+          # 只保留最新一帧；整图重建时也确保只用当前帧障碍。
+          observation_persistence: 0.0
+          expected_update_rate: 0.5        # 点云低于约 2 Hz 时告警
+          min_obstacle_height: -0.30       # 与滤波器 z_min 对齐
+          max_obstacle_height: 0.80        # 与滤波器 z_max 对齐
+          obstacle_min_range: 0.05
+          obstacle_max_range: 3.00
+          raytrace_min_range: 0.05
+          raytrace_max_range: 3.00
+          inf_is_valid: false
+
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
+        # 由 footprint 自动推导的内切半径现在约为 0.20 m（受较短的后悬伸 r=0.2 限制）；
+        # inflation_radius 必须 >= 该值。
+        inflation_radius: 0.44
+        cost_scaling_factor: 4.0
+        inflate_unknown: false

@@ -1,0 +1,84 @@
+cmd_vel_safety_gate_node:
+  ros__parameters:
+    cmd_vel_in: "/cmd_vel"
+    cmd_vel_out: "/nav/control"
+    # 透传（PASSTHROUGH）源：来自固件、已按挡位缩放的摇杆速度。
+    handle_control_topic: "/handle/control"
+    # 障碍物距离源：用于“透传<->避障”之间的仲裁。
+    obstacle_points_topic: "/perception/obstacle_points"
+    safety_state_topic: "/safety_state"
+    # Nav2 Humble 的 controller_server 在 /cmd_vel 上发布 geometry_msgs/Twist
+    #（TwistStamped / enable_stamped_cmd_vel 仅在 Iron/Jazzy+ 上才有）。订阅类型必须
+    # 与发布者一致，否则 DDS 会丢弃每一条消息，限速门会把 /nav/control 锁定为 0。
+    input_type: "twist"
+    require_safety_state: false
+    safety_fault_threshold: 1
+
+    cmd_timeout: 0.20
+    publish_rate_hz: 50.0
+
+    # --- 基于障碍物门控的透传仲裁 ---
+    # true：空旷区域直接由 /handle/control 驱动（低延迟、手感精确），仅在靠近障碍物时
+    #       才交由 MPPI 接管。
+    # false：一直使用“仲裁 + MPPI”模式——门控恒定判定为 AVOID，所有运动都走 MPPI
+    #        输出（/cmd_vel），透传被禁用。此模式下 proximity_speed_cap 与挡位限速
+    #        仍作用于 MPPI 输出。
+    passthrough_enable: false
+    # 当行进方向扇区内的最近障碍物距离小于 d_engage 时进入 AVOID（使用 MPPI）；只有在超过
+    # d_release 且经过 min_dwell 之后才返回 PASSTHROUGH（非对称迟滞：保护要快，放松要慢）。
+    # --- 速度自适应的介入距离（用于高挡位）---
+    # 为 true 时，每个周期都根据当前速度重新计算 d_engage，使轮椅进入 AVOID 时总有足够的
+    # 刹车余量：
+    #   d_engage = overhang + standoff + v*reaction_time + v^2/(2*brake_decel)
+    dynamic_d_engage: true
+    # base_link -> 保险杠的前/后悬伸（取自 footprint 的 f / r）。
+    front_overhang: 0.935
+    rear_overhang: 0.2
+    # 完全停止时保险杠与障碍物之间保留的间隙。
+    standoff: 0.08
+    reaction_time: 0.2
+    # 刹车计算所用的减速度；保持 <= 限速门的 |ax_min|（1.5），使加速度限制器总能真正达到它。
+    brake_decel: 1.2
+    # AVOID -> PASSTHROUGH 在 d_engage + release_gap 处释放（迟滞）。
+    release_gap: 0.6
+    # 接近速度上限：在两种模式下都把速度限制为 sqrt(2*brake_decel*clearance)，使轮椅在距最近
+    # 障碍物 standoff 处减速停下。这是在有限传感器量程内保证 3/4 挡安全的关键。
+    proximity_speed_cap: true
+
+    min_dwell: 0.5
+    # 行进方向扇区的半角（弧度）~ atan2(w=0.34, d_engage)+余量。
+    sector_half_angle: 0.45
+
+    # 回退用的固定阈值（仅当 dynamic_d_engage=false 时使用）。
+    d_engage: 1.7
+    d_release: 2.3
+    # 障碍物点云比此值更旧 -> 强制 AVOID（盲区时绝不透传）。
+    obstacle_timeout: 0.5
+    # |linear.x| 低于此值视为未平移（不计前向威胁）。
+    intent_eps: 0.03
+
+    # 速度限制必须覆盖最高挡位（挡位 4: v=2.249, w=1.260），并与
+    # mppi_controller_server.yaml 的 FollowPath 限制保持一致，否则限速门会重新裁剪 MPPI 从
+    # /handle/control 镜像过来的速度。
+    vx_max: 2.30
+    vx_min: -2.30
+    vy_max: 0.0
+    wz_max: 1.30
+    # 加速度整形（MPPI 1.1.20 不强制加速度）。调高以便输出能真正跟上高挡位指令，而不是总是
+    # 滞后；在车上根据乘坐舒适性与响应性的权衡进行调参。
+    ax_max: 1.20
+    ax_min: -1.50
+    az_max: 2.50
+
+    # --- 按挡位限制 MPPI 输出的最大速度 ---
+    # 当前挡位（挡位 1..3）由底盘在 /vlago/car/info(interface/msg/CarInfo) 的 gear
+    # 字段上以约 1 Hz 反馈。下面把每个挡位映射到 |linear.x| 的上限（m/s），MPPI/摇杆
+    # 无论要多快，输出都不会超过所选挡位对应速度。
+    #   1 挡 = 2 km/h ≈ 0.5556 m/s
+    #   2 挡 = 4 km/h ≈ 1.1111 m/s
+    #   3 挡 = 6 km/h ≈ 1.6667 m/s
+    gear_speed_cap_enable: true
+    gear_speed_caps_mps: [0.5556, 1.1111, 1.6667]
+    # 尚未收到挡位反馈、或挡位越界时使用的兜底上限（m/s）。设为 <=0 表示此时不限速。
+    gear_default_mps: 1.6667
+    car_info_topic: "/vlago/car/info"

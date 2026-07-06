@@ -1,0 +1,233 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /TF1
+        - /Perception1
+        - /Costmap1
+        - /Control1
+      Splitter Ratio: 0.5
+    Tree Height: 720
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 1
+      Plane Cell Count: 20
+      Color: 160; 160; 164
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Reference Frame: odom
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Marker Scale: 0.6
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0
+      Frame Timeout: 15
+      Value: true
+    - Class: rviz_common/Group
+      Name: Perception
+      Enabled: true
+      Displays:
+        - Class: rviz_default_plugins/LaserScan
+          Name: scan_left
+          Enabled: false
+          Topic:
+            Value: /scan/left
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+          Style: Points
+          Size (Pixels): 3
+          Color Transformer: FlatColor
+          Color: 0; 170; 255
+          Value: false
+        - Class: rviz_default_plugins/LaserScan
+          Name: scan_right
+          Enabled: false
+          Topic:
+            Value: /scan/right
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+          Style: Points
+          Size (Pixels): 3
+          Color Transformer: FlatColor
+          Color: 0; 255; 170
+          Value: false
+        - Class: rviz_default_plugins/LaserScan
+          Name: scan_back
+          Enabled: false
+          Topic:
+            Value: /scan/back
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+          Style: Points
+          Size (Pixels): 3
+          Color Transformer: FlatColor
+          Color: 255; 170; 0
+          Value: false
+        - Class: rviz_default_plugins/PointCloud2
+          Name: fusion_points
+          Enabled: true
+          Topic:
+            Value: /perception/lidar_fusion/points
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+          Style: Flat Squares
+          Size (m): 0.02
+          Color Transformer: FlatColor
+          Color: 200; 200; 200
+          Decay Time: 0
+          Value: true
+        - Class: rviz_default_plugins/PointCloud2
+          Name: obstacle_points
+          Enabled: true
+          Topic:
+            Value: /perception/obstacle_points
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+          Style: Boxes
+          Size (m): 0.05
+          Color Transformer: FlatColor
+          Color: 255; 40; 40
+          Decay Time: 0
+          Value: true
+      Value: true
+    - Class: rviz_common/Group
+      Name: Costmap
+      Enabled: true
+      Displays:
+        - Class: rviz_default_plugins/Map
+          Name: local_costmap
+          Enabled: true
+          Topic:
+            Value: /local_costmap/costmap
+            Depth: 1
+            Durability Policy: Transient Local
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+          Color Scheme: costmap
+          Draw Behind: true
+          Update Topic:
+            Value: /local_costmap/costmap_updates
+          Value: true
+        - Class: rviz_default_plugins/Polygon
+          Name: footprint
+          Enabled: true
+          Topic:
+            Value: /local_costmap/published_footprint
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+          Color: 0; 255; 0
+          Value: true
+      Value: true
+    - Class: rviz_common/Group
+      Name: Control
+      Enabled: true
+      Displays:
+        - Class: rviz_default_plugins/Odometry
+          Name: odom_fused
+          Enabled: true
+          Topic:
+            Value: /odom/fused
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+          Covariance:
+            Value: false
+          Keep: 1
+          Shape: Arrow
+          Value: true
+        - Class: rviz_default_plugins/Path
+          Name: intent_path
+          Enabled: true
+          Topic:
+            Value: /mppi/local_intent_path
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+          Color: 0; 200; 0
+          Line Style: Lines
+          Value: true
+        - Class: rviz_default_plugins/Path
+          Name: mppi_transformed_plan
+          Enabled: true
+          Topic:
+            Value: /controller_server/transformed_global_plan
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+          Color: 0; 200; 255
+          Line Style: Lines
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Name: mppi_trajectories
+          Enabled: true
+          Namespaces: {}
+          Topic:
+            Value: /controller_server/trajectories
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+          Value: true
+      Value: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: odom
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 12
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Pitch: 1.2
+      Yaw: 3.14
+      Target Frame: base_link
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Width: 1500
+  Views:
+    collapsed: false

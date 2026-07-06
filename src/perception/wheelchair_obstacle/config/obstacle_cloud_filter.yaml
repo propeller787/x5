@@ -1,0 +1,47 @@
+obstacle_cloud_filter:
+  ros__parameters:
+    input_cloud_topic: "/perception/lidar_fusion/points"
+    output_cloud_topic: "/perception/obstacle_points"
+    self_mask_marker_topic: "/perception/obstacle_points/debug/self_mask"
+    roi_marker_topic: "/perception/obstacle_points/debug/roi"
+    target_frame: "base_link"
+
+    max_input_age_sec: 0.30
+    transform_timeout_sec: 0.05
+    publish_empty_cloud: true
+
+    range_min: 0.05
+    range_max: 3.00
+    z_min: -0.30
+    z_max: 0.80
+
+    roi:
+      x_min: -2.20
+      x_max: 3.50
+      y_min: -1.50
+      y_max: 1.50
+
+    self_mask_enabled: true
+    # 通过扁平数组覆盖自遮挡掩膜。若要使用下方的内置默认值，请把这些键保持“注释掉”的状态
+    # （不要写出来）。注意：不要将它们设为空的 "[]" —— 空的 YAML 数组没有元素类型，会导致
+    # rclcpp 拒绝该参数。
+    #   chassis（底盘）:        [-0.45,-0.36],[0.55,-0.36],[0.55,0.36],[-0.45,0.36]
+    #   front_footrest（前脚踏）: [0.45,-0.30],[0.85,-0.30],[0.85,0.30],[0.45,0.30]
+    # 覆盖示例（下面三行必须一起取消注释）：
+    # self_mask_names: ["chassis"]
+    # self_mask_sizes: [4]
+    # self_mask_polygons_flat: [-0.45, -0.36, 0.55, -0.36, 0.55, 0.36, -0.45, 0.36]
+
+    isolation_filter_enabled: true
+    neighbor_radius: 0.08
+    min_neighbors: 2
+    isolation_grid_resolution: 0.05
+    skip_isolation_range: 0.50
+
+    voxel_downsample_enabled: true
+    voxel_size_xy: 0.04
+    keep_nearest_in_voxel: true
+
+    debug:
+      publish_markers: true
+      marker_period_sec: 1.0

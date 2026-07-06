@@ -1,0 +1,25 @@
+joystick_local_path_node:
+  ros__parameters:
+    # 来自底盘固件（CAN 0x220）、已按挡位缩放的速度意图，约 50 Hz 的 geometry_msgs/Twist。
+    # 原始摇杆话题 /sensor/joystick 不携带挡位（挡位）信息，因此这里镜像已经缩放好的速度。
+    control_topic: "/handle/control"
+    odom_topic: "/odom/fused"
+    intent_path_topic: "/mppi/local_intent_path"
+    follow_path_action: "follow_path"
+
+    global_frame: "odom"
+    controller_id: "FollowPath"
+    goal_checker_id: "general_goal_checker"
+
+    # 死区现在使用物理单位（m/s, rad/s）；/handle/control 静止时为 0，因此这些仅用于抑制噪声。
+    lin_deadband: 0.02
+    ang_deadband: 0.02
+    # 当意图（接近）纯旋转时注入的前向蠕动速度，使生成的路径具有非零的目标位移，从而避免目标
+    # 检查器在轮椅完成转向之前就报告“已到达”。设为 0.0 表示纯原地旋转（需要感知偏航的目标检查器）。
+    turn_assist_vx: 0.08
+    control_timeout: 0.30
+    odom_timeout: 0.30
+
+    horizon: 1.5
+    dt: 0.10
+    send_rate_hz: 5.0
