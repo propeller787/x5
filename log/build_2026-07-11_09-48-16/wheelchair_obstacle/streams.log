@@ -1,0 +1,66 @@
+[0.009s] Invoking command in '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle': AMENT_PREFIX_PATH=/home/howard/code/freego_2025_tft/install/interface:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble LD_LIBRARY_PATH=/home/howard/code/freego_2025_tft/install/interface/lib:${LD_LIBRARY_PATH} PS1=\n(TraeAI-1) \w [$?] $ PYTHONPATH=/home/howard/code/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:${PYTHONPATH} __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --build /home/howard/code/freego_2025_tft/build/wheelchair_obstacle -- -j24 -l24
+[0.042s] Consolidate compiler generated dependencies of target gtest_main
+[0.044s] Consolidate compiler generated dependencies of target gtest
+[0.045s] Consolidate compiler generated dependencies of target rebuild_obstacle_layer
+[0.047s] Consolidate compiler generated dependencies of target cmd_vel_safety_gate_node
+[0.047s] Consolidate compiler generated dependencies of target joystick_local_path_node
+[0.050s] [ 14%] Built target gtest_main
+[0.052s] Consolidate compiler generated dependencies of target obstacle_cloud_filter_node
+[0.054s] [ 28%] Built target gtest
+[0.056s] [ 35%] Building CXX object CMakeFiles/cmd_vel_safety_gate_node.dir/src/cmd_vel_safety_gate_node.cpp.o
+[0.057s] [ 50%] Built target rebuild_obstacle_layer
+[0.059s] [ 64%] Built target joystick_local_path_node
+[0.063s] Consolidate compiler generated dependencies of target test_obstacle_cloud_filter_core
+[0.071s] [ 78%] Built target obstacle_cloud_filter_node
+[0.073s] [ 92%] Built target test_obstacle_cloud_filter_core
+[11.819s] [100%] Linking CXX executable cmd_vel_safety_gate_node
+[12.488s] [100%] Built target cmd_vel_safety_gate_node
+[12.529s] Invoked command in '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle' returned '0': AMENT_PREFIX_PATH=/home/howard/code/freego_2025_tft/install/interface:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble LD_LIBRARY_PATH=/home/howard/code/freego_2025_tft/install/interface/lib:${LD_LIBRARY_PATH} PS1=\n(TraeAI-1) \w [$?] $ PYTHONPATH=/home/howard/code/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:${PYTHONPATH} __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --build /home/howard/code/freego_2025_tft/build/wheelchair_obstacle -- -j24 -l24
+[12.542s] Invoking command in '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle': AMENT_PREFIX_PATH=/home/howard/code/freego_2025_tft/install/interface:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble LD_LIBRARY_PATH=/home/howard/code/freego_2025_tft/install/interface/lib:${LD_LIBRARY_PATH} PS1=\n(TraeAI-1) \w [$?] $ PYTHONPATH=/home/howard/code/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:${PYTHONPATH} __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --install /home/howard/code/freego_2025_tft/build/wheelchair_obstacle
+[12.547s] -- Install configuration: ""
+[12.547s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rebuild_obstacle_layer.xml
+[12.547s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/obstacle_cloud_filter_node
+[12.549s] -- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/obstacle_cloud_filter_node" to ""
+[12.549s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/joystick_local_path_node
+[12.551s] -- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/joystick_local_path_node" to ""
+[12.551s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/cmd_vel_safety_gate_node
+[12.556s] -- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/cmd_vel_safety_gate_node" to ""
+[12.556s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/librebuild_obstacle_layer.so
+[12.556s] -- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/librebuild_obstacle_layer.so" to ""
+[12.556s] -- Up-to-date: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rebuild_obstacle_layer.xml
+[12.556s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config
+[12.556s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/joystick_local_path.yaml
+[12.556s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/cmd_vel_safety_gate.yaml
+[12.556s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/obstacle_cloud_filter.yaml
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/mppi_controller_server.yaml
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/__pycache__
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/__pycache__/mppi_wheelchair_controller.launch.cpython-310.pyc
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/__pycache__/mppi_stack_no_sensors.launch.cpython-311.pyc
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/obstacle_cloud_filter.launch.py
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/mppi_stack_no_sensors.launch.py
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/mppi_wheelchair_controller.launch.py
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rviz
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rviz/wheelchair_obstacle_debug.rviz
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rviz/nav_debug.rviz
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include/wheelchair_obstacle
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include/wheelchair_obstacle/rebuild_obstacle_layer.hpp
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include/wheelchair_obstacle/obstacle_cloud_filter_core.hpp
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/package_run_dependencies/wheelchair_obstacle
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/parent_prefix_path/wheelchair_obstacle
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/ament_prefix_path.sh
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/ament_prefix_path.dsv
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/path.sh
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/path.dsv
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.bash
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.sh
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.zsh
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.dsv
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/package.dsv
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/packages/wheelchair_obstacle
+[12.557s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/nav2_costmap_2d__pluginlib__plugin/wheelchair_obstacle
+[12.558s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/cmake/wheelchair_obstacleConfig.cmake
+[12.558s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/cmake/wheelchair_obstacleConfig-version.cmake
+[12.558s] -- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/package.xml
+[12.559s] Invoked command in '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle' returned '0': AMENT_PREFIX_PATH=/home/howard/code/freego_2025_tft/install/interface:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble LD_LIBRARY_PATH=/home/howard/code/freego_2025_tft/install/interface/lib:${LD_LIBRARY_PATH} PS1=\n(TraeAI-1) \w [$?] $ PYTHONPATH=/home/howard/code/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:${PYTHONPATH} __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --install /home/howard/code/freego_2025_tft/build/wheelchair_obstacle

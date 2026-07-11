@@ -18,6 +18,7 @@
 #include "nav2_mppi_controller/tools/utils.hpp"
 
 // #define BENCHMARK_TESTING
+#define BENCHMARK_TESTING
 
 namespace nav2_mppi_controller
 {
@@ -49,6 +50,26 @@ void MPPIController::configure(
     costmap_ros_->getGlobalFrameID(), parameters_handler_.get());
 
   RCLCPP_INFO(logger_, "Configured MPPI Controller: %s", name_.c_str());
+
+  // [DEBUG-LAG] 订阅过滤后点云 + costmap，观测时间差
+  dbg_pcloud_sub_ = node->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/perception/obstacle_points", rclcpp::SensorDataQoS(),
+    [this](const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+      dbg_last_pcloud_stamp_ = msg->header.stamp;
+    });
+
+  dbg_costmap_sub_ = node->create_subscription<nav_msgs::msg::OccupancyGrid>(
+    "/local_costmap/costmap", rclcpp::SensorDataQoS(),
+    [this, node](const nav_msgs::msg::OccupancyGrid::SharedPtr msg) {
+      const rclcpp::Time stamp = msg->header.stamp;
+      const double pcloud_diff = (dbg_last_pcloud_stamp_.nanoseconds() > 0)
+        ? (stamp - dbg_last_pcloud_stamp_).seconds()
+        : -1.0;
+      RCLCPP_INFO_THROTTLE(
+        logger_, *clock_, 1000,
+        "[DEBUG-LAG] costmap_age=%.3fs pcloud_dt=%.3fs",
+        (node->now() - stamp).seconds(), pcloud_diff);
+    });
 }
 
 void MPPIController::cleanup()
@@ -82,6 +103,12 @@ geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
   const geometry_msgs::msg::Twist & robot_speed,
   nav2_core::GoalChecker * goal_checker)
 {
+  // [DEBUG-FRAME] 记录单帧起始时间 + 点云延迟
+  const auto _frame_t0 = std::chrono::steady_clock::now();
+  const double _pcloud_age_s = (dbg_last_pcloud_stamp_.nanoseconds() > 0)
+    ? (clock_->now() - dbg_last_pcloud_stamp_).seconds()
+    : -1.0;
+
 #ifdef BENCHMARK_TESTING
   auto start = std::chrono::system_clock::now();
 #endif
@@ -105,6 +132,15 @@ geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
   RCLCPP_INFO(logger_, "Control loop execution time: %ld [ms]", duration);
 #endif
+
+  // [DEBUG-FRAME] 单帧总耗时
+  const auto _frame_t1 = std::chrono::steady_clock::now();
+  const double _frame_ms = std::chrono::duration<double, std::milli>(
+    _frame_t1 - _frame_t0).count();
+  RCLCPP_INFO_THROTTLE(
+    logger_, *clock_, 500,
+    "[DEBUG-FRAME] total=%.1fms pcloud_age=%.3fs cmd=(v=%.2f w=%.2f)",
+    _frame_ms, _pcloud_age_s, cmd.twist.linear.x, cmd.twist.angular.z);
 
   if (visualize_) {
     visualize(std::move(transformed_plan));

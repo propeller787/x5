@@ -1,0 +1,468 @@
+[0.000000] (-) TimerEvent: {}
+[0.000177] (-) JobUnselected: {'identifier': 'PahoMqttCpp'}
+[0.000202] (-) JobUnselected: {'identifier': 'cloud_manager'}
+[0.000226] (-) JobUnselected: {'identifier': 'common'}
+[0.000243] (-) JobUnselected: {'identifier': 'cpr'}
+[0.000332] (-) JobUnselected: {'identifier': 'fdilink_ahrs'}
+[0.000354] (-) JobUnselected: {'identifier': 'interface'}
+[0.000480] (-) JobUnselected: {'identifier': 'ldlidar_stl_ros2'}
+[0.000500] (-) JobUnselected: {'identifier': 'lidar_fusion'}
+[0.000539] (-) JobUnselected: {'identifier': 'lidar_imu_fusion'}
+[0.000554] (-) JobUnselected: {'identifier': 'lidar_obstacle_groundmodel'}
+[0.000574] (-) JobUnselected: {'identifier': 'localization'}
+[0.000589] (-) JobUnselected: {'identifier': 'lx_camera_ros'}
+[0.000604] (-) JobUnselected: {'identifier': 'mqtt_module'}
+[0.000651] (-) JobUnselected: {'identifier': 'oradar_lidar'}
+[0.000667] (-) JobUnselected: {'identifier': 'paho.mqtt.c'}
+[0.000683] (-) JobUnselected: {'identifier': 'podao_detect'}
+[0.000699] (-) JobUnselected: {'identifier': 'safety_node'}
+[0.000725] (-) JobUnselected: {'identifier': 'scene_node'}
+[0.000764] (-) JobUnselected: {'identifier': 'scene_service'}
+[0.000780] (-) JobUnselected: {'identifier': 'sensor'}
+[0.000798] (-) JobUnselected: {'identifier': 'tft_manager'}
+[0.000840] (-) JobUnselected: {'identifier': 'wheelchair_obstacle'}
+[0.000856] (-) JobUnselected: {'identifier': 'ydlidar_ros2_driver'}
+[0.000875] (nav2_mppi_controller) JobQueued: {'identifier': 'nav2_mppi_controller', 'dependencies': OrderedDict()}
+[0.000893] (nav2_mppi_controller) JobStarted: {'identifier': 'nav2_mppi_controller'}
+[0.004789] (nav2_mppi_controller) JobProgress: {'identifier': 'nav2_mppi_controller', 'progress': 'cmake'}
+[0.005221] (nav2_mppi_controller) Command: {'cmd': ['/usr/bin/cmake', '/home/howard/code/freego_2025_tft/src/nav2_mppi_controller', '-DCMAKE_INSTALL_PREFIX=/home/howard/code/freego_2025_tft/install/nav2_mppi_controller'], 'cwd': '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('AI_AGENT', 'TRAE'), ('LANGUAGE', 'zh_CN:en'), ('USER', 'howard'), ('LC_TIME', 'zh_CN.UTF-8'), ('XDG_SESSION_TYPE', 'x11'), ('GIT_ASKPASS', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass.sh'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('INPUT_METHOD', 'fcitx5'), ('HOME', '/home/howard'), ('CHROME_DESKTOP', 'trae-cn.desktop'), ('CONDA_SHLVL', '0'), ('OLDPWD', '/home/howard/code/freego_2025_tft'), ('TERM_PROGRAM_VERSION', '1.107.1'), ('DESKTOP_SESSION', 'ubuntu'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/trae-cn.desktop'), ('TRAE_SANDBOX_CLI_PATH', '/usr/share/trae-cn/resources/app/modules/sandbox/trae-sandbox'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('PAGER', ''), ('VSCODE_GIT_ASKPASS_MAIN', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass-main.js'), ('PS1', '\\n(TraeAI-1) \\w [$?] $'), ('NUPLAN_DB_VERSION', '/home/howard/code/nuplan/dataset/nuplan-v1.1/mini/2021.07.16.20.45.29_veh-35_01095_01486.db'), ('LC_MONETARY', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_NODE', '/usr/share/trae-cn/trae-cn'), ('MANAGERPID', '2960'), ('TRAE_AI_SHELL_ID', '1'), ('NUPLAN_DATA_ROOT', '/home/howard/code/nuplan/dataset'), ('TRAE_SANDBOX_SOURCE_FLAG_PATH', '/tmp/sandbox-source-flag-a9f24b6c-c370-4955-9816-f830b5bef04a'), ('SYSTEMD_EXEC_PID', '3332'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('_CE_M', ''), ('isArchMatched', '1'), ('_CONDA_ROOT', '/home/howard/miniconda3'), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '15487'), ('TRAE_JWT_TOKEN_PATH', '/home/howard/.trae-cn/trae-jwt-token'), ('TRAE_SANDBOX_STORAGE_PATH', '/home/howard/.config/Trae CN/ModularData/ai-agent/sandbox'), ('SAFE_RM_AUTO_ADD_TEMP', '1'), ('ROS_DISTRO', 'humble'), ('GTK_IM_MODULE', 'xim'), ('LOGNAME', 'howard'), ('SAFE_RM_DENIED_PATH', '/home/howard/code/freego_2025_tft/.git'), ('JOURNAL_STREAM', '8:19008'), ('_', '/home/howard/.local/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('USERNAME', 'howard'), ('TERM', 'xterm-256color'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('TRAE_SANDBOX_LOG_DIR', '/home/howard/.config/Trae CN/logs/20260706T173415/Modular'), ('_CE_CONDA', ''), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '1'), ('HISTCONTROL', 'ignorespace'), ('WINDOWPATH', '2'), ('NUPLAN_MAP_VERSION', 'nuplan-maps-v1.0'), ('PATH', '/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/usr/share/trae-cn/resources/app/bin:/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/home/howard/miniconda3/condabin:/opt/ros/humble/bin:/home/howard/.local/bin:/home/howard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/usr/share/trae-cn/resources/app/node_modules/@vscode/ripgrep/bin'), ('SESSION_MANAGER', 'local/howard-JIGUANG-Series:@/tmp/.ICE-unix/3304,unix/howard-JIGUANG-Series:/tmp/.ICE-unix/3304'), ('INVOCATION_ID', '8abb83de73b346259a660e3145f99a1d'), ('PAPERSIZE', 'a4'), ('XDG_MENU_PREFIX', 'gnome-'), ('LC_ADDRESS', 'zh_CN.UTF-8'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'x11'), ('DISPLAY', ':1'), ('FILESYSTEM_CASE_SENSITIVE', 'true'), ('LANG', 'zh_CN.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('LC_TELEPHONE', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_CONFIG_NAME', '6a33e8d309ba4e398e4917fc'), ('XMODIFIERS', '@im=fcitx'), ('TRAE_SANDBOX_DUMP_DIR', '/home/howard/.config/Trae CN/Crashpad/sandbox-pending'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/gdm/Xauthority'), ('TRAE_BRAND_NAME', 'Trae CN'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-f7db09f0d3.sock'), ('TERM_PROGRAM', 'vscode'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/opt/ros/humble'), ('CONDA_PYTHON_EXE', '/home/howard/miniconda3/bin/python'), ('SHELL', '/bin/bash'), ('LC_NAME', 'zh_CN.UTF-8'), ('__trae_PS1', '\\n(TraeAI-1) \\w [$?] $'), ('QT_ACCESSIBILITY', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('LC_MEASUREMENT', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_TRACE_FILE', '/tmp/trae_sandbox_trace_b369e453-d0a6-4404-b794-2d4133abf6a2.jsonl'), ('GPG_AGENT_INFO', '/run/user/1000/gnupg/S.gpg-agent:0:1'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('_CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('LC_IDENTIFICATION', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('GIT_PAGER', ''), ('QT_IM_MODULE', 'xim'), ('NUPLAN_MAPS_ROOT', '/home/howard/code/nuplan/dataset/maps'), ('PWD', '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller'), ('LC_ALL', 'en_US.UTF-8'), ('SAFE_RM_ALLOWED_PATH', '/home/howard/code/freego_2025_tft:/home/howard/.config/Trae CN/ModularData/ai-agent/hooks_env:/tmp:/home/howard/.cache:/home/howard/.local/lib:/home/howard/.local/bin:/home/howard/.local/share:/home/howard/miniconda3:/home/howard/.conda:/home/howard/.dotnet:/home/howard/.bash_history'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('TERM_PRODUCT', 'Trae'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('SAFE_RM_PROTECTION_FLAG', '/tmp/safe-rm-protection-flag-05819937-7474-4ffe-af88-a2b61b71ae45'), ('LC_NUMERIC', 'zh_CN.UTF-8'), ('LC_PAPER', 'zh_CN.UTF-8'), ('COLCON', '1'), ('SAFE_RM_SOURCE_FLAG', '/tmp/safe-rm-source-flag-686d6d6d-32e4-4ee7-9aec-3b59f5eef052'), ('ROS_HOME', '/tmp/ros_home'), ('CMAKE_PREFIX_PATH', '/opt/ros/humble')]), 'shell': False}
+[0.086144] (nav2_mppi_controller) StdoutLine: {'line': b'-- The C compiler identification is GNU 11.4.0\n'}
+[0.099581] (-) TimerEvent: {}
+[0.140391] (nav2_mppi_controller) StdoutLine: {'line': b'-- The CXX compiler identification is GNU 11.4.0\n'}
+[0.147657] (nav2_mppi_controller) StdoutLine: {'line': b'-- Detecting C compiler ABI info\n'}
+[0.197349] (nav2_mppi_controller) StdoutLine: {'line': b'-- Detecting C compiler ABI info - done\n'}
+[0.199673] (-) TimerEvent: {}
+[0.201186] (nav2_mppi_controller) StdoutLine: {'line': b'-- Check for working C compiler: /usr/bin/cc - skipped\n'}
+[0.201787] (nav2_mppi_controller) StdoutLine: {'line': b'-- Detecting C compile features\n'}
+[0.202285] (nav2_mppi_controller) StdoutLine: {'line': b'-- Detecting C compile features - done\n'}
+[0.204729] (nav2_mppi_controller) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info\n'}
+[0.277646] (nav2_mppi_controller) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info - done\n'}
+[0.283192] (nav2_mppi_controller) StdoutLine: {'line': b'-- Check for working CXX compiler: /usr/bin/c++ - skipped\n'}
+[0.283307] (nav2_mppi_controller) StdoutLine: {'line': b'-- Detecting CXX compile features\n'}
+[0.283403] (nav2_mppi_controller) StdoutLine: {'line': b'-- Detecting CXX compile features - done\n'}
+[0.286842] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)\n'}
+[0.299751] (-) TimerEvent: {}
+[0.399918] (-) TimerEvent: {}
+[0.415150] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter \n'}
+[0.500017] (-) TimerEvent: {}
+[0.513466] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test arch_native_supported\n'}
+[0.578090] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test arch_native_supported - Success\n'}
+[0.584009] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)\n'}
+[0.600152] (-) TimerEvent: {}
+[0.622079] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)\n'}
+[0.625927] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)\n'}
+[0.633966] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)\n'}
+[0.645378] (nav2_mppi_controller) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[0.657048] (nav2_mppi_controller) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[0.688027] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)\n'}
+[0.690059] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)\n'}
+[0.700327] (-) TimerEvent: {}
+[0.756284] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.2")  \n'}
+[0.774835] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found FastRTPS: /opt/ros/humble/include  \n'}
+[0.800517] (-) TimerEvent: {}
+[0.811616] (nav2_mppi_controller) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[0.825269] (nav2_mppi_controller) StdoutLine: {'line': b'-- Looking for pthread.h\n'}
+[0.900639] (-) TimerEvent: {}
+[0.915001] (nav2_mppi_controller) StdoutLine: {'line': b'-- Looking for pthread.h - found\n'}
+[0.915127] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test CMAKE_HAVE_LIBC_PTHREAD\n'}
+[0.975156] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success\n'}
+[0.976071] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found Threads: TRUE  \n'}
+[1.000744] (-) TimerEvent: {}
+[1.016073] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found nav2_common: 1.1.20 (/opt/ros/humble/share/nav2_common/cmake)\n'}
+[1.016996] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found pluginlib: 5.1.4 (/opt/ros/humble/share/pluginlib/cmake)\n'}
+[1.037784] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found tf2: 0.25.20 (/opt/ros/humble/share/tf2/cmake)\n'}
+[1.052994] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found visualization_msgs: 4.9.1 (/opt/ros/humble/share/visualization_msgs/cmake)\n'}
+[1.079580] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found nav_msgs: 4.9.1 (/opt/ros/humble/share/nav_msgs/cmake)\n'}
+[1.091706] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found nav2_core: 1.1.20 (/opt/ros/humble/share/nav2_core/cmake)\n'}
+[1.100910] (-) TimerEvent: {}
+[1.201126] (-) TimerEvent: {}
+[1.227821] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found Eigen3: TRUE (found version "3.4.0") \n'}
+[1.227995] (nav2_mppi_controller) StdoutLine: {'line': b'-- Ensuring Eigen3 include directory is part of orocos-kdl CMake target\n'}
+[1.278342] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found tf2_eigen: 0.25.20 (/opt/ros/humble/share/tf2_eigen/cmake)\n'}
+[1.280412] (nav2_mppi_controller) StdoutLine: {'line': b'-- Setting build type to Release as none was specified.\n'}
+[1.280716] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test COMPILER_SUPPORTS_AVX512\n'}
+[1.301287] (-) TimerEvent: {}
+[1.352730] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test COMPILER_SUPPORTS_AVX512 - Success\n'}
+[1.353085] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test COMPILER_SUPPORTS_SSE4\n'}
+[1.401420] (-) TimerEvent: {}
+[1.436442] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test COMPILER_SUPPORTS_SSE4 - Success\n'}
+[1.436837] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test COMPILER_SUPPORTS_AVX2\n'}
+[1.494736] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test COMPILER_SUPPORTS_AVX2 - Success\n'}
+[1.495303] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test COMPILER_SUPPORTS_FMA\n'}
+[1.501523] (-) TimerEvent: {}
+[1.565319] (nav2_mppi_controller) StdoutLine: {'line': b'-- Performing Test COMPILER_SUPPORTS_FMA - Success\n'}
+[1.601614] (-) TimerEvent: {}
+[1.667729] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found ament_lint_auto: 0.12.15 (/opt/ros/humble/share/ament_lint_auto/cmake)\n'}
+[1.670910] (nav2_mppi_controller) StdoutLine: {'line': b'-- Found ament_cmake_gtest: 1.3.14 (/opt/ros/humble/share/ament_cmake_gtest/cmake)\n'}
+[1.701712] (-) TimerEvent: {}
+[1.745702] (nav2_mppi_controller) StdoutLine: {'line': b"-- Found gtest sources under '/opt/ros/humble/src/gtest_vendor': C++ tests using 'Google Test' will be built\n"}
+[1.801817] (-) TimerEvent: {}
+[1.902030] (-) TimerEvent: {}
+[2.002255] (-) TimerEvent: {}
+[2.102555] (-) TimerEvent: {}
+[2.172176] (nav2_mppi_controller) StdoutLine: {'line': b"-- Added test 'cppcheck' to perform static code analysis on C / C++ code\n"}
+[2.172716] (nav2_mppi_controller) StdoutLine: {'line': b'-- Configured cppcheck include dirs: /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include\n'}
+[2.172848] (nav2_mppi_controller) StdoutLine: {'line': b'-- Configured cppcheck exclude dirs and/or files: \n'}
+[2.174506] (nav2_mppi_controller) StdoutLine: {'line': b"-- Added test 'cpplint' to check C / C++ code against the Google style\n"}
+[2.174608] (nav2_mppi_controller) StdoutLine: {'line': b'-- Configured cpplint exclude dirs and/or files: \n'}
+[2.175667] (nav2_mppi_controller) StdoutLine: {'line': b"-- Added test 'lint_cmake' to check CMake code style\n"}
+[2.177362] (nav2_mppi_controller) StdoutLine: {'line': b"-- Added test 'uncrustify' to check C / C++ code style\n"}
+[2.177453] (nav2_mppi_controller) StdoutLine: {'line': b'-- Configured uncrustify additional arguments: \n'}
+[2.177911] (nav2_mppi_controller) StdoutLine: {'line': b"-- Added test 'xmllint' to check XML markup files\n"}
+[2.180099] (nav2_mppi_controller) StdoutLine: {'line': b'-- Configuring done\n'}
+[2.202607] (-) TimerEvent: {}
+[2.302864] (-) TimerEvent: {}
+[2.403035] (-) TimerEvent: {}
+[2.503310] (-) TimerEvent: {}
+[2.507821] (nav2_mppi_controller) StdoutLine: {'line': b'-- Generating done\n'}
+[2.547618] (nav2_mppi_controller) StdoutLine: {'line': b'-- Build files have been written to: /home/howard/code/freego_2025_tft/build/nav2_mppi_controller\n'}
+[2.556982] (nav2_mppi_controller) CommandEnded: {'returncode': 0}
+[2.558598] (nav2_mppi_controller) JobProgress: {'identifier': 'nav2_mppi_controller', 'progress': 'build'}
+[2.558623] (nav2_mppi_controller) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller', '--', '-j24', '-l24'], 'cwd': '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('AI_AGENT', 'TRAE'), ('LANGUAGE', 'zh_CN:en'), ('USER', 'howard'), ('LC_TIME', 'zh_CN.UTF-8'), ('XDG_SESSION_TYPE', 'x11'), ('GIT_ASKPASS', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass.sh'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('INPUT_METHOD', 'fcitx5'), ('HOME', '/home/howard'), ('CHROME_DESKTOP', 'trae-cn.desktop'), ('CONDA_SHLVL', '0'), ('OLDPWD', '/home/howard/code/freego_2025_tft'), ('TERM_PROGRAM_VERSION', '1.107.1'), ('DESKTOP_SESSION', 'ubuntu'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/trae-cn.desktop'), ('TRAE_SANDBOX_CLI_PATH', '/usr/share/trae-cn/resources/app/modules/sandbox/trae-sandbox'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('PAGER', ''), ('VSCODE_GIT_ASKPASS_MAIN', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass-main.js'), ('PS1', '\\n(TraeAI-1) \\w [$?] $'), ('NUPLAN_DB_VERSION', '/home/howard/code/nuplan/dataset/nuplan-v1.1/mini/2021.07.16.20.45.29_veh-35_01095_01486.db'), ('LC_MONETARY', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_NODE', '/usr/share/trae-cn/trae-cn'), ('MANAGERPID', '2960'), ('TRAE_AI_SHELL_ID', '1'), ('NUPLAN_DATA_ROOT', '/home/howard/code/nuplan/dataset'), ('TRAE_SANDBOX_SOURCE_FLAG_PATH', '/tmp/sandbox-source-flag-a9f24b6c-c370-4955-9816-f830b5bef04a'), ('SYSTEMD_EXEC_PID', '3332'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('_CE_M', ''), ('isArchMatched', '1'), ('_CONDA_ROOT', '/home/howard/miniconda3'), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '15487'), ('TRAE_JWT_TOKEN_PATH', '/home/howard/.trae-cn/trae-jwt-token'), ('TRAE_SANDBOX_STORAGE_PATH', '/home/howard/.config/Trae CN/ModularData/ai-agent/sandbox'), ('SAFE_RM_AUTO_ADD_TEMP', '1'), ('ROS_DISTRO', 'humble'), ('GTK_IM_MODULE', 'xim'), ('LOGNAME', 'howard'), ('SAFE_RM_DENIED_PATH', '/home/howard/code/freego_2025_tft/.git'), ('JOURNAL_STREAM', '8:19008'), ('_', '/home/howard/.local/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('USERNAME', 'howard'), ('TERM', 'xterm-256color'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('TRAE_SANDBOX_LOG_DIR', '/home/howard/.config/Trae CN/logs/20260706T173415/Modular'), ('_CE_CONDA', ''), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '1'), ('HISTCONTROL', 'ignorespace'), ('WINDOWPATH', '2'), ('NUPLAN_MAP_VERSION', 'nuplan-maps-v1.0'), ('PATH', '/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/usr/share/trae-cn/resources/app/bin:/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/home/howard/miniconda3/condabin:/opt/ros/humble/bin:/home/howard/.local/bin:/home/howard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/usr/share/trae-cn/resources/app/node_modules/@vscode/ripgrep/bin'), ('SESSION_MANAGER', 'local/howard-JIGUANG-Series:@/tmp/.ICE-unix/3304,unix/howard-JIGUANG-Series:/tmp/.ICE-unix/3304'), ('INVOCATION_ID', '8abb83de73b346259a660e3145f99a1d'), ('PAPERSIZE', 'a4'), ('XDG_MENU_PREFIX', 'gnome-'), ('LC_ADDRESS', 'zh_CN.UTF-8'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'x11'), ('DISPLAY', ':1'), ('FILESYSTEM_CASE_SENSITIVE', 'true'), ('LANG', 'zh_CN.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('LC_TELEPHONE', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_CONFIG_NAME', '6a33e8d309ba4e398e4917fc'), ('XMODIFIERS', '@im=fcitx'), ('TRAE_SANDBOX_DUMP_DIR', '/home/howard/.config/Trae CN/Crashpad/sandbox-pending'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/gdm/Xauthority'), ('TRAE_BRAND_NAME', 'Trae CN'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-f7db09f0d3.sock'), ('TERM_PROGRAM', 'vscode'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/opt/ros/humble'), ('CONDA_PYTHON_EXE', '/home/howard/miniconda3/bin/python'), ('SHELL', '/bin/bash'), ('LC_NAME', 'zh_CN.UTF-8'), ('__trae_PS1', '\\n(TraeAI-1) \\w [$?] $'), ('QT_ACCESSIBILITY', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('LC_MEASUREMENT', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_TRACE_FILE', '/tmp/trae_sandbox_trace_b369e453-d0a6-4404-b794-2d4133abf6a2.jsonl'), ('GPG_AGENT_INFO', '/run/user/1000/gnupg/S.gpg-agent:0:1'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('_CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('LC_IDENTIFICATION', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('GIT_PAGER', ''), ('QT_IM_MODULE', 'xim'), ('NUPLAN_MAPS_ROOT', '/home/howard/code/nuplan/dataset/maps'), ('PWD', '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller'), ('LC_ALL', 'en_US.UTF-8'), ('SAFE_RM_ALLOWED_PATH', '/home/howard/code/freego_2025_tft:/home/howard/.config/Trae CN/ModularData/ai-agent/hooks_env:/tmp:/home/howard/.cache:/home/howard/.local/lib:/home/howard/.local/bin:/home/howard/.local/share:/home/howard/miniconda3:/home/howard/.conda:/home/howard/.dotnet:/home/howard/.bash_history'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('TERM_PRODUCT', 'Trae'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('SAFE_RM_PROTECTION_FLAG', '/tmp/safe-rm-protection-flag-05819937-7474-4ffe-af88-a2b61b71ae45'), ('LC_NUMERIC', 'zh_CN.UTF-8'), ('LC_PAPER', 'zh_CN.UTF-8'), ('COLCON', '1'), ('SAFE_RM_SOURCE_FLAG', '/tmp/safe-rm-source-flag-686d6d6d-32e4-4ee7-9aec-3b59f5eef052'), ('ROS_HOME', '/tmp/ros_home'), ('CMAKE_PREFIX_PATH', '/opt/ros/humble')]), 'shell': False}
+[2.604238] (nav2_mppi_controller) StdoutLine: {'line': b'[  4%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/path_align_legacy_critic.cpp.o\n'}
+[2.604685] (-) TimerEvent: {}
+[2.604717] (nav2_mppi_controller) StdoutLine: {'line': b'[  4%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/cost_critic.cpp.o\n'}
+[2.604806] (nav2_mppi_controller) StdoutLine: {'line': b'[  6%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/goal_critic.cpp.o\n'}
+[2.604980] (nav2_mppi_controller) StdoutLine: {'line': b'[  8%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/goal_angle_critic.cpp.o\n'}
+[2.605027] (nav2_mppi_controller) StdoutLine: {'line': b'[ 10%] Building CXX object CMakeFiles/mppi_controller.dir/src/controller.cpp.o\n'}
+[2.605057] (nav2_mppi_controller) StdoutLine: {'line': b'[ 12%] Building CXX object gtest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o\n'}
+[2.605084] (nav2_mppi_controller) StdoutLine: {'line': b'[ 14%] Building CXX object CMakeFiles/mppi_controller.dir/src/trajectory_visualizer.cpp.o\n'}
+[2.605110] (nav2_mppi_controller) StdoutLine: {'line': b'[ 16%] Building CXX object CMakeFiles/mppi_controller.dir/src/optimizer.cpp.o\n'}
+[2.605137] (nav2_mppi_controller) StdoutLine: {'line': b'[ 18%] Building CXX object CMakeFiles/mppi_controller.dir/src/critic_manager.cpp.o\n'}
+[2.605163] (nav2_mppi_controller) StdoutLine: {'line': b'[ 22%] Building CXX object gtest/CMakeFiles/gtest.dir/src/gtest-all.cc.o\n'}
+[2.605189] (nav2_mppi_controller) StdoutLine: {'line': b'[ 22%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/obstacles_critic.cpp.o\n'}
+[2.605213] (nav2_mppi_controller) StdoutLine: {'line': b'[ 24%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/path_angle_critic.cpp.o\n'}
+[2.605236] (nav2_mppi_controller) StdoutLine: {'line': b'[ 30%] Building CXX object CMakeFiles/mppi_controller.dir/src/parameters_handler.cpp.o\n'}
+[2.605260] (nav2_mppi_controller) StdoutLine: {'line': b'[ 30%] Building CXX object CMakeFiles/mppi_controller.dir/src/path_handler.cpp.o\n'}
+[2.605283] (nav2_mppi_controller) StdoutLine: {'line': b'[ 30%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/twirling_critic.cpp.o\n'}
+[2.605416] (nav2_mppi_controller) StdoutLine: {'line': b'[ 32%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/constraint_critic.cpp.o\n'}
+[2.605471] (nav2_mppi_controller) StdoutLine: {'line': b'[ 36%] Building CXX object CMakeFiles/mppi_controller.dir/src/noise_generator.cpp.o\n'}
+[2.605521] (nav2_mppi_controller) StdoutLine: {'line': b'[ 36%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/path_align_critic.cpp.o\n'}
+[2.605563] (nav2_mppi_controller) StdoutLine: {'line': b'[ 38%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/path_follow_critic.cpp.o\n'}
+[2.605598] (nav2_mppi_controller) StdoutLine: {'line': b'[ 40%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/prefer_forward_critic.cpp.o\n'}
+[2.605852] (nav2_mppi_controller) StdoutLine: {'line': b'[ 42%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/velocity_deadband_critic.cpp.o\n'}
+[2.704810] (-) TimerEvent: {}
+[2.805047] (-) TimerEvent: {}
+[2.905243] (-) TimerEvent: {}
+[3.005433] (-) TimerEvent: {}
+[3.106028] (-) TimerEvent: {}
+[3.206277] (-) TimerEvent: {}
+[3.306552] (-) TimerEvent: {}
+[3.406817] (-) TimerEvent: {}
+[3.508248] (-) TimerEvent: {}
+[3.608502] (-) TimerEvent: {}
+[3.709556] (-) TimerEvent: {}
+[3.809817] (-) TimerEvent: {}
+[3.910041] (-) TimerEvent: {}
+[4.010268] (-) TimerEvent: {}
+[4.110703] (-) TimerEvent: {}
+[4.164254] (nav2_mppi_controller) StdoutLine: {'line': b'[ 44%] Linking CXX static library libgtest_main.a\n'}
+[4.210821] (-) TimerEvent: {}
+[4.224705] (nav2_mppi_controller) StdoutLine: {'line': b'[ 44%] Built target gtest_main\n'}
+[4.310937] (-) TimerEvent: {}
+[4.411773] (-) TimerEvent: {}
+[4.512525] (-) TimerEvent: {}
+[4.612747] (-) TimerEvent: {}
+[4.712977] (-) TimerEvent: {}
+[4.814545] (-) TimerEvent: {}
+[4.914785] (-) TimerEvent: {}
+[5.015016] (-) TimerEvent: {}
+[5.115239] (-) TimerEvent: {}
+[5.218123] (-) TimerEvent: {}
+[5.318347] (-) TimerEvent: {}
+[5.418709] (-) TimerEvent: {}
+[5.519080] (-) TimerEvent: {}
+[5.619377] (-) TimerEvent: {}
+[5.719616] (-) TimerEvent: {}
+[5.819844] (-) TimerEvent: {}
+[5.921541] (-) TimerEvent: {}
+[6.021779] (-) TimerEvent: {}
+[6.122040] (-) TimerEvent: {}
+[6.222282] (-) TimerEvent: {}
+[6.323704] (-) TimerEvent: {}
+[6.423986] (-) TimerEvent: {}
+[6.524446] (-) TimerEvent: {}
+[6.625541] (-) TimerEvent: {}
+[6.725771] (-) TimerEvent: {}
+[6.825999] (-) TimerEvent: {}
+[6.930559] (-) TimerEvent: {}
+[7.030793] (-) TimerEvent: {}
+[7.131013] (-) TimerEvent: {}
+[7.231269] (-) TimerEvent: {}
+[7.331711] (-) TimerEvent: {}
+[7.432568] (-) TimerEvent: {}
+[7.533878] (-) TimerEvent: {}
+[7.634095] (-) TimerEvent: {}
+[7.734964] (-) TimerEvent: {}
+[7.835437] (-) TimerEvent: {}
+[7.935928] (-) TimerEvent: {}
+[8.036554] (-) TimerEvent: {}
+[8.137016] (-) TimerEvent: {}
+[8.237240] (-) TimerEvent: {}
+[8.337611] (-) TimerEvent: {}
+[8.438539] (-) TimerEvent: {}
+[8.538778] (-) TimerEvent: {}
+[8.639016] (-) TimerEvent: {}
+[8.739235] (-) TimerEvent: {}
+[8.839471] (-) TimerEvent: {}
+[8.939695] (-) TimerEvent: {}
+[9.039920] (-) TimerEvent: {}
+[9.140244] (-) TimerEvent: {}
+[9.240511] (-) TimerEvent: {}
+[9.340842] (-) TimerEvent: {}
+[9.441101] (-) TimerEvent: {}
+[9.541358] (-) TimerEvent: {}
+[9.641595] (-) TimerEvent: {}
+[9.741825] (-) TimerEvent: {}
+[9.867186] (-) TimerEvent: {}
+[9.967414] (-) TimerEvent: {}
+[10.067651] (-) TimerEvent: {}
+[10.167871] (-) TimerEvent: {}
+[10.268263] (-) TimerEvent: {}
+[10.368492] (-) TimerEvent: {}
+[10.468708] (-) TimerEvent: {}
+[10.568918] (-) TimerEvent: {}
+[10.669144] (-) TimerEvent: {}
+[10.769370] (-) TimerEvent: {}
+[10.869603] (-) TimerEvent: {}
+[10.969968] (-) TimerEvent: {}
+[11.070189] (-) TimerEvent: {}
+[11.172536] (-) TimerEvent: {}
+[11.272755] (-) TimerEvent: {}
+[11.373143] (-) TimerEvent: {}
+[11.473653] (-) TimerEvent: {}
+[11.574089] (-) TimerEvent: {}
+[11.674339] (-) TimerEvent: {}
+[11.774554] (-) TimerEvent: {}
+[11.874802] (-) TimerEvent: {}
+[11.975052] (-) TimerEvent: {}
+[12.075329] (-) TimerEvent: {}
+[12.175620] (-) TimerEvent: {}
+[12.276035] (-) TimerEvent: {}
+[12.376275] (-) TimerEvent: {}
+[12.476524] (-) TimerEvent: {}
+[12.576810] (-) TimerEvent: {}
+[12.677080] (-) TimerEvent: {}
+[12.777688] (-) TimerEvent: {}
+[12.811559] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp: In lambda function:\n'}
+[12.812069] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:18: error: no match for \xe2\x80\x98operator-\xe2\x80\x99 (operand types are \xe2\x80\x98const builtin_interfaces::msg::Time_<std::allocator<void> >\xe2\x80\x99 and \xe2\x80\x98rclcpp::Time\xe2\x80\x99)\n'}
+[12.812201] (nav2_mppi_controller) StderrLine: {'line': b'   66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()\n'}
+[12.812291] (nav2_mppi_controller) StderrLine: {'line': b'      |            ~~~~~ ^ ~~~~~~~~~~~~~~~~~~~~~~\n'}
+[12.812366] (nav2_mppi_controller) StderrLine: {'line': b'      |            |       |\n'}
+[12.812429] (nav2_mppi_controller) StderrLine: {'line': b'      |            |       rclcpp::Time\n'}
+[12.812495] (nav2_mppi_controller) StderrLine: {'line': b'      |            const builtin_interfaces::msg::Time_<std::allocator<void> >\n'}
+[12.812559] (nav2_mppi_controller) StderrLine: {'line': b'In file included from /usr/include/c++/11/bits/stl_algobase.h:67,\n'}
+[12.812671] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/c++/11/bits/char_traits.h:39,\n'}
+[12.812725] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/c++/11/string:40,\n'}
+[12.812778] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:18,\n'}
+[12.812834] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:\n'}
+[12.812887] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/bits/stl_iterator.h:577:5: note: candidate: \xe2\x80\x98template<class _IteratorL, class _IteratorR> constexpr decltype ((__y.base() - __x.base())) std::operator-(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_IteratorR>&)\xe2\x80\x99\n'}
+[12.812946] (nav2_mppi_controller) StderrLine: {'line': b'  577 |     operator-(const reverse_iterator<_IteratorL>& __x,\n'}
+[12.813000] (nav2_mppi_controller) StderrLine: {'line': b'      |     ^~~~~~~~\n'}
+[12.813060] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/bits/stl_iterator.h:577:5: note:   template argument deduction/substitution failed:\n'}
+[12.813124] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   \xe2\x80\x98const builtin_interfaces::msg::Time_<std::allocator<void> >\xe2\x80\x99 is not derived from \xe2\x80\x98const std::reverse_iterator<_Iterator>\xe2\x80\x99\n'}
+[12.813201] (nav2_mppi_controller) StderrLine: {'line': b'   66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()\n'}
+[12.813278] (nav2_mppi_controller) StderrLine: {'line': b'      |                    ^~~~~~~~~~~~~~~~~~~~~~\n'}
+[12.813354] (nav2_mppi_controller) StderrLine: {'line': b'In file included from /usr/include/c++/11/bits/stl_algobase.h:67,\n'}
+[12.813425] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/c++/11/bits/char_traits.h:39,\n'}
+[12.813519] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/c++/11/string:40,\n'}
+[12.813593] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:18,\n'}
+[12.813667] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:\n'}
+[12.813745] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/bits/stl_iterator.h:1693:5: note: candidate: \xe2\x80\x98template<class _IteratorL, class _IteratorR> constexpr decltype ((__x.base() - __y.base())) std::operator-(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorR>&)\xe2\x80\x99\n'}
+[12.813838] (nav2_mppi_controller) StderrLine: {'line': b' 1693 |     operator-(const move_iterator<_IteratorL>& __x,\n'}
+[12.813908] (nav2_mppi_controller) StderrLine: {'line': b'      |     ^~~~~~~~\n'}
+[12.813980] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/bits/stl_iterator.h:1693:5: note:   template argument deduction/substitution failed:\n'}
+[12.814053] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   \xe2\x80\x98const builtin_interfaces::msg::Time_<std::allocator<void> >\xe2\x80\x99 is not derived from \xe2\x80\x98const std::move_iterator<_IteratorL>\xe2\x80\x99\n'}
+[12.814128] (nav2_mppi_controller) StderrLine: {'line': b'   66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()\n'}
+[12.814362] (nav2_mppi_controller) StderrLine: {'line': b'      |                    ^~~~~~~~~~~~~~~~~~~~~~\n'}
+[12.814450] (nav2_mppi_controller) StderrLine: {'line': b'In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,\n'}
+[12.819381] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xsimd/types/xsimd_traits.hpp:16,\n'}
+[12.819525] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xsimd/xsimd.hpp:16,\n'}
+[12.819620] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xtensor_config.hpp:75,\n'}
+[12.819700] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xbuffer_adaptor.hpp:21,\n'}
+[12.819773] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xtensor.hpp:19,\n'}
+[12.819846] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,\n'}
+[12.819924] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,\n'}
+[12.819999] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:\n'}
+[12.820073] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/complex:362:5: note: candidate: \xe2\x80\x98template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&, const std::complex<_Tp>&)\xe2\x80\x99\n'}
+[12.820151] (nav2_mppi_controller) StderrLine: {'line': b'  362 |     operator-(const complex<_Tp>& __x, const complex<_Tp>& __y)\n'}
+[12.820225] (nav2_mppi_controller) StderrLine: {'line': b'      |     ^~~~~~~~\n'}
+[12.820300] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/complex:362:5: note:   template argument deduction/substitution failed:\n'}
+[12.820376] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   \xe2\x80\x98const builtin_interfaces::msg::Time_<std::allocator<void> >\xe2\x80\x99 is not derived from \xe2\x80\x98const std::complex<_Tp>\xe2\x80\x99\n'}
+[12.820496] (nav2_mppi_controller) StderrLine: {'line': b'   66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()\n'}
+[12.820592] (nav2_mppi_controller) StderrLine: {'line': b'      |                    ^~~~~~~~~~~~~~~~~~~~~~\n'}
+[12.820668] (nav2_mppi_controller) StderrLine: {'line': b'In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,\n'}
+[12.820751] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xsimd/types/xsimd_traits.hpp:16,\n'}
+[12.820830] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xsimd/xsimd.hpp:16,\n'}
+[12.820912] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xtensor_config.hpp:75,\n'}
+[12.820985] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xbuffer_adaptor.hpp:21,\n'}
+[12.821067] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xtensor.hpp:19,\n'}
+[12.821141] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,\n'}
+[12.821215] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,\n'}
+[12.821285] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:\n'}
+[12.821360] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/complex:371:5: note: candidate: \xe2\x80\x98template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&, const _Tp&)\xe2\x80\x99\n'}
+[12.821443] (nav2_mppi_controller) StderrLine: {'line': b'  371 |     operator-(const complex<_Tp>& __x, const _Tp& __y)\n'}
+[12.821533] (nav2_mppi_controller) StderrLine: {'line': b'      |     ^~~~~~~~\n'}
+[12.821607] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/complex:371:5: note:   template argument deduction/substitution failed:\n'}
+[12.821680] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   \xe2\x80\x98const builtin_interfaces::msg::Time_<std::allocator<void> >\xe2\x80\x99 is not derived from \xe2\x80\x98const std::complex<_Tp>\xe2\x80\x99\n'}
+[12.821755] (nav2_mppi_controller) StderrLine: {'line': b'   66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()\n'}
+[12.821830] (nav2_mppi_controller) StderrLine: {'line': b'      |                    ^~~~~~~~~~~~~~~~~~~~~~\n'}
+[12.821901] (nav2_mppi_controller) StderrLine: {'line': b'In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,\n'}
+[12.821983] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xsimd/types/xsimd_traits.hpp:16,\n'}
+[12.822060] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xsimd/xsimd.hpp:16,\n'}
+[12.822130] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xtensor_config.hpp:75,\n'}
+[12.822203] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xbuffer_adaptor.hpp:21,\n'}
+[12.822271] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xtensor.hpp:19,\n'}
+[12.822343] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,\n'}
+[12.822413] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,\n'}
+[12.828631] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:\n'}
+[12.828808] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/complex:380:5: note: candidate: \xe2\x80\x98template<class _Tp> std::complex<_Tp> std::operator-(const _Tp&, const std::complex<_Tp>&)\xe2\x80\x99\n'}
+[12.828915] (nav2_mppi_controller) StderrLine: {'line': b'  380 |     operator-(const _Tp& __x, const complex<_Tp>& __y)\n'}
+[12.829005] (nav2_mppi_controller) StderrLine: {'line': b'      |     ^~~~~~~~\n'}
+[12.829080] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/complex:380:5: note:   template argument deduction/substitution failed:\n'}
+[12.829152] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   \xe2\x80\x98rclcpp::Time\xe2\x80\x99 is not derived from \xe2\x80\x98const std::complex<_Tp>\xe2\x80\x99\n'}
+[12.829238] (nav2_mppi_controller) StderrLine: {'line': b'   66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()\n'}
+[12.829324] (nav2_mppi_controller) StderrLine: {'line': b'      |                    ^~~~~~~~~~~~~~~~~~~~~~\n'}
+[12.829399] (nav2_mppi_controller) StderrLine: {'line': b'In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,\n'}
+[12.829482] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xsimd/types/xsimd_traits.hpp:16,\n'}
+[12.829562] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xsimd/xsimd.hpp:16,\n'}
+[12.829636] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xtensor_config.hpp:75,\n'}
+[12.829713] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xbuffer_adaptor.hpp:21,\n'}
+[12.829787] (nav2_mppi_controller) StderrLine: {'line': b'                 from /usr/include/xtensor/xtensor.hpp:19,\n'}
+[12.829857] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,\n'}
+[12.829934] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,\n'}
+[12.830011] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:\n'}
+[12.830086] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/complex:457:5: note: candidate: \xe2\x80\x98template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&)\xe2\x80\x99\n'}
+[12.830168] (nav2_mppi_controller) StderrLine: {'line': b'  457 |     operator-(const complex<_Tp>& __x)\n'}
+[12.830243] (nav2_mppi_controller) StderrLine: {'line': b'      |     ^~~~~~~~\n'}
+[12.830314] (nav2_mppi_controller) StderrLine: {'line': b'/usr/include/c++/11/complex:457:5: note:   template argument deduction/substitution failed:\n'}
+[12.830388] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   \xe2\x80\x98const builtin_interfaces::msg::Time_<std::allocator<void> >\xe2\x80\x99 is not derived from \xe2\x80\x98const std::complex<_Tp>\xe2\x80\x99\n'}
+[12.830488] (nav2_mppi_controller) StderrLine: {'line': b'   66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()\n'}
+[12.830582] (nav2_mppi_controller) StderrLine: {'line': b'      |                    ^~~~~~~~~~~~~~~~~~~~~~\n'}
+[12.865702] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp: In member function \xe2\x80\x98virtual geometry_msgs::msg::TwistStamped nav2_mppi_controller::MPPIController::computeVelocityCommands(const PoseStamped&, const Twist&, nav2_core::GoalChecker*)\xe2\x80\x99:\n'}
+[12.865960] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:133:17: error: \xe2\x80\x98_frame_t0\xe2\x80\x99 was not declared in this scope; did you mean \xe2\x80\x98_frame_t1\xe2\x80\x99?\n'}
+[12.866069] (nav2_mppi_controller) StderrLine: {'line': b'  133 |     _frame_t1 - _frame_t0).count();\n'}
+[12.866149] (nav2_mppi_controller) StderrLine: {'line': b'      |                 ^~~~~~~~~\n'}
+[12.866217] (nav2_mppi_controller) StderrLine: {'line': b'      |                 _frame_t1\n'}
+[12.878131] (-) TimerEvent: {}
+[12.921730] (nav2_mppi_controller) StderrLine: {'line': b'In file included from /opt/ros/humble/include/rclcpp/rclcpp/logging.hpp:24,\n'}
+[12.922020] (nav2_mppi_controller) StderrLine: {'line': b'                 from /opt/ros/humble/include/rclcpp/rclcpp/client.hpp:40,\n'}
+[12.922125] (nav2_mppi_controller) StderrLine: {'line': b'                 from /opt/ros/humble/include/rclcpp/rclcpp/callback_group.hpp:24,\n'}
+[12.922193] (nav2_mppi_controller) StderrLine: {'line': b'                 from /opt/ros/humble/include/rclcpp_lifecycle/rclcpp_lifecycle/lifecycle_node.hpp:55,\n'}
+[12.922270] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/tools/path_handler.hpp:25,\n'}
+[12.922337] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:21,\n'}
+[12.922400] (nav2_mppi_controller) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:\n'}
+[12.922469] (nav2_mppi_controller) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:137:16: error: \xe2\x80\x98_pcloud_age_s\xe2\x80\x99 was not declared in this scope\n'}
+[12.922543] (nav2_mppi_controller) StderrLine: {'line': b'  137 |     _frame_ms, _pcloud_age_s, cmd.twist.linear.x, cmd.twist.angular.z);\n'}
+[12.922615] (nav2_mppi_controller) StderrLine: {'line': b'      |                ^~~~~~~~~~~~~\n'}
+[12.978264] (-) TimerEvent: {}
+[13.078547] (-) TimerEvent: {}
+[13.181036] (-) TimerEvent: {}
+[13.281580] (-) TimerEvent: {}
+[13.382172] (-) TimerEvent: {}
+[13.482432] (-) TimerEvent: {}
+[13.582745] (-) TimerEvent: {}
+[13.684558] (-) TimerEvent: {}
+[13.784846] (-) TimerEvent: {}
+[13.885130] (-) TimerEvent: {}
+[13.985423] (-) TimerEvent: {}
+[14.085726] (-) TimerEvent: {}
+[14.187561] (-) TimerEvent: {}
+[14.287833] (-) TimerEvent: {}
+[14.388102] (-) TimerEvent: {}
+[14.488364] (-) TimerEvent: {}
+[14.588633] (-) TimerEvent: {}
+[14.688896] (-) TimerEvent: {}
+[14.789154] (-) TimerEvent: {}
+[14.891571] (-) TimerEvent: {}
+[14.991839] (-) TimerEvent: {}
+[15.092103] (-) TimerEvent: {}
+[15.193559] (-) TimerEvent: {}
+[15.207567] (nav2_mppi_controller) StdoutLine: {'line': b'[ 46%] Linking CXX static library libgtest.a\n'}
+[15.258677] (nav2_mppi_controller) StdoutLine: {'line': b'[ 46%] Built target gtest\n'}
+[15.293662] (-) TimerEvent: {}
+[15.393878] (-) TimerEvent: {}
+[15.494100] (-) TimerEvent: {}
+[15.594329] (-) TimerEvent: {}
+[15.694541] (-) TimerEvent: {}
+[15.794756] (-) TimerEvent: {}
+[15.894975] (-) TimerEvent: {}
+[15.995188] (-) TimerEvent: {}
+[16.095414] (-) TimerEvent: {}
+[16.195649] (-) TimerEvent: {}
+[16.296536] (-) TimerEvent: {}
+[16.396758] (-) TimerEvent: {}
+[16.496984] (-) TimerEvent: {}
+[16.597214] (-) TimerEvent: {}
+[16.697428] (-) TimerEvent: {}
+[16.797644] (-) TimerEvent: {}
+[16.897897] (-) TimerEvent: {}
+[16.998195] (-) TimerEvent: {}
+[17.098543] (-) TimerEvent: {}
+[17.198827] (-) TimerEvent: {}
+[17.299070] (-) TimerEvent: {}
+[17.399404] (-) TimerEvent: {}
+[17.499686] (-) TimerEvent: {}
+[17.600015] (-) TimerEvent: {}
+[17.700334] (-) TimerEvent: {}
+[17.800547] (-) TimerEvent: {}
+[17.900774] (-) TimerEvent: {}
+[18.001001] (-) TimerEvent: {}
+[18.101257] (-) TimerEvent: {}
+[18.201582] (-) TimerEvent: {}
+[18.301812] (-) TimerEvent: {}
+[18.402033] (-) TimerEvent: {}
+[18.502352] (-) TimerEvent: {}
+[18.602670] (-) TimerEvent: {}
+[18.702971] (-) TimerEvent: {}
+[18.803234] (-) TimerEvent: {}
+[18.903541] (-) TimerEvent: {}
+[19.003805] (-) TimerEvent: {}
+[19.104016] (-) TimerEvent: {}
+[19.204272] (-) TimerEvent: {}
+[19.304576] (-) TimerEvent: {}
+[19.404833] (-) TimerEvent: {}
+[19.505125] (-) TimerEvent: {}
+[19.605409] (-) TimerEvent: {}
+[19.705597] (-) TimerEvent: {}
+[19.787310] (nav2_mppi_controller) StderrLine: {'line': b'gmake[2]: *** [CMakeFiles/mppi_controller.dir/build.make:76\xef\xbc\x9aCMakeFiles/mppi_controller.dir/src/controller.cpp.o] \xe9\x94\x99\xe8\xaf\xaf 1\n'}
+[19.787492] (nav2_mppi_controller) StderrLine: {'line': b'gmake[2]: *** \xe6\xad\xa3\xe5\x9c\xa8\xe7\xad\x89\xe5\xbe\x85\xe6\x9c\xaa\xe5\xae\x8c\xe6\x88\x90\xe7\x9a\x84\xe4\xbb\xbb\xe5\x8a\xa1....\n'}
+[19.805721] (-) TimerEvent: {}
+[19.906000] (-) TimerEvent: {}
+[19.946839] (nav2_mppi_controller) StdoutLine: {'line': b'[ 48%] Linking CXX shared library libmppi_critics.so\n'}
+[20.006196] (-) TimerEvent: {}
+[20.106478] (-) TimerEvent: {}
+[20.206664] (-) TimerEvent: {}
+[20.232034] (nav2_mppi_controller) StdoutLine: {'line': b'[ 48%] Built target mppi_critics\n'}
+[20.306760] (-) TimerEvent: {}
+[20.407073] (-) TimerEvent: {}
+[20.507254] (-) TimerEvent: {}
+[20.607470] (-) TimerEvent: {}
+[20.707748] (-) TimerEvent: {}
+[20.807949] (-) TimerEvent: {}
+[20.908197] (-) TimerEvent: {}
+[21.008480] (-) TimerEvent: {}
+[21.108835] (-) TimerEvent: {}
+[21.209067] (-) TimerEvent: {}
+[21.309307] (-) TimerEvent: {}
+[21.409576] (-) TimerEvent: {}
+[21.509805] (-) TimerEvent: {}
+[21.609984] (-) TimerEvent: {}
+[21.710219] (-) TimerEvent: {}
+[21.810464] (-) TimerEvent: {}
+[21.910612] (-) TimerEvent: {}
+[22.010855] (-) TimerEvent: {}
+[22.111045] (-) TimerEvent: {}
+[22.211284] (-) TimerEvent: {}
+[22.311553] (-) TimerEvent: {}
+[22.411697] (-) TimerEvent: {}
+[22.511945] (-) TimerEvent: {}
+[22.612184] (-) TimerEvent: {}
+[22.712423] (-) TimerEvent: {}
+[22.812672] (-) TimerEvent: {}
+[22.912834] (-) TimerEvent: {}
+[22.923852] (nav2_mppi_controller) StderrLine: {'line': b'gmake[1]: *** [CMakeFiles/Makefile2:196\xef\xbc\x9aCMakeFiles/mppi_controller.dir/all] \xe9\x94\x99\xe8\xaf\xaf 2\n'}
+[22.923993] (nav2_mppi_controller) StderrLine: {'line': b'gmake: *** [Makefile:146\xef\xbc\x9aall] \xe9\x94\x99\xe8\xaf\xaf 2\n'}
+[22.925630] (nav2_mppi_controller) CommandEnded: {'returncode': 2}
+[22.934831] (nav2_mppi_controller) JobEnded: {'identifier': 'nav2_mppi_controller', 'rc': 2}
+[22.945146] (-) EventReactorShutdown: {}

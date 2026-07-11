@@ -11,13 +11,13 @@ obstacle_cloud_filter:
     publish_empty_cloud: true
 
     range_min: 0.05
-    range_max: 3.00
+    range_max: 5.00
     z_min: -0.30
     z_max: 0.80
 
     roi:
       x_min: -2.20
-      x_max: 3.50
+      x_max: 5.50
       y_min: -1.50
       y_max: 1.50
 

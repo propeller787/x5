@@ -27,6 +27,8 @@
 #include "nav2_core/controller.hpp"
 #include "nav2_core/goal_checker.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "nav_msgs/msg/occupancy_grid.hpp"
 
 namespace nav2_mppi_controller
 {
@@ -125,6 +127,11 @@ protected:
   double reset_period_;
   // Last time computeVelocityCommands was called
   rclcpp::Time last_time_called_;
+
+  // [DEBUG-LAG] pointcloud 与 costmap 时间差观测
+  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr dbg_pcloud_sub_;
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr dbg_costmap_sub_;
+  rclcpp::Time dbg_last_pcloud_stamp_{0, 0, RCL_ROS_TIME};
 };
 
 }  // namespace nav2_mppi_controller

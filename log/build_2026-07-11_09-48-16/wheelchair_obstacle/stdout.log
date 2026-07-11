@@ -1,0 +1,62 @@
+Consolidate compiler generated dependencies of target gtest_main
+Consolidate compiler generated dependencies of target gtest
+Consolidate compiler generated dependencies of target rebuild_obstacle_layer
+Consolidate compiler generated dependencies of target cmd_vel_safety_gate_node
+Consolidate compiler generated dependencies of target joystick_local_path_node
+[ 14%] Built target gtest_main
+Consolidate compiler generated dependencies of target obstacle_cloud_filter_node
+[ 28%] Built target gtest
+[ 35%] Building CXX object CMakeFiles/cmd_vel_safety_gate_node.dir/src/cmd_vel_safety_gate_node.cpp.o
+[ 50%] Built target rebuild_obstacle_layer
+[ 64%] Built target joystick_local_path_node
+Consolidate compiler generated dependencies of target test_obstacle_cloud_filter_core
+[ 78%] Built target obstacle_cloud_filter_node
+[ 92%] Built target test_obstacle_cloud_filter_core
+[100%] Linking CXX executable cmd_vel_safety_gate_node
+[100%] Built target cmd_vel_safety_gate_node
+-- Install configuration: ""
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rebuild_obstacle_layer.xml
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/obstacle_cloud_filter_node
+-- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/obstacle_cloud_filter_node" to ""
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/joystick_local_path_node
+-- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/joystick_local_path_node" to ""
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/cmd_vel_safety_gate_node
+-- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/cmd_vel_safety_gate_node" to ""
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/librebuild_obstacle_layer.so
+-- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/librebuild_obstacle_layer.so" to ""
+-- Up-to-date: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rebuild_obstacle_layer.xml
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/joystick_local_path.yaml
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/cmd_vel_safety_gate.yaml
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/obstacle_cloud_filter.yaml
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/mppi_controller_server.yaml
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/__pycache__
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/__pycache__/mppi_wheelchair_controller.launch.cpython-310.pyc
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/__pycache__/mppi_stack_no_sensors.launch.cpython-311.pyc
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/obstacle_cloud_filter.launch.py
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/mppi_stack_no_sensors.launch.py
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/mppi_wheelchair_controller.launch.py
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rviz
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rviz/wheelchair_obstacle_debug.rviz
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rviz/nav_debug.rviz
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include/wheelchair_obstacle
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include/wheelchair_obstacle/rebuild_obstacle_layer.hpp
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include/wheelchair_obstacle/obstacle_cloud_filter_core.hpp
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/package_run_dependencies/wheelchair_obstacle
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/parent_prefix_path/wheelchair_obstacle
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/ament_prefix_path.sh
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/ament_prefix_path.dsv
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/path.sh
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/path.dsv
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.bash
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.sh
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.zsh
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.dsv
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/package.dsv
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/packages/wheelchair_obstacle
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/nav2_costmap_2d__pluginlib__plugin/wheelchair_obstacle
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/cmake/wheelchair_obstacleConfig.cmake
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/cmake/wheelchair_obstacleConfig-version.cmake
+-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/package.xml

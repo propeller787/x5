@@ -1,0 +1,91 @@
+CMake Warning (dev) at CMakeLists.txt:19 (find_package):
+  Policy CMP0074 is not set: find_package uses <PackageName>_ROOT variables.
+  Run "cmake --help-policy CMP0074" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+
+  CMake variable PCL_ROOT is set to:
+
+    /usr
+
+  For compatibility, CMake is ignoring the variable.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:25: error: ‘Joystick’ does not name a type
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                         ^~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:45: error: expected unqualified-id before ‘msg’
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                                             ^~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:44: error: expected ‘)’ before ‘msg’
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                  ~                         ^~~~
+      |                                            )
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:35: error: expected ‘;’ at end of member declaration
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                                   ^~~~~~~~~
+      |                                            ;
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:45: error: ‘msg’ does not name a type
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                                             ^~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:24: error: ‘Joystick’ was not declared in this scope; did you mean ‘interface::msg::Joystick’?
+  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
+      |                        ^~~~~~~~
+      |                        interface::msg::Joystick
+In file included from /home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/joystick.hpp:7,
+                 from /home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:56:
+/home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/detail/joystick__struct.hpp:165:7: note: ‘interface::msg::Joystick’ declared here
+  165 | using Joystick =
+      |       ^~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 1 is invalid
+  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
+      |                                ^
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 3 is invalid
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 4 is invalid
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 5 is invalid
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:35: error: expected ‘;’ at end of member declaration
+  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
+      |                                   ^~~~~~~~~
+      |                                            ;
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:45: error: ‘joystick_sub_’ does not name a type
+  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
+      |                                             ^~~~~~~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp: In constructor ‘CmdVelSafetyGateNode::CmdVelSafetyGateNode()’:
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:5: error: ‘joystick_sub_’ was not declared in this scope
+  180 |     joystick_sub_ = create_subscription<Joystick>(
+      |     ^~~~~~~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:41: error: ‘Joystick’ was not declared in this scope; did you mean ‘interface::msg::Joystick’?
+  180 |     joystick_sub_ = create_subscription<Joystick>(
+      |                                         ^~~~~~~~
+      |                                         interface::msg::Joystick
+In file included from /home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/joystick.hpp:7,
+                 from /home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:56:
+/home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/detail/joystick__struct.hpp:165:7: note: ‘interface::msg::Joystick’ declared here
+  165 | using Joystick =
+      |       ^~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:50: error: no matching function for call to ‘CmdVelSafetyGateNode::create_subscription<<expression error> >(std::string&, rclcpp::SensorDataQoS, std::_Bind_helper<false, void (CmdVelSafetyGateNode::*)(...), CmdVelSafetyGateNode*, const std::_Placeholder<1>&>::type)’
+  180 |     joystick_sub_ = create_subscription<Joystick>(
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  181 |       rocker_topic_, rclcpp::SensorDataQoS(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+  182 |       std::bind(&CmdVelSafetyGateNode::onJoystick, this, std::placeholders::_1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /opt/ros/humble/include/rclcpp/rclcpp/node.hpp:1321,
+                 from /opt/ros/humble/include/rclcpp/rclcpp/executors/single_threaded_executor.hpp:28,
+                 from /opt/ros/humble/include/rclcpp/rclcpp/executors.hpp:22,
+                 from /opt/ros/humble/include/rclcpp/rclcpp/rclcpp.hpp:155,
+                 from /home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:49:
+/opt/ros/humble/include/rclcpp/rclcpp/node_impl.hpp:92:1: note: candidate: ‘template<class MessageT, class CallbackT, class AllocatorT, class SubscriptionT, class MessageMemoryStrategyT> std::shared_ptr<ROSMessageT> rclcpp::Node::create_subscription(const string&, const rclcpp::QoS&, CallbackT&&, const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT>&, typename MessageMemoryStrategyT::SharedPtr)’
+   92 | Node::create_subscription(
+      | ^~~~
+/opt/ros/humble/include/rclcpp/rclcpp/node_impl.hpp:92:1: note:   template argument deduction/substitution failed:
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:50: error: template argument 1 is invalid
+  180 |     joystick_sub_ = create_subscription<Joystick>(
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  181 |       rocker_topic_, rclcpp::SensorDataQoS(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+  182 |       std::bind(&CmdVelSafetyGateNode::onJoystick, this, std::placeholders::_1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+gmake[2]: *** [CMakeFiles/cmd_vel_safety_gate_node.dir/build.make:76：CMakeFiles/cmd_vel_safety_gate_node.dir/src/cmd_vel_safety_gate_node.cpp.o] 错误 1
+gmake[1]: *** [CMakeFiles/Makefile2:230：CMakeFiles/cmd_vel_safety_gate_node.dir/all] 错误 2
+gmake[1]: *** 正在等待未完成的任务....
+gmake: *** [Makefile:146：all] 错误 2

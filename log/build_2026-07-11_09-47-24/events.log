@@ -1,0 +1,370 @@
+[0.000000] (-) TimerEvent: {}
+[0.000278] (-) JobUnselected: {'identifier': 'PahoMqttCpp'}
+[0.000352] (-) JobUnselected: {'identifier': 'cloud_manager'}
+[0.000434] (-) JobUnselected: {'identifier': 'common'}
+[0.000442] (-) JobUnselected: {'identifier': 'cpr'}
+[0.000450] (-) JobUnselected: {'identifier': 'fdilink_ahrs'}
+[0.000457] (-) JobUnselected: {'identifier': 'interface'}
+[0.000463] (-) JobUnselected: {'identifier': 'ldlidar_stl_ros2'}
+[0.000471] (-) JobUnselected: {'identifier': 'lidar_fusion'}
+[0.000477] (-) JobUnselected: {'identifier': 'lidar_imu_fusion'}
+[0.000483] (-) JobUnselected: {'identifier': 'lidar_obstacle_groundmodel'}
+[0.000490] (-) JobUnselected: {'identifier': 'localization'}
+[0.000497] (-) JobUnselected: {'identifier': 'lx_camera_ros'}
+[0.000504] (-) JobUnselected: {'identifier': 'mqtt_module'}
+[0.000510] (-) JobUnselected: {'identifier': 'nav2_mppi_controller'}
+[0.000516] (-) JobUnselected: {'identifier': 'oradar_lidar'}
+[0.000523] (-) JobUnselected: {'identifier': 'paho.mqtt.c'}
+[0.000529] (-) JobUnselected: {'identifier': 'podao_detect'}
+[0.000536] (-) JobUnselected: {'identifier': 'safety_node'}
+[0.000542] (-) JobUnselected: {'identifier': 'scene_node'}
+[0.000549] (-) JobUnselected: {'identifier': 'scene_service'}
+[0.000556] (-) JobUnselected: {'identifier': 'sensor'}
+[0.000562] (-) JobUnselected: {'identifier': 'tft_manager'}
+[0.000569] (-) JobUnselected: {'identifier': 'ydlidar_ros2_driver'}
+[0.000578] (wheelchair_obstacle) JobQueued: {'identifier': 'wheelchair_obstacle', 'dependencies': OrderedDict([('interface', '/home/howard/code/freego_2025_tft/install/interface')])}
+[0.000749] (wheelchair_obstacle) JobStarted: {'identifier': 'wheelchair_obstacle'}
+[0.007509] (wheelchair_obstacle) JobProgress: {'identifier': 'wheelchair_obstacle', 'progress': 'cmake'}
+[0.007909] (wheelchair_obstacle) Command: {'cmd': ['/usr/bin/cmake', '/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle', '-DCMAKE_INSTALL_PREFIX=/home/howard/code/freego_2025_tft/install/wheelchair_obstacle'], 'cwd': '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('AI_AGENT', 'TRAE'), ('LANGUAGE', 'zh_CN:en'), ('USER', 'howard'), ('LC_TIME', 'zh_CN.UTF-8'), ('XDG_SESSION_TYPE', 'x11'), ('GIT_ASKPASS', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass.sh'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/home/howard/code/freego_2025_tft/install/interface/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('INPUT_METHOD', 'fcitx5'), ('HOME', '/home/howard'), ('CHROME_DESKTOP', 'trae-cn.desktop'), ('CONDA_SHLVL', '0'), ('OLDPWD', '/home/howard/code/freego_2025_tft'), ('TERM_PROGRAM_VERSION', '1.107.1'), ('DESKTOP_SESSION', 'ubuntu'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/trae-cn.desktop'), ('TRAE_SANDBOX_CLI_PATH', '/usr/share/trae-cn/resources/app/modules/sandbox/trae-sandbox'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('PAGER', ''), ('VSCODE_GIT_ASKPASS_MAIN', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass-main.js'), ('PS1', '\\n(TraeAI-1) \\w [$?] $'), ('NUPLAN_DB_VERSION', '/home/howard/code/nuplan/dataset/nuplan-v1.1/mini/2021.07.16.20.45.29_veh-35_01095_01486.db'), ('LC_MONETARY', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_NODE', '/usr/share/trae-cn/trae-cn'), ('MANAGERPID', '2960'), ('TRAE_AI_SHELL_ID', '1'), ('NUPLAN_DATA_ROOT', '/home/howard/code/nuplan/dataset'), ('TRAE_SANDBOX_SOURCE_FLAG_PATH', '/tmp/sandbox-source-flag-53bd7860-f528-4258-962a-7f30283f1205'), ('SYSTEMD_EXEC_PID', '3332'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('_CE_M', ''), ('isArchMatched', '1'), ('_CONDA_ROOT', '/home/howard/miniconda3'), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '15487'), ('TRAE_JWT_TOKEN_PATH', '/home/howard/.trae-cn/trae-jwt-token'), ('TRAE_SANDBOX_STORAGE_PATH', '/home/howard/.config/Trae CN/ModularData/ai-agent/sandbox'), ('SAFE_RM_AUTO_ADD_TEMP', '1'), ('ROS_DISTRO', 'humble'), ('GTK_IM_MODULE', 'xim'), ('LOGNAME', 'howard'), ('SAFE_RM_DENIED_PATH', '/home/howard/code/freego_2025_tft/.git'), ('JOURNAL_STREAM', '8:19008'), ('_', '/home/howard/.local/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('USERNAME', 'howard'), ('TERM', 'xterm-256color'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('TRAE_SANDBOX_LOG_DIR', '/home/howard/.config/Trae CN/logs/20260706T173415/Modular'), ('_CE_CONDA', ''), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '1'), ('HISTCONTROL', 'ignorespace'), ('WINDOWPATH', '2'), ('NUPLAN_MAP_VERSION', 'nuplan-maps-v1.0'), ('PATH', '/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/usr/share/trae-cn/resources/app/bin:/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/home/howard/miniconda3/condabin:/opt/ros/humble/bin:/home/howard/.local/bin:/home/howard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/usr/share/trae-cn/resources/app/node_modules/@vscode/ripgrep/bin'), ('SESSION_MANAGER', 'local/howard-JIGUANG-Series:@/tmp/.ICE-unix/3304,unix/howard-JIGUANG-Series:/tmp/.ICE-unix/3304'), ('INVOCATION_ID', '8abb83de73b346259a660e3145f99a1d'), ('PAPERSIZE', 'a4'), ('XDG_MENU_PREFIX', 'gnome-'), ('LC_ADDRESS', 'zh_CN.UTF-8'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'x11'), ('DISPLAY', ':1'), ('FILESYSTEM_CASE_SENSITIVE', 'true'), ('LANG', 'zh_CN.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('LC_TELEPHONE', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_CONFIG_NAME', '6a33e8d309ba4e398e4917fc'), ('XMODIFIERS', '@im=fcitx'), ('TRAE_SANDBOX_DUMP_DIR', '/home/howard/.config/Trae CN/Crashpad/sandbox-pending'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/gdm/Xauthority'), ('TRAE_BRAND_NAME', 'Trae CN'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-f7db09f0d3.sock'), ('TERM_PROGRAM', 'vscode'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble'), ('CONDA_PYTHON_EXE', '/home/howard/miniconda3/bin/python'), ('SHELL', '/bin/bash'), ('LC_NAME', 'zh_CN.UTF-8'), ('__trae_PS1', '\\n(TraeAI-1) \\w [$?] $'), ('QT_ACCESSIBILITY', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('LC_MEASUREMENT', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_TRACE_FILE', '/tmp/trae_sandbox_trace_cc4c7897-0b0f-4a18-8cd3-5ab28d75b44d.jsonl'), ('GPG_AGENT_INFO', '/run/user/1000/gnupg/S.gpg-agent:0:1'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('_CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('LC_IDENTIFICATION', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('GIT_PAGER', ''), ('QT_IM_MODULE', 'xim'), ('NUPLAN_MAPS_ROOT', '/home/howard/code/nuplan/dataset/maps'), ('PWD', '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle'), ('LC_ALL', 'en_US.UTF-8'), ('SAFE_RM_ALLOWED_PATH', '/home/howard/code/freego_2025_tft:/home/howard/.config/Trae CN/ModularData/ai-agent/hooks_env:/tmp:/home/howard/.cache:/home/howard/.local/lib:/home/howard/.local/bin:/home/howard/.local/share:/home/howard/miniconda3:/home/howard/.conda:/home/howard/.dotnet:/home/howard/.bash_history'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('TERM_PRODUCT', 'Trae'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/home/howard/code/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('SAFE_RM_PROTECTION_FLAG', '/tmp/safe-rm-protection-flag-5c0e2042-b174-43f2-88dd-b1e9c6c0fb71'), ('LC_NUMERIC', 'zh_CN.UTF-8'), ('LC_PAPER', 'zh_CN.UTF-8'), ('COLCON', '1'), ('SAFE_RM_SOURCE_FLAG', '/tmp/safe-rm-source-flag-74684515-2807-4ff3-82b1-2103221c952f'), ('ROS_HOME', '/tmp/ros_home'), ('CMAKE_PREFIX_PATH', '/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble')]), 'shell': False}
+[0.074937] (wheelchair_obstacle) StdoutLine: {'line': b'-- The C compiler identification is GNU 11.4.0\n'}
+[0.100023] (-) TimerEvent: {}
+[0.111072] (wheelchair_obstacle) StdoutLine: {'line': b'-- The CXX compiler identification is GNU 11.4.0\n'}
+[0.115462] (wheelchair_obstacle) StdoutLine: {'line': b'-- Detecting C compiler ABI info\n'}
+[0.175188] (wheelchair_obstacle) StdoutLine: {'line': b'-- Detecting C compiler ABI info - done\n'}
+[0.182983] (wheelchair_obstacle) StdoutLine: {'line': b'-- Check for working C compiler: /usr/bin/cc - skipped\n'}
+[0.183365] (wheelchair_obstacle) StdoutLine: {'line': b'-- Detecting C compile features\n'}
+[0.183592] (wheelchair_obstacle) StdoutLine: {'line': b'-- Detecting C compile features - done\n'}
+[0.186071] (wheelchair_obstacle) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info\n'}
+[0.200156] (-) TimerEvent: {}
+[0.255704] (wheelchair_obstacle) StdoutLine: {'line': b'-- Detecting CXX compiler ABI info - done\n'}
+[0.260015] (wheelchair_obstacle) StdoutLine: {'line': b'-- Check for working CXX compiler: /usr/bin/c++ - skipped\n'}
+[0.260214] (wheelchair_obstacle) StdoutLine: {'line': b'-- Detecting CXX compile features\n'}
+[0.260359] (wheelchair_obstacle) StdoutLine: {'line': b'-- Detecting CXX compile features - done\n'}
+[0.261451] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)\n'}
+[0.300297] (-) TimerEvent: {}
+[0.385329] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter \n'}
+[0.400459] (-) TimerEvent: {}
+[0.486584] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)\n'}
+[0.500675] (-) TimerEvent: {}
+[0.516371] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)\n'}
+[0.518682] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)\n'}
+[0.522941] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)\n'}
+[0.528764] (wheelchair_obstacle) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[0.536595] (wheelchair_obstacle) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[0.570776] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)\n'}
+[0.572828] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)\n'}
+[0.600890] (-) TimerEvent: {}
+[0.679169] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.2")  \n'}
+[0.701012] (-) TimerEvent: {}
+[0.701540] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found FastRTPS: /opt/ros/humble/include  \n'}
+[0.729181] (wheelchair_obstacle) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[0.735725] (wheelchair_obstacle) StdoutLine: {'line': b'-- Looking for pthread.h\n'}
+[0.801224] (-) TimerEvent: {}
+[0.804036] (wheelchair_obstacle) StdoutLine: {'line': b'-- Looking for pthread.h - found\n'}
+[0.804477] (wheelchair_obstacle) StdoutLine: {'line': b'-- Performing Test CMAKE_HAVE_LIBC_PTHREAD\n'}
+[0.882559] (wheelchair_obstacle) StdoutLine: {'line': b'-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success\n'}
+[0.883240] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found Threads: TRUE  \n'}
+[0.901330] (-) TimerEvent: {}
+[0.925894] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found sensor_msgs: 4.9.1 (/opt/ros/humble/share/sensor_msgs/cmake)\n'}
+[0.945987] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found nav_msgs: 4.9.1 (/opt/ros/humble/share/nav_msgs/cmake)\n'}
+[0.960485] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found visualization_msgs: 4.9.1 (/opt/ros/humble/share/visualization_msgs/cmake)\n'}
+[0.973739] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found diagnostic_msgs: 4.9.1 (/opt/ros/humble/share/diagnostic_msgs/cmake)\n'}
+[0.988735] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found tf2: 0.25.20 (/opt/ros/humble/share/tf2/cmake)\n'}
+[0.996653] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found tf2_ros: 0.25.20 (/opt/ros/humble/share/tf2_ros/cmake)\n'}
+[1.001413] (-) TimerEvent: {}
+[1.063244] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found tf2_geometry_msgs: 0.25.20 (/opt/ros/humble/share/tf2_geometry_msgs/cmake)\n'}
+[1.072685] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found eigen3_cmake_module: 0.1.1 (/opt/ros/humble/share/eigen3_cmake_module/cmake)\n'}
+[1.073813] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found Eigen3: TRUE (found version "3.4.0") \n'}
+[1.073878] (wheelchair_obstacle) StdoutLine: {'line': b'-- Ensuring Eigen3 include directory is part of orocos-kdl CMake target\n'}
+[1.075707] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found pcl_conversions: 2.4.5 (/opt/ros/humble/share/pcl_conversions/cmake)\n'}
+[1.100555] (wheelchair_obstacle) StdoutLine: {'line': b"-- Checking for module 'eigen3'\n"}
+[1.101500] (-) TimerEvent: {}
+[1.111160] (wheelchair_obstacle) StdoutLine: {'line': b'--   Found eigen3, version 3.4.0\n'}
+[1.166353] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found Eigen: /usr/include/eigen3 (Required is at least version "3.1") \n'}
+[1.166587] (wheelchair_obstacle) StdoutLine: {'line': b'-- Eigen found (include: /usr/include/eigen3, version: 3.4.0)\n'}
+[1.201188] (wheelchair_obstacle) StdoutLine: {'line': b"-- Checking for module 'flann'\n"}
+[1.201552] (-) TimerEvent: {}
+[1.214255] (wheelchair_obstacle) StdoutLine: {'line': b'--   Found flann, version 1.9.1\n'}
+[1.296571] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found FLANN: /usr/lib/x86_64-linux-gnu/libflann_cpp.so  \n'}
+[1.296752] (wheelchair_obstacle) StdoutLine: {'line': b'-- FLANN found (include: /usr/include, lib: /usr/lib/x86_64-linux-gnu/libflann_cpp.so)\n'}
+[1.301719] (-) TimerEvent: {}
+[1.401877] (-) TimerEvent: {}
+[1.502040] (-) TimerEvent: {}
+[1.602231] (-) TimerEvent: {}
+[1.702424] (-) TimerEvent: {}
+[1.802646] (-) TimerEvent: {}
+[1.902934] (-) TimerEvent: {}
+[2.003087] (-) TimerEvent: {}
+[2.103270] (-) TimerEvent: {}
+[2.203444] (-) TimerEvent: {}
+[2.302507] (wheelchair_obstacle) StdoutLine: {'line': b"-- Checking for module 'libusb-1.0'\n"}
+[2.303565] (-) TimerEvent: {}
+[2.325214] (wheelchair_obstacle) StdoutLine: {'line': b'--   Found libusb-1.0, version 1.0.25\n'}
+[2.391750] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found libusb: /usr/lib/x86_64-linux-gnu/libusb-1.0.so  \n'}
+[2.393855] (wheelchair_obstacle) StdoutLine: {'line': b'-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)\n'}
+[2.403670] (-) TimerEvent: {}
+[2.447196] (wheelchair_obstacle) StdoutLine: {'line': b'-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)\n'}
+[2.503848] (-) TimerEvent: {}
+[2.547416] (wheelchair_obstacle) StdoutLine: {'line': b'-- Eigen found (include: /usr/include/eigen3, version: 3.4.0)\n'}
+[2.552088] (wheelchair_obstacle) StdoutLine: {'line': b'-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)\n'}
+[2.556635] (wheelchair_obstacle) StdoutLine: {'line': b'-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)\n'}
+[2.603936] (-) TimerEvent: {}
+[2.694438] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found Qhull version 8.0.2\n'}
+[2.704017] (-) TimerEvent: {}
+[2.802871] (wheelchair_obstacle) StdoutLine: {'line': b'-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)\n'}
+[2.804082] (-) TimerEvent: {}
+[2.904231] (-) TimerEvent: {}
+[2.920665] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_COMMON: /usr/lib/x86_64-linux-gnu/libpcl_common.so  \n'}
+[2.921170] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_KDTREE: /usr/lib/x86_64-linux-gnu/libpcl_kdtree.so  \n'}
+[2.921714] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_OCTREE: /usr/lib/x86_64-linux-gnu/libpcl_octree.so  \n'}
+[2.922195] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_SEARCH: /usr/lib/x86_64-linux-gnu/libpcl_search.so  \n'}
+[2.922670] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_SAMPLE_CONSENSUS: /usr/lib/x86_64-linux-gnu/libpcl_sample_consensus.so  \n'}
+[2.923051] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_FILTERS: /usr/lib/x86_64-linux-gnu/libpcl_filters.so  \n'}
+[2.923272] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_2D: /usr/include/pcl-1.12  \n'}
+[2.923468] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_GEOMETRY: /usr/include/pcl-1.12  \n'}
+[2.924000] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_IO: /usr/lib/x86_64-linux-gnu/libpcl_io.so  \n'}
+[2.924529] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_FEATURES: /usr/lib/x86_64-linux-gnu/libpcl_features.so  \n'}
+[2.924980] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_ML: /usr/lib/x86_64-linux-gnu/libpcl_ml.so  \n'}
+[2.925488] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_SEGMENTATION: /usr/lib/x86_64-linux-gnu/libpcl_segmentation.so  \n'}
+[2.926044] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_VISUALIZATION: /usr/lib/x86_64-linux-gnu/libpcl_visualization.so  \n'}
+[2.926559] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_SURFACE: /usr/lib/x86_64-linux-gnu/libpcl_surface.so  \n'}
+[2.927058] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_REGISTRATION: /usr/lib/x86_64-linux-gnu/libpcl_registration.so  \n'}
+[2.927436] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_KEYPOINTS: /usr/lib/x86_64-linux-gnu/libpcl_keypoints.so  \n'}
+[2.927930] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_TRACKING: /usr/lib/x86_64-linux-gnu/libpcl_tracking.so  \n'}
+[2.928380] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_RECOGNITION: /usr/lib/x86_64-linux-gnu/libpcl_recognition.so  \n'}
+[2.928895] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_STEREO: /usr/lib/x86_64-linux-gnu/libpcl_stereo.so  \n'}
+[2.929409] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_APPS: /usr/lib/x86_64-linux-gnu/libpcl_apps.so  \n'}
+[2.929870] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_IN_HAND_SCANNER: /usr/include/pcl-1.12  \n'}
+[2.930041] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_MODELER: /usr/include/pcl-1.12  \n'}
+[2.930274] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_POINT_CLOUD_EDITOR: /usr/include/pcl-1.12  \n'}
+[2.930784] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_OUTOFCORE: /usr/lib/x86_64-linux-gnu/libpcl_outofcore.so  \n'}
+[2.931351] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found PCL_PEOPLE: /usr/lib/x86_64-linux-gnu/libpcl_people.so  \n'}
+[2.932378] (wheelchair_obstacle) StderrLine: {'line': b'CMake Warning (dev) at CMakeLists.txt:19 (find_package):\n'}
+[2.932420] (wheelchair_obstacle) StderrLine: {'line': b'  Policy CMP0074 is not set: find_package uses <PackageName>_ROOT variables.\n'}
+[2.932445] (wheelchair_obstacle) StderrLine: {'line': b'  Run "cmake --help-policy CMP0074" for policy details.  Use the cmake_policy\n'}
+[2.932469] (wheelchair_obstacle) StderrLine: {'line': b'  command to set the policy and suppress this warning.\n'}
+[2.932492] (wheelchair_obstacle) StderrLine: {'line': b'\n'}
+[2.932514] (wheelchair_obstacle) StderrLine: {'line': b'  CMake variable PCL_ROOT is set to:\n'}
+[2.932538] (wheelchair_obstacle) StderrLine: {'line': b'\n'}
+[2.932560] (wheelchair_obstacle) StderrLine: {'line': b'    /usr\n'}
+[2.932582] (wheelchair_obstacle) StderrLine: {'line': b'\n'}
+[2.932604] (wheelchair_obstacle) StderrLine: {'line': b'  For compatibility, CMake is ignoring the variable.\n'}
+[2.932626] (wheelchair_obstacle) StderrLine: {'line': b'This warning is for project developers.  Use -Wno-dev to suppress it.\n'}
+[2.932648] (wheelchair_obstacle) StderrLine: {'line': b'\n'}
+[2.977035] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found nav2_msgs: 1.1.20 (/opt/ros/humble/share/nav2_msgs/cmake)\n'}
+[3.001055] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found interface: 0.0.0 (/home/howard/code/freego_2025_tft/install/interface/share/interface/cmake)\n'}
+[3.004381] (-) TimerEvent: {}
+[3.011650] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found nav2_costmap_2d: 1.1.20 (/opt/ros/humble/share/nav2_costmap_2d/cmake)\n'}
+[3.104569] (-) TimerEvent: {}
+[3.112762] (wheelchair_obstacle) StdoutLine: {'line': b'-- Found ament_lint_auto: 0.12.15 (/opt/ros/humble/share/ament_lint_auto/cmake)\n'}
+[3.177739] (wheelchair_obstacle) StdoutLine: {'line': b"-- Found gtest sources under '/opt/ros/humble/src/gtest_vendor': C++ tests using 'Google Test' will be built\n"}
+[3.182166] (wheelchair_obstacle) StdoutLine: {'line': b"-- Added test 'cppcheck' to perform static code analysis on C / C++ code\n"}
+[3.182370] (wheelchair_obstacle) StdoutLine: {'line': b'-- Configured cppcheck include dirs: $<BUILD_INTERFACE:/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/include>\n'}
+[3.182431] (wheelchair_obstacle) StdoutLine: {'line': b'-- Configured cppcheck exclude dirs and/or files: \n'}
+[3.182742] (wheelchair_obstacle) StdoutLine: {'line': b"-- Added test 'flake8' to check Python code syntax and style conventions\n"}
+[3.183196] (wheelchair_obstacle) StdoutLine: {'line': b"-- Added test 'lint_cmake' to check CMake code style\n"}
+[3.183471] (wheelchair_obstacle) StdoutLine: {'line': b"-- Added test 'pep257' to check Python code against some of the docstring style conventions in PEP 257\n"}
+[3.184289] (wheelchair_obstacle) StdoutLine: {'line': b"-- Added test 'uncrustify' to check C / C++ code style\n"}
+[3.184358] (wheelchair_obstacle) StdoutLine: {'line': b'-- Configured uncrustify additional arguments: \n'}
+[3.184575] (wheelchair_obstacle) StdoutLine: {'line': b"-- Added test 'xmllint' to check XML markup files\n"}
+[3.185290] (wheelchair_obstacle) StdoutLine: {'line': b'-- Configuring done\n'}
+[3.204653] (-) TimerEvent: {}
+[3.285386] (wheelchair_obstacle) StdoutLine: {'line': b'-- Generating done\n'}
+[3.295834] (wheelchair_obstacle) StdoutLine: {'line': b'-- Build files have been written to: /home/howard/code/freego_2025_tft/build/wheelchair_obstacle\n'}
+[3.304867] (-) TimerEvent: {}
+[3.308447] (wheelchair_obstacle) CommandEnded: {'returncode': 0}
+[3.309133] (wheelchair_obstacle) JobProgress: {'identifier': 'wheelchair_obstacle', 'progress': 'build'}
+[3.309644] (wheelchair_obstacle) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle', '--', '-j24', '-l24'], 'cwd': '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('AI_AGENT', 'TRAE'), ('LANGUAGE', 'zh_CN:en'), ('USER', 'howard'), ('LC_TIME', 'zh_CN.UTF-8'), ('XDG_SESSION_TYPE', 'x11'), ('GIT_ASKPASS', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass.sh'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/home/howard/code/freego_2025_tft/install/interface/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('INPUT_METHOD', 'fcitx5'), ('HOME', '/home/howard'), ('CHROME_DESKTOP', 'trae-cn.desktop'), ('CONDA_SHLVL', '0'), ('OLDPWD', '/home/howard/code/freego_2025_tft'), ('TERM_PROGRAM_VERSION', '1.107.1'), ('DESKTOP_SESSION', 'ubuntu'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/trae-cn.desktop'), ('TRAE_SANDBOX_CLI_PATH', '/usr/share/trae-cn/resources/app/modules/sandbox/trae-sandbox'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('PAGER', ''), ('VSCODE_GIT_ASKPASS_MAIN', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass-main.js'), ('PS1', '\\n(TraeAI-1) \\w [$?] $'), ('NUPLAN_DB_VERSION', '/home/howard/code/nuplan/dataset/nuplan-v1.1/mini/2021.07.16.20.45.29_veh-35_01095_01486.db'), ('LC_MONETARY', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_NODE', '/usr/share/trae-cn/trae-cn'), ('MANAGERPID', '2960'), ('TRAE_AI_SHELL_ID', '1'), ('NUPLAN_DATA_ROOT', '/home/howard/code/nuplan/dataset'), ('TRAE_SANDBOX_SOURCE_FLAG_PATH', '/tmp/sandbox-source-flag-53bd7860-f528-4258-962a-7f30283f1205'), ('SYSTEMD_EXEC_PID', '3332'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('_CE_M', ''), ('isArchMatched', '1'), ('_CONDA_ROOT', '/home/howard/miniconda3'), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '15487'), ('TRAE_JWT_TOKEN_PATH', '/home/howard/.trae-cn/trae-jwt-token'), ('TRAE_SANDBOX_STORAGE_PATH', '/home/howard/.config/Trae CN/ModularData/ai-agent/sandbox'), ('SAFE_RM_AUTO_ADD_TEMP', '1'), ('ROS_DISTRO', 'humble'), ('GTK_IM_MODULE', 'xim'), ('LOGNAME', 'howard'), ('SAFE_RM_DENIED_PATH', '/home/howard/code/freego_2025_tft/.git'), ('JOURNAL_STREAM', '8:19008'), ('_', '/home/howard/.local/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('USERNAME', 'howard'), ('TERM', 'xterm-256color'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('TRAE_SANDBOX_LOG_DIR', '/home/howard/.config/Trae CN/logs/20260706T173415/Modular'), ('_CE_CONDA', ''), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '1'), ('HISTCONTROL', 'ignorespace'), ('WINDOWPATH', '2'), ('NUPLAN_MAP_VERSION', 'nuplan-maps-v1.0'), ('PATH', '/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/usr/share/trae-cn/resources/app/bin:/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/home/howard/miniconda3/condabin:/opt/ros/humble/bin:/home/howard/.local/bin:/home/howard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/usr/share/trae-cn/resources/app/node_modules/@vscode/ripgrep/bin'), ('SESSION_MANAGER', 'local/howard-JIGUANG-Series:@/tmp/.ICE-unix/3304,unix/howard-JIGUANG-Series:/tmp/.ICE-unix/3304'), ('INVOCATION_ID', '8abb83de73b346259a660e3145f99a1d'), ('PAPERSIZE', 'a4'), ('XDG_MENU_PREFIX', 'gnome-'), ('LC_ADDRESS', 'zh_CN.UTF-8'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'x11'), ('DISPLAY', ':1'), ('FILESYSTEM_CASE_SENSITIVE', 'true'), ('LANG', 'zh_CN.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('LC_TELEPHONE', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_CONFIG_NAME', '6a33e8d309ba4e398e4917fc'), ('XMODIFIERS', '@im=fcitx'), ('TRAE_SANDBOX_DUMP_DIR', '/home/howard/.config/Trae CN/Crashpad/sandbox-pending'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/gdm/Xauthority'), ('TRAE_BRAND_NAME', 'Trae CN'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-f7db09f0d3.sock'), ('TERM_PROGRAM', 'vscode'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble'), ('CONDA_PYTHON_EXE', '/home/howard/miniconda3/bin/python'), ('SHELL', '/bin/bash'), ('LC_NAME', 'zh_CN.UTF-8'), ('__trae_PS1', '\\n(TraeAI-1) \\w [$?] $'), ('QT_ACCESSIBILITY', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('LC_MEASUREMENT', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_TRACE_FILE', '/tmp/trae_sandbox_trace_cc4c7897-0b0f-4a18-8cd3-5ab28d75b44d.jsonl'), ('GPG_AGENT_INFO', '/run/user/1000/gnupg/S.gpg-agent:0:1'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('_CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('LC_IDENTIFICATION', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('GIT_PAGER', ''), ('QT_IM_MODULE', 'xim'), ('NUPLAN_MAPS_ROOT', '/home/howard/code/nuplan/dataset/maps'), ('PWD', '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle'), ('LC_ALL', 'en_US.UTF-8'), ('SAFE_RM_ALLOWED_PATH', '/home/howard/code/freego_2025_tft:/home/howard/.config/Trae CN/ModularData/ai-agent/hooks_env:/tmp:/home/howard/.cache:/home/howard/.local/lib:/home/howard/.local/bin:/home/howard/.local/share:/home/howard/miniconda3:/home/howard/.conda:/home/howard/.dotnet:/home/howard/.bash_history'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('TERM_PRODUCT', 'Trae'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/home/howard/code/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('SAFE_RM_PROTECTION_FLAG', '/tmp/safe-rm-protection-flag-5c0e2042-b174-43f2-88dd-b1e9c6c0fb71'), ('LC_NUMERIC', 'zh_CN.UTF-8'), ('LC_PAPER', 'zh_CN.UTF-8'), ('COLCON', '1'), ('SAFE_RM_SOURCE_FLAG', '/tmp/safe-rm-source-flag-74684515-2807-4ff3-82b1-2103221c952f'), ('ROS_HOME', '/tmp/ros_home'), ('CMAKE_PREFIX_PATH', '/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble')]), 'shell': False}
+[3.362973] (wheelchair_obstacle) StdoutLine: {'line': b'[ 14%] Building CXX object gtest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o\n'}
+[3.363204] (wheelchair_obstacle) StdoutLine: {'line': b'[ 14%] Building CXX object CMakeFiles/joystick_local_path_node.dir/src/joystick_local_path_node.cpp.o\n'}
+[3.370716] (wheelchair_obstacle) StdoutLine: {'line': b'[ 21%] Building CXX object CMakeFiles/obstacle_cloud_filter_node.dir/src/obstacle_cloud_filter_node.cpp.o\n'}
+[3.374313] (wheelchair_obstacle) StdoutLine: {'line': b'[ 28%] Building CXX object CMakeFiles/cmd_vel_safety_gate_node.dir/src/cmd_vel_safety_gate_node.cpp.o\n'}
+[3.379836] (wheelchair_obstacle) StdoutLine: {'line': b'[ 35%] Building CXX object CMakeFiles/rebuild_obstacle_layer.dir/src/rebuild_obstacle_layer.cpp.o\n'}
+[3.381432] (wheelchair_obstacle) StdoutLine: {'line': b'[ 42%] Building CXX object gtest/CMakeFiles/gtest.dir/src/gtest-all.cc.o\n'}
+[3.405019] (-) TimerEvent: {}
+[3.505304] (-) TimerEvent: {}
+[3.605565] (-) TimerEvent: {}
+[3.705787] (-) TimerEvent: {}
+[3.806063] (-) TimerEvent: {}
+[3.906274] (-) TimerEvent: {}
+[4.006587] (-) TimerEvent: {}
+[4.090653] (wheelchair_obstacle) StdoutLine: {'line': b'[ 50%] Linking CXX static library libgtest_main.a\n'}
+[4.106741] (-) TimerEvent: {}
+[4.124551] (wheelchair_obstacle) StdoutLine: {'line': b'[ 50%] Built target gtest_main\n'}
+[4.206919] (-) TimerEvent: {}
+[4.307117] (-) TimerEvent: {}
+[4.407320] (-) TimerEvent: {}
+[4.507550] (-) TimerEvent: {}
+[4.607875] (-) TimerEvent: {}
+[4.708184] (-) TimerEvent: {}
+[4.808472] (-) TimerEvent: {}
+[4.908774] (-) TimerEvent: {}
+[5.008974] (-) TimerEvent: {}
+[5.059860] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:25: error: \xe2\x80\x98Joystick\xe2\x80\x99 does not name a type\n'}
+[5.060064] (wheelchair_obstacle) StderrLine: {'line': b'  250 |   void onJoystick(const Joystick::SharedPtr msg)\n'}
+[5.060147] (wheelchair_obstacle) StderrLine: {'line': b'      |                         ^~~~~~~~\n'}
+[5.060222] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:45: error: expected unqualified-id before \xe2\x80\x98msg\xe2\x80\x99\n'}
+[5.060300] (wheelchair_obstacle) StderrLine: {'line': b'  250 |   void onJoystick(const Joystick::SharedPtr msg)\n'}
+[5.060376] (wheelchair_obstacle) StderrLine: {'line': b'      |                                             ^~~\n'}
+[5.060454] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:44: error: expected \xe2\x80\x98)\xe2\x80\x99 before \xe2\x80\x98msg\xe2\x80\x99\n'}
+[5.060749] (wheelchair_obstacle) StderrLine: {'line': b'  250 |   void onJoystick(const Joystick::SharedPtr msg)\n'}
+[5.060849] (wheelchair_obstacle) StderrLine: {'line': b'      |                  ~                         ^~~~\n'}
+[5.060927] (wheelchair_obstacle) StderrLine: {'line': b'      |                                            )\n'}
+[5.061000] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:35: error: expected \xe2\x80\x98;\xe2\x80\x99 at end of member declaration\n'}
+[5.061073] (wheelchair_obstacle) StderrLine: {'line': b'  250 |   void onJoystick(const Joystick::SharedPtr msg)\n'}
+[5.061145] (wheelchair_obstacle) StderrLine: {'line': b'      |                                   ^~~~~~~~~\n'}
+[5.061221] (wheelchair_obstacle) StderrLine: {'line': b'      |                                            ;\n'}
+[5.061293] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:45: error: \xe2\x80\x98msg\xe2\x80\x99 does not name a type\n'}
+[5.061366] (wheelchair_obstacle) StderrLine: {'line': b'  250 |   void onJoystick(const Joystick::SharedPtr msg)\n'}
+[5.061440] (wheelchair_obstacle) StderrLine: {'line': b'      |                                             ^~~\n'}
+[5.109182] (-) TimerEvent: {}
+[5.112684] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:24: error: \xe2\x80\x98Joystick\xe2\x80\x99 was not declared in this scope; did you mean \xe2\x80\x98interface::msg::Joystick\xe2\x80\x99?\n'}
+[5.112886] (wheelchair_obstacle) StderrLine: {'line': b'  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;\n'}
+[5.112969] (wheelchair_obstacle) StderrLine: {'line': b'      |                        ^~~~~~~~\n'}
+[5.113045] (wheelchair_obstacle) StderrLine: {'line': b'      |                        interface::msg::Joystick\n'}
+[5.113118] (wheelchair_obstacle) StderrLine: {'line': b'In file included from /home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/joystick.hpp:7,\n'}
+[5.113192] (wheelchair_obstacle) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:56:\n'}
+[5.113263] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/detail/joystick__struct.hpp:165:7: note: \xe2\x80\x98interface::msg::Joystick\xe2\x80\x99 declared here\n'}
+[5.113335] (wheelchair_obstacle) StderrLine: {'line': b'  165 | using Joystick =\n'}
+[5.113406] (wheelchair_obstacle) StderrLine: {'line': b'      |       ^~~~~~~~\n'}
+[5.113476] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 1 is invalid\n'}
+[5.113547] (wheelchair_obstacle) StderrLine: {'line': b'  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;\n'}
+[5.113616] (wheelchair_obstacle) StderrLine: {'line': b'      |                                ^\n'}
+[5.113686] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 3 is invalid\n'}
+[5.113763] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 4 is invalid\n'}
+[5.113838] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 5 is invalid\n'}
+[5.113908] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:35: error: expected \xe2\x80\x98;\xe2\x80\x99 at end of member declaration\n'}
+[5.113978] (wheelchair_obstacle) StderrLine: {'line': b'  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;\n'}
+[5.114048] (wheelchair_obstacle) StderrLine: {'line': b'      |                                   ^~~~~~~~~\n'}
+[5.114118] (wheelchair_obstacle) StderrLine: {'line': b'      |                                            ;\n'}
+[5.114398] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:45: error: \xe2\x80\x98joystick_sub_\xe2\x80\x99 does not name a type\n'}
+[5.114571] (wheelchair_obstacle) StderrLine: {'line': b'  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;\n'}
+[5.114652] (wheelchair_obstacle) StderrLine: {'line': b'      |                                             ^~~~~~~~~~~~~\n'}
+[5.209382] (-) TimerEvent: {}
+[5.225883] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp: In constructor \xe2\x80\x98CmdVelSafetyGateNode::CmdVelSafetyGateNode()\xe2\x80\x99:\n'}
+[5.226169] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:5: error: \xe2\x80\x98joystick_sub_\xe2\x80\x99 was not declared in this scope\n'}
+[5.226254] (wheelchair_obstacle) StderrLine: {'line': b'  180 |     joystick_sub_ = create_subscription<Joystick>(\n'}
+[5.226330] (wheelchair_obstacle) StderrLine: {'line': b'      |     ^~~~~~~~~~~~~\n'}
+[5.226402] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:41: error: \xe2\x80\x98Joystick\xe2\x80\x99 was not declared in this scope; did you mean \xe2\x80\x98interface::msg::Joystick\xe2\x80\x99?\n'}
+[5.226481] (wheelchair_obstacle) StderrLine: {'line': b'  180 |     joystick_sub_ = create_subscription<Joystick>(\n'}
+[5.226553] (wheelchair_obstacle) StderrLine: {'line': b'      |                                         ^~~~~~~~\n'}
+[5.226624] (wheelchair_obstacle) StderrLine: {'line': b'      |                                         interface::msg::Joystick\n'}
+[5.226695] (wheelchair_obstacle) StderrLine: {'line': b'In file included from /home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/joystick.hpp:7,\n'}
+[5.226776] (wheelchair_obstacle) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:56:\n'}
+[5.226856] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/detail/joystick__struct.hpp:165:7: note: \xe2\x80\x98interface::msg::Joystick\xe2\x80\x99 declared here\n'}
+[5.226927] (wheelchair_obstacle) StderrLine: {'line': b'  165 | using Joystick =\n'}
+[5.226998] (wheelchair_obstacle) StderrLine: {'line': b'      |       ^~~~~~~~\n'}
+[5.227511] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:50: error: no matching function for call to \xe2\x80\x98CmdVelSafetyGateNode::create_subscription<<expression error> >(std::string&, rclcpp::SensorDataQoS, std::_Bind_helper<false, void (CmdVelSafetyGateNode::*)(...), CmdVelSafetyGateNode*, const std::_Placeholder<1>&>::type)\xe2\x80\x99\n'}
+[5.227638] (wheelchair_obstacle) StderrLine: {'line': b'  180 |     joystick_sub_ = create_subscription<Joystick>(\n'}
+[5.227721] (wheelchair_obstacle) StderrLine: {'line': b'      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n'}
+[5.227810] (wheelchair_obstacle) StderrLine: {'line': b'  181 |       rocker_topic_, rclcpp::SensorDataQoS(),\n'}
+[5.227885] (wheelchair_obstacle) StderrLine: {'line': b'      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     \n'}
+[5.227958] (wheelchair_obstacle) StderrLine: {'line': b'  182 |       std::bind(&CmdVelSafetyGateNode::onJoystick, this, std::placeholders::_1));\n'}
+[5.228029] (wheelchair_obstacle) StderrLine: {'line': b'      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n'}
+[5.228101] (wheelchair_obstacle) StderrLine: {'line': b'In file included from /opt/ros/humble/include/rclcpp/rclcpp/node.hpp:1321,\n'}
+[5.228172] (wheelchair_obstacle) StderrLine: {'line': b'                 from /opt/ros/humble/include/rclcpp/rclcpp/executors/single_threaded_executor.hpp:28,\n'}
+[5.228244] (wheelchair_obstacle) StderrLine: {'line': b'                 from /opt/ros/humble/include/rclcpp/rclcpp/executors.hpp:22,\n'}
+[5.228316] (wheelchair_obstacle) StderrLine: {'line': b'                 from /opt/ros/humble/include/rclcpp/rclcpp/rclcpp.hpp:155,\n'}
+[5.228391] (wheelchair_obstacle) StderrLine: {'line': b'                 from /home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:49:\n'}
+[5.228462] (wheelchair_obstacle) StderrLine: {'line': b'/opt/ros/humble/include/rclcpp/rclcpp/node_impl.hpp:92:1: note: candidate: \xe2\x80\x98template<class MessageT, class CallbackT, class AllocatorT, class SubscriptionT, class MessageMemoryStrategyT> std::shared_ptr<ROSMessageT> rclcpp::Node::create_subscription(const string&, const rclcpp::QoS&, CallbackT&&, const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT>&, typename MessageMemoryStrategyT::SharedPtr)\xe2\x80\x99\n'}
+[5.228538] (wheelchair_obstacle) StderrLine: {'line': b'   92 | Node::create_subscription(\n'}
+[5.228612] (wheelchair_obstacle) StderrLine: {'line': b'      | ^~~~\n'}
+[5.228684] (wheelchair_obstacle) StderrLine: {'line': b'/opt/ros/humble/include/rclcpp/rclcpp/node_impl.hpp:92:1: note:   template argument deduction/substitution failed:\n'}
+[5.228764] (wheelchair_obstacle) StderrLine: {'line': b'/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:50: error: template argument 1 is invalid\n'}
+[5.228841] (wheelchair_obstacle) StderrLine: {'line': b'  180 |     joystick_sub_ = create_subscription<Joystick>(\n'}
+[5.228914] (wheelchair_obstacle) StderrLine: {'line': b'      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n'}
+[5.228987] (wheelchair_obstacle) StderrLine: {'line': b'  181 |       rocker_topic_, rclcpp::SensorDataQoS(),\n'}
+[5.229059] (wheelchair_obstacle) StderrLine: {'line': b'      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     \n'}
+[5.229132] (wheelchair_obstacle) StderrLine: {'line': b'  182 |       std::bind(&CmdVelSafetyGateNode::onJoystick, this, std::placeholders::_1));\n'}
+[5.229204] (wheelchair_obstacle) StderrLine: {'line': b'      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n'}
+[5.309583] (-) TimerEvent: {}
+[5.409876] (-) TimerEvent: {}
+[5.510068] (-) TimerEvent: {}
+[5.610285] (-) TimerEvent: {}
+[5.710577] (-) TimerEvent: {}
+[5.756362] (wheelchair_obstacle) StdoutLine: {'line': b'[ 57%] Linking CXX static library libgtest.a\n'}
+[5.802667] (wheelchair_obstacle) StdoutLine: {'line': b'[ 57%] Built target gtest\n'}
+[5.810747] (-) TimerEvent: {}
+[5.821892] (wheelchair_obstacle) StdoutLine: {'line': b'[ 64%] Building CXX object test/CMakeFiles/test_obstacle_cloud_filter_core.dir/test_obstacle_cloud_filter_core.cpp.o\n'}
+[5.910879] (-) TimerEvent: {}
+[6.011067] (-) TimerEvent: {}
+[6.111366] (-) TimerEvent: {}
+[6.211607] (-) TimerEvent: {}
+[6.311913] (-) TimerEvent: {}
+[6.412159] (-) TimerEvent: {}
+[6.512380] (-) TimerEvent: {}
+[6.612648] (-) TimerEvent: {}
+[6.712858] (-) TimerEvent: {}
+[6.813053] (-) TimerEvent: {}
+[6.913282] (-) TimerEvent: {}
+[6.990540] (wheelchair_obstacle) StdoutLine: {'line': b'[ 71%] Linking CXX executable test_obstacle_cloud_filter_core\n'}
+[7.013438] (-) TimerEvent: {}
+[7.033030] (wheelchair_obstacle) StdoutLine: {'line': b'[ 78%] Linking CXX shared library librebuild_obstacle_layer.so\n'}
+[7.102257] (wheelchair_obstacle) StdoutLine: {'line': b'[ 78%] Built target test_obstacle_cloud_filter_core\n'}
+[7.113579] (-) TimerEvent: {}
+[7.213783] (-) TimerEvent: {}
+[7.214328] (wheelchair_obstacle) StdoutLine: {'line': b'[ 78%] Built target rebuild_obstacle_layer\n'}
+[7.313918] (-) TimerEvent: {}
+[7.414103] (-) TimerEvent: {}
+[7.514330] (-) TimerEvent: {}
+[7.614621] (-) TimerEvent: {}
+[7.714942] (-) TimerEvent: {}
+[7.815112] (-) TimerEvent: {}
+[7.915385] (-) TimerEvent: {}
+[8.015659] (-) TimerEvent: {}
+[8.115830] (-) TimerEvent: {}
+[8.216091] (-) TimerEvent: {}
+[8.316294] (-) TimerEvent: {}
+[8.416526] (-) TimerEvent: {}
+[8.516792] (-) TimerEvent: {}
+[8.617081] (-) TimerEvent: {}
+[8.717326] (-) TimerEvent: {}
+[8.817567] (-) TimerEvent: {}
+[8.917850] (-) TimerEvent: {}
+[9.018094] (-) TimerEvent: {}
+[9.118275] (-) TimerEvent: {}
+[9.218448] (-) TimerEvent: {}
+[9.318704] (-) TimerEvent: {}
+[9.418881] (-) TimerEvent: {}
+[9.515824] (wheelchair_obstacle) StderrLine: {'line': b'gmake[2]: *** [CMakeFiles/cmd_vel_safety_gate_node.dir/build.make:76\xef\xbc\x9aCMakeFiles/cmd_vel_safety_gate_node.dir/src/cmd_vel_safety_gate_node.cpp.o] \xe9\x94\x99\xe8\xaf\xaf 1\n'}
+[9.516056] (wheelchair_obstacle) StderrLine: {'line': b'gmake[1]: *** [CMakeFiles/Makefile2:230\xef\xbc\x9aCMakeFiles/cmd_vel_safety_gate_node.dir/all] \xe9\x94\x99\xe8\xaf\xaf 2\n'}
+[9.516096] (wheelchair_obstacle) StderrLine: {'line': b'gmake[1]: *** \xe6\xad\xa3\xe5\x9c\xa8\xe7\xad\x89\xe5\xbe\x85\xe6\x9c\xaa\xe5\xae\x8c\xe6\x88\x90\xe7\x9a\x84\xe4\xbb\xbb\xe5\x8a\xa1....\n'}
+[9.518939] (-) TimerEvent: {}
+[9.619142] (-) TimerEvent: {}
+[9.719318] (-) TimerEvent: {}
+[9.819553] (-) TimerEvent: {}
+[9.919720] (-) TimerEvent: {}
+[10.019960] (-) TimerEvent: {}
+[10.120106] (-) TimerEvent: {}
+[10.220276] (-) TimerEvent: {}
+[10.320443] (-) TimerEvent: {}
+[10.420611] (-) TimerEvent: {}
+[10.520843] (-) TimerEvent: {}
+[10.620989] (-) TimerEvent: {}
+[10.721134] (-) TimerEvent: {}
+[10.847136] (-) TimerEvent: {}
+[10.947406] (-) TimerEvent: {}
+[11.047594] (-) TimerEvent: {}
+[11.147799] (-) TimerEvent: {}
+[11.248041] (-) TimerEvent: {}
+[11.348218] (-) TimerEvent: {}
+[11.448475] (-) TimerEvent: {}
+[11.470956] (wheelchair_obstacle) StdoutLine: {'line': b'[ 85%] Linking CXX executable joystick_local_path_node\n'}
+[11.548585] (-) TimerEvent: {}
+[11.648871] (-) TimerEvent: {}
+[11.749033] (-) TimerEvent: {}
+[11.849186] (-) TimerEvent: {}
+[11.888849] (wheelchair_obstacle) StdoutLine: {'line': b'[ 85%] Built target joystick_local_path_node\n'}
+[11.949308] (-) TimerEvent: {}
+[11.975424] (wheelchair_obstacle) StdoutLine: {'line': b'[ 92%] Linking CXX executable obstacle_cloud_filter_node\n'}
+[12.049523] (-) TimerEvent: {}
+[12.149709] (-) TimerEvent: {}
+[12.249889] (-) TimerEvent: {}
+[12.350030] (-) TimerEvent: {}
+[12.450196] (-) TimerEvent: {}
+[12.550449] (-) TimerEvent: {}
+[12.564005] (wheelchair_obstacle) StdoutLine: {'line': b'[ 92%] Built target obstacle_cloud_filter_node\n'}
+[12.564636] (wheelchair_obstacle) StderrLine: {'line': b'gmake: *** [Makefile:146\xef\xbc\x9aall] \xe9\x94\x99\xe8\xaf\xaf 2\n'}
+[12.566324] (wheelchair_obstacle) CommandEnded: {'returncode': 2}
+[12.572673] (wheelchair_obstacle) JobEnded: {'identifier': 'wheelchair_obstacle', 'rc': 2}
+[12.583113] (-) EventReactorShutdown: {}

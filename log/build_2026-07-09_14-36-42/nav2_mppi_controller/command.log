@@ -1,0 +1,2 @@
+Invoking command in '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller': CMAKE_PREFIX_PATH=/opt/ros/humble PS1=\n(TraeAI-1) \w [$?] $ __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --build /home/howard/code/freego_2025_tft/build/nav2_mppi_controller -- -j24 -l24
+Invoked command in '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller' returned '2': CMAKE_PREFIX_PATH=/opt/ros/humble PS1=\n(TraeAI-1) \w [$?] $ __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --build /home/howard/code/freego_2025_tft/build/nav2_mppi_controller -- -j24 -l24

@@ -1,0 +1,103 @@
+[  4%] Built target gtest_main
+[  8%] Built target gtest
+Consolidate compiler generated dependencies of target mppi_controller
+[ 34%] Built target mppi_critics
+[ 36%] Building CXX object CMakeFiles/mppi_controller.dir/src/controller.cpp.o
+/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp: In lambda function:
+/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:34: error: no match for ‘operator-’ (operand types are ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} and ‘rclcpp::Time’)
+   66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+      |                            ~~~~~ ^ ~~~~~~~~~~~~~~~~~~~~~~
+      |                            |       |
+      |                            |       rclcpp::Time
+      |                            const Time {aka const builtin_interfaces::msg::Time_<std::allocator<void> >}
+In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+                 from /usr/include/c++/11/bits/char_traits.h:39,
+                 from /usr/include/c++/11/string:40,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:18,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+/usr/include/c++/11/bits/stl_iterator.h:577:5: note: candidate: ‘template<class _IteratorL, class _IteratorR> constexpr decltype ((__y.base() - __x.base())) std::operator-(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_IteratorR>&)’
+  577 |     operator-(const reverse_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_iterator.h:577:5: note:   template argument deduction/substitution failed:
+/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::reverse_iterator<_Iterator>’
+   66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+                 from /usr/include/c++/11/bits/char_traits.h:39,
+                 from /usr/include/c++/11/string:40,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:18,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+/usr/include/c++/11/bits/stl_iterator.h:1693:5: note: candidate: ‘template<class _IteratorL, class _IteratorR> constexpr decltype ((__x.base() - __y.base())) std::operator-(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorR>&)’
+ 1693 |     operator-(const move_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_iterator.h:1693:5: note:   template argument deduction/substitution failed:
+/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::move_iterator<_IteratorL>’
+   66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+                 from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+                 from /usr/include/xsimd/xsimd.hpp:16,
+                 from /usr/include/xtensor/xtensor_config.hpp:75,
+                 from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+                 from /usr/include/xtensor/xtensor.hpp:19,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+/usr/include/c++/11/complex:362:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&, const std::complex<_Tp>&)’
+  362 |     operator-(const complex<_Tp>& __x, const complex<_Tp>& __y)
+      |     ^~~~~~~~
+/usr/include/c++/11/complex:362:5: note:   template argument deduction/substitution failed:
+/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::complex<_Tp>’
+   66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+                 from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+                 from /usr/include/xsimd/xsimd.hpp:16,
+                 from /usr/include/xtensor/xtensor_config.hpp:75,
+                 from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+                 from /usr/include/xtensor/xtensor.hpp:19,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+/usr/include/c++/11/complex:371:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&, const _Tp&)’
+  371 |     operator-(const complex<_Tp>& __x, const _Tp& __y)
+      |     ^~~~~~~~
+/usr/include/c++/11/complex:371:5: note:   template argument deduction/substitution failed:
+/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::complex<_Tp>’
+   66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+                 from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+                 from /usr/include/xsimd/xsimd.hpp:16,
+                 from /usr/include/xtensor/xtensor_config.hpp:75,
+                 from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+                 from /usr/include/xtensor/xtensor.hpp:19,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+/usr/include/c++/11/complex:380:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const _Tp&, const std::complex<_Tp>&)’
+  380 |     operator-(const _Tp& __x, const complex<_Tp>& __y)
+      |     ^~~~~~~~
+/usr/include/c++/11/complex:380:5: note:   template argument deduction/substitution failed:
+/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘rclcpp::Time’ is not derived from ‘const std::complex<_Tp>’
+   66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+                 from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+                 from /usr/include/xsimd/xsimd.hpp:16,
+                 from /usr/include/xtensor/xtensor_config.hpp:75,
+                 from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+                 from /usr/include/xtensor/xtensor.hpp:19,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+                 from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+/usr/include/c++/11/complex:457:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&)’
+  457 |     operator-(const complex<_Tp>& __x)
+      |     ^~~~~~~~
+/usr/include/c++/11/complex:457:5: note:   template argument deduction/substitution failed:
+/home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::complex<_Tp>’
+   66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~
+gmake[2]: *** [CMakeFiles/mppi_controller.dir/build.make:76：CMakeFiles/mppi_controller.dir/src/controller.cpp.o] 错误 1
+gmake[1]: *** [CMakeFiles/Makefile2:196：CMakeFiles/mppi_controller.dir/all] 错误 2
+gmake: *** [Makefile:146：all] 错误 2

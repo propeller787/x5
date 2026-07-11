@@ -1,0 +1,211 @@
+-- The C compiler identification is GNU 11.4.0
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)
+-- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter 
+-- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)
+-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)
+-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+-- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)
+-- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.2")  
+-- Found FastRTPS: /opt/ros/humble/include  
+-- Using RMW implementation 'rmw_fastrtps_cpp' as default
+-- Looking for pthread.h
+-- Looking for pthread.h - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Found sensor_msgs: 4.9.1 (/opt/ros/humble/share/sensor_msgs/cmake)
+-- Found nav_msgs: 4.9.1 (/opt/ros/humble/share/nav_msgs/cmake)
+-- Found visualization_msgs: 4.9.1 (/opt/ros/humble/share/visualization_msgs/cmake)
+-- Found diagnostic_msgs: 4.9.1 (/opt/ros/humble/share/diagnostic_msgs/cmake)
+-- Found tf2: 0.25.20 (/opt/ros/humble/share/tf2/cmake)
+-- Found tf2_ros: 0.25.20 (/opt/ros/humble/share/tf2_ros/cmake)
+-- Found tf2_geometry_msgs: 0.25.20 (/opt/ros/humble/share/tf2_geometry_msgs/cmake)
+-- Found eigen3_cmake_module: 0.1.1 (/opt/ros/humble/share/eigen3_cmake_module/cmake)
+-- Found Eigen3: TRUE (found version "3.4.0") 
+-- Ensuring Eigen3 include directory is part of orocos-kdl CMake target
+-- Found pcl_conversions: 2.4.5 (/opt/ros/humble/share/pcl_conversions/cmake)
+-- Checking for module 'eigen3'
+--   Found eigen3, version 3.4.0
+-- Found Eigen: /usr/include/eigen3 (Required is at least version "3.1") 
+-- Eigen found (include: /usr/include/eigen3, version: 3.4.0)
+-- Checking for module 'flann'
+--   Found flann, version 1.9.1
+-- Found FLANN: /usr/lib/x86_64-linux-gnu/libflann_cpp.so  
+-- FLANN found (include: /usr/include, lib: /usr/lib/x86_64-linux-gnu/libflann_cpp.so)
+-- Checking for module 'libusb-1.0'
+--   Found libusb-1.0, version 1.0.25
+-- Found libusb: /usr/lib/x86_64-linux-gnu/libusb-1.0.so  
+-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)
+-- Eigen found (include: /usr/include/eigen3, version: 3.4.0)
+-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+-- OpenNI2 found (version: 2.2.0.33, include: /usr/include/openni2, lib: /usr/lib/x86_64-linux-gnu/libOpenNI2.so;libusb::libusb)
+-- Found Qhull version 8.0.2
+-- OpenNI found (version: 1.5.4.0, include: /usr/include/ni, lib: /usr/lib/libOpenNI.so;libusb::libusb)
+-- Found PCL_COMMON: /usr/lib/x86_64-linux-gnu/libpcl_common.so  
+-- Found PCL_KDTREE: /usr/lib/x86_64-linux-gnu/libpcl_kdtree.so  
+-- Found PCL_OCTREE: /usr/lib/x86_64-linux-gnu/libpcl_octree.so  
+-- Found PCL_SEARCH: /usr/lib/x86_64-linux-gnu/libpcl_search.so  
+-- Found PCL_SAMPLE_CONSENSUS: /usr/lib/x86_64-linux-gnu/libpcl_sample_consensus.so  
+-- Found PCL_FILTERS: /usr/lib/x86_64-linux-gnu/libpcl_filters.so  
+-- Found PCL_2D: /usr/include/pcl-1.12  
+-- Found PCL_GEOMETRY: /usr/include/pcl-1.12  
+-- Found PCL_IO: /usr/lib/x86_64-linux-gnu/libpcl_io.so  
+-- Found PCL_FEATURES: /usr/lib/x86_64-linux-gnu/libpcl_features.so  
+-- Found PCL_ML: /usr/lib/x86_64-linux-gnu/libpcl_ml.so  
+-- Found PCL_SEGMENTATION: /usr/lib/x86_64-linux-gnu/libpcl_segmentation.so  
+-- Found PCL_VISUALIZATION: /usr/lib/x86_64-linux-gnu/libpcl_visualization.so  
+-- Found PCL_SURFACE: /usr/lib/x86_64-linux-gnu/libpcl_surface.so  
+-- Found PCL_REGISTRATION: /usr/lib/x86_64-linux-gnu/libpcl_registration.so  
+-- Found PCL_KEYPOINTS: /usr/lib/x86_64-linux-gnu/libpcl_keypoints.so  
+-- Found PCL_TRACKING: /usr/lib/x86_64-linux-gnu/libpcl_tracking.so  
+-- Found PCL_RECOGNITION: /usr/lib/x86_64-linux-gnu/libpcl_recognition.so  
+-- Found PCL_STEREO: /usr/lib/x86_64-linux-gnu/libpcl_stereo.so  
+-- Found PCL_APPS: /usr/lib/x86_64-linux-gnu/libpcl_apps.so  
+-- Found PCL_IN_HAND_SCANNER: /usr/include/pcl-1.12  
+-- Found PCL_MODELER: /usr/include/pcl-1.12  
+-- Found PCL_POINT_CLOUD_EDITOR: /usr/include/pcl-1.12  
+-- Found PCL_OUTOFCORE: /usr/lib/x86_64-linux-gnu/libpcl_outofcore.so  
+-- Found PCL_PEOPLE: /usr/lib/x86_64-linux-gnu/libpcl_people.so  
+CMake Warning (dev) at CMakeLists.txt:19 (find_package):
+  Policy CMP0074 is not set: find_package uses <PackageName>_ROOT variables.
+  Run "cmake --help-policy CMP0074" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+
+  CMake variable PCL_ROOT is set to:
+
+    /usr
+
+  For compatibility, CMake is ignoring the variable.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Found nav2_msgs: 1.1.20 (/opt/ros/humble/share/nav2_msgs/cmake)
+-- Found interface: 0.0.0 (/home/howard/code/freego_2025_tft/install/interface/share/interface/cmake)
+-- Found nav2_costmap_2d: 1.1.20 (/opt/ros/humble/share/nav2_costmap_2d/cmake)
+-- Found ament_lint_auto: 0.12.15 (/opt/ros/humble/share/ament_lint_auto/cmake)
+-- Found gtest sources under '/opt/ros/humble/src/gtest_vendor': C++ tests using 'Google Test' will be built
+-- Added test 'cppcheck' to perform static code analysis on C / C++ code
+-- Configured cppcheck include dirs: $<BUILD_INTERFACE:/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/include>
+-- Configured cppcheck exclude dirs and/or files: 
+-- Added test 'flake8' to check Python code syntax and style conventions
+-- Added test 'lint_cmake' to check CMake code style
+-- Added test 'pep257' to check Python code against some of the docstring style conventions in PEP 257
+-- Added test 'uncrustify' to check C / C++ code style
+-- Configured uncrustify additional arguments: 
+-- Added test 'xmllint' to check XML markup files
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/howard/code/freego_2025_tft/build/wheelchair_obstacle
+[ 14%] Building CXX object gtest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+[ 14%] Building CXX object CMakeFiles/joystick_local_path_node.dir/src/joystick_local_path_node.cpp.o
+[ 21%] Building CXX object CMakeFiles/obstacle_cloud_filter_node.dir/src/obstacle_cloud_filter_node.cpp.o
+[ 28%] Building CXX object CMakeFiles/cmd_vel_safety_gate_node.dir/src/cmd_vel_safety_gate_node.cpp.o
+[ 35%] Building CXX object CMakeFiles/rebuild_obstacle_layer.dir/src/rebuild_obstacle_layer.cpp.o
+[ 42%] Building CXX object gtest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+[ 50%] Linking CXX static library libgtest_main.a
+[ 50%] Built target gtest_main
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:25: error: ‘Joystick’ does not name a type
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                         ^~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:45: error: expected unqualified-id before ‘msg’
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                                             ^~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:44: error: expected ‘)’ before ‘msg’
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                  ~                         ^~~~
+      |                                            )
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:35: error: expected ‘;’ at end of member declaration
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                                   ^~~~~~~~~
+      |                                            ;
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:250:45: error: ‘msg’ does not name a type
+  250 |   void onJoystick(const Joystick::SharedPtr msg)
+      |                                             ^~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:24: error: ‘Joystick’ was not declared in this scope; did you mean ‘interface::msg::Joystick’?
+  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
+      |                        ^~~~~~~~
+      |                        interface::msg::Joystick
+In file included from /home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/joystick.hpp:7,
+                 from /home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:56:
+/home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/detail/joystick__struct.hpp:165:7: note: ‘interface::msg::Joystick’ declared here
+  165 | using Joystick =
+      |       ^~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 1 is invalid
+  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
+      |                                ^
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 3 is invalid
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 4 is invalid
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:32: error: template argument 5 is invalid
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:35: error: expected ‘;’ at end of member declaration
+  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
+      |                                   ^~~~~~~~~
+      |                                            ;
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:607:45: error: ‘joystick_sub_’ does not name a type
+  607 |   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
+      |                                             ^~~~~~~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp: In constructor ‘CmdVelSafetyGateNode::CmdVelSafetyGateNode()’:
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:5: error: ‘joystick_sub_’ was not declared in this scope
+  180 |     joystick_sub_ = create_subscription<Joystick>(
+      |     ^~~~~~~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:41: error: ‘Joystick’ was not declared in this scope; did you mean ‘interface::msg::Joystick’?
+  180 |     joystick_sub_ = create_subscription<Joystick>(
+      |                                         ^~~~~~~~
+      |                                         interface::msg::Joystick
+In file included from /home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/joystick.hpp:7,
+                 from /home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:56:
+/home/howard/code/freego_2025_tft/install/interface/include/interface/interface/msg/detail/joystick__struct.hpp:165:7: note: ‘interface::msg::Joystick’ declared here
+  165 | using Joystick =
+      |       ^~~~~~~~
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:50: error: no matching function for call to ‘CmdVelSafetyGateNode::create_subscription<<expression error> >(std::string&, rclcpp::SensorDataQoS, std::_Bind_helper<false, void (CmdVelSafetyGateNode::*)(...), CmdVelSafetyGateNode*, const std::_Placeholder<1>&>::type)’
+  180 |     joystick_sub_ = create_subscription<Joystick>(
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  181 |       rocker_topic_, rclcpp::SensorDataQoS(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+  182 |       std::bind(&CmdVelSafetyGateNode::onJoystick, this, std::placeholders::_1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /opt/ros/humble/include/rclcpp/rclcpp/node.hpp:1321,
+                 from /opt/ros/humble/include/rclcpp/rclcpp/executors/single_threaded_executor.hpp:28,
+                 from /opt/ros/humble/include/rclcpp/rclcpp/executors.hpp:22,
+                 from /opt/ros/humble/include/rclcpp/rclcpp/rclcpp.hpp:155,
+                 from /home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:49:
+/opt/ros/humble/include/rclcpp/rclcpp/node_impl.hpp:92:1: note: candidate: ‘template<class MessageT, class CallbackT, class AllocatorT, class SubscriptionT, class MessageMemoryStrategyT> std::shared_ptr<ROSMessageT> rclcpp::Node::create_subscription(const string&, const rclcpp::QoS&, CallbackT&&, const rclcpp::SubscriptionOptionsWithAllocator<AllocatorT>&, typename MessageMemoryStrategyT::SharedPtr)’
+   92 | Node::create_subscription(
+      | ^~~~
+/opt/ros/humble/include/rclcpp/rclcpp/node_impl.hpp:92:1: note:   template argument deduction/substitution failed:
+/home/howard/code/freego_2025_tft/src/perception/wheelchair_obstacle/src/cmd_vel_safety_gate_node.cpp:180:50: error: template argument 1 is invalid
+  180 |     joystick_sub_ = create_subscription<Joystick>(
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  181 |       rocker_topic_, rclcpp::SensorDataQoS(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+  182 |       std::bind(&CmdVelSafetyGateNode::onJoystick, this, std::placeholders::_1));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[ 57%] Linking CXX static library libgtest.a
+[ 57%] Built target gtest
+[ 64%] Building CXX object test/CMakeFiles/test_obstacle_cloud_filter_core.dir/test_obstacle_cloud_filter_core.cpp.o
+[ 71%] Linking CXX executable test_obstacle_cloud_filter_core
+[ 78%] Linking CXX shared library librebuild_obstacle_layer.so
+[ 78%] Built target test_obstacle_cloud_filter_core
+[ 78%] Built target rebuild_obstacle_layer
+gmake[2]: *** [CMakeFiles/cmd_vel_safety_gate_node.dir/build.make:76：CMakeFiles/cmd_vel_safety_gate_node.dir/src/cmd_vel_safety_gate_node.cpp.o] 错误 1
+gmake[1]: *** [CMakeFiles/Makefile2:230：CMakeFiles/cmd_vel_safety_gate_node.dir/all] 错误 2
+gmake[1]: *** 正在等待未完成的任务....
+[ 85%] Linking CXX executable joystick_local_path_node
+[ 85%] Built target joystick_local_path_node
+[ 92%] Linking CXX executable obstacle_cloud_filter_node
+[ 92%] Built target obstacle_cloud_filter_node
+gmake: *** [Makefile:146：all] 错误 2

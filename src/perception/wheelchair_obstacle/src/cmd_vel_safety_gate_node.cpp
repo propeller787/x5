@@ -53,6 +53,7 @@
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 #include <interface/msg/car_info.hpp>
+#include <interface/msg/joystick.hpp>
 
 namespace
 {
@@ -90,6 +91,7 @@ public:
   using PointCloud2 = sensor_msgs::msg::PointCloud2;
   using UInt8 = std_msgs::msg::UInt8;
   using CarInfo = interface::msg::CarInfo;
+  using Joystick = interface::msg::Joystick;
 
   enum class Mode : uint8_t { PASSTHROUGH = 0, AVOID = 1 };
 
@@ -104,6 +106,14 @@ public:
     input_type_ = declare_parameter<std::string>("input_type", "twist");
     require_safety_state_ = declare_parameter<bool>("require_safety_state", false);
     safety_fault_threshold_ = declare_parameter<int>("safety_fault_threshold", 1);
+
+    // Raw rocker (interface/msg/Joystick, rocker_x/y in [-100, 100]) from
+    // handle_can_adapter. Used to trigger an immediate stop the moment the
+    // user releases the stick -- /handle/control lags because ODrive applies
+    // an internal ramp/filter to top_input_vel (0x220).
+    rocker_topic_ = declare_parameter<std::string>("rocker_topic", "/sensor/joystick");
+    rocker_deadband_ = declare_parameter<double>("rocker_deadband", 5.0);
+    rocker_timeout_ = declare_parameter<double>("rocker_timeout", 0.30);
 
     cmd_timeout_ = declare_parameter<double>("cmd_timeout", 0.20);
     publish_rate_hz_ = declare_parameter<double>("publish_rate_hz", 50.0);
@@ -166,6 +176,12 @@ public:
       handle_topic_, 10,
       std::bind(&CmdVelSafetyGateNode::onHandle, this, std::placeholders::_1));
 
+    // Raw rocker: SensorDataQoS to match the ~50 Hz publisher in
+    // handle_can_adapter, no latch so we always see the latest value.
+    joystick_sub_ = create_subscription<Joystick>(
+      rocker_topic_, rclcpp::SensorDataQoS(),
+      std::bind(&CmdVelSafetyGateNode::onJoystick, this, std::placeholders::_1));
+
     cloud_sub_ = create_subscription<PointCloud2>(
       obstacle_topic_, rclcpp::SensorDataQoS(),
       std::bind(&CmdVelSafetyGateNode::onCloud, this, std::placeholders::_1));
@@ -191,13 +207,14 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "cmd_vel_safety_gate: in=%s handle=%s cloud=%s out=%s input_type=%s "
+      "cmd_vel_safety_gate: in=%s handle=%s rocker=%s cloud=%s out=%s input_type=%s "
       "passthrough=%d d_engage=%.2f d_release=%.2f min_dwell=%.2f "
-      "sector_half=%.2f cmd_timeout=%.2f vx=[%.2f,%.2f] wz_max=%.2f",
-      in_stamped_topic_.c_str(), handle_topic_.c_str(), obstacle_topic_.c_str(),
-      out_topic_.c_str(), input_type_.c_str(), passthrough_enable_ ? 1 : 0,
+      "sector_half=%.2f cmd_timeout=%.2f rocker_deadband=%.1f vx=[%.2f,%.2f] wz_max=%.2f",
+      in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
+      obstacle_topic_.c_str(), out_topic_.c_str(), input_type_.c_str(),
+      passthrough_enable_ ? 1 : 0,
       d_engage_, d_release_, min_dwell_, sector_half_angle_, cmd_timeout_,
-      vx_min_, vx_max_, wz_max_);
+      rocker_deadband_, vx_min_, vx_max_, wz_max_);
   }
 
 private:
@@ -229,6 +246,20 @@ private:
     latest_handle_ = *msg;
     latest_handle_stamp_ = now();
     have_handle_ = true;
+  }
+
+  void onJoystick(const Joystick::SharedPtr msg)
+  {
+    // Raw rocker (CAN 0x226, ~50 Hz). We only use this to detect "rocker
+    // released" -- the actual commanded velocity still comes from
+    // /handle/control. Keeping the read here tiny (no locks) so the ~50 Hz
+    // callback never blocks the timer thread.
+    const bool at_origin =
+      (std::abs(msg->rocker_x) <= rocker_deadband_) &&
+      (std::abs(msg->rocker_y) <= rocker_deadband_);
+    rocker_at_origin_.store(at_origin, std::memory_order_relaxed);
+    latest_rocker_stamp_ns_.store(now().nanoseconds(), std::memory_order_relaxed);
+    have_rocker_.store(true, std::memory_order_relaxed);
   }
 
   void onCloud(const PointCloud2::SharedPtr msg)
@@ -409,6 +440,27 @@ private:
 
     const Mode mode = decideMode(d, d_eng, d_rel, cloud_ok, tnow);
 
+    // Rocker released -> immediate stop, regardless of mode. We watch the raw
+    // rocker (/sensor/joystick, CAN 0x226) instead of /handle/control because
+    // ODrive applies an internal ramp/filter to top_input_vel (0x220), which
+    // makes /handle/control.linear.x lag the physical stick by 100~500 ms. The
+    // raw rocker reflects the user's actual intent within one CAN frame. Stale
+    // or missing rocker data also triggers the halt (fail-safe).
+    if (have_rocker_.load(std::memory_order_relaxed)) {
+      const auto rocker_age_ns =
+        tnow.nanoseconds() -
+        latest_rocker_stamp_ns_.load(std::memory_order_relaxed);
+      const bool rocker_stale = rocker_age_ns >
+        static_cast<int64_t>(rocker_timeout_ * 1e9);
+      if (rocker_stale) {
+        halted = true;
+        reason = "joystick stale";
+      } else if (rocker_at_origin_.load(std::memory_order_relaxed)) {
+        halted = true;
+        reason = "joystick released (rocker at origin)";
+      }
+    }
+
     // Select the velocity source for this mode and check its freshness.
     Twist target;
     bool input_ok = false;
@@ -515,6 +567,9 @@ private:
   std::string obstacle_topic_;
   std::string safety_state_topic_;
   std::string input_type_;
+  std::string rocker_topic_;
+  double rocker_deadband_{5.0};
+  double rocker_timeout_{0.30};
   bool require_safety_state_{false};
   int safety_fault_threshold_{1};
   double cmd_timeout_{0.20};
@@ -550,6 +605,7 @@ private:
   rclcpp::Subscription<Twist>::SharedPtr twist_sub_;
   rclcpp::Subscription<TwistStamped>::SharedPtr twist_stamped_sub_;
   rclcpp::Subscription<Twist>::SharedPtr handle_sub_;
+  rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<UInt8>::SharedPtr safety_sub_;
   rclcpp::Subscription<CarInfo>::SharedPtr car_info_sub_;
@@ -567,6 +623,13 @@ private:
   Twist latest_handle_;
   rclcpp::Time latest_handle_stamp_{0, 0, RCL_ROS_TIME};
   bool have_handle_{false};
+
+  // Raw rocker state. Accessed from the onJoystick callback (~50 Hz) and
+  // onTimer (50 Hz); atomics + rclcpp::Time are not copy-constructible, so we
+  // store the stamp's nanoseconds as int64_t to keep the load cheap.
+  std::atomic<bool> rocker_at_origin_{true};     // safe default: stop
+  std::atomic<int64_t> latest_rocker_stamp_ns_{0};
+  std::atomic<bool> have_rocker_{false};
 
   mutable std::mutex cloud_mutex_;
   std::vector<std::pair<float, float>> cloud_pts_;

@@ -1,0 +1,28 @@
+[0.000000] (-) TimerEvent: {}
+[0.000092] (-) JobUnselected: {'identifier': 'PahoMqttCpp'}
+[0.000117] (-) JobUnselected: {'identifier': 'cloud_manager'}
+[0.000141] (-) JobUnselected: {'identifier': 'common'}
+[0.000157] (-) JobUnselected: {'identifier': 'cpr'}
+[0.000171] (-) JobUnselected: {'identifier': 'fdilink_ahrs'}
+[0.000185] (-) JobUnselected: {'identifier': 'interface'}
+[0.000199] (-) JobUnselected: {'identifier': 'ldlidar_stl_ros2'}
+[0.000212] (-) JobUnselected: {'identifier': 'lidar_fusion'}
+[0.000225] (-) JobUnselected: {'identifier': 'lidar_imu_fusion'}
+[0.000238] (-) JobUnselected: {'identifier': 'lidar_obstacle_groundmodel'}
+[0.000251] (-) JobUnselected: {'identifier': 'localization'}
+[0.000264] (-) JobUnselected: {'identifier': 'lx_camera_ros'}
+[0.000277] (-) JobUnselected: {'identifier': 'mqtt_module'}
+[0.000291] (-) JobUnselected: {'identifier': 'nav2_mppi_controller'}
+[0.000305] (-) JobUnselected: {'identifier': 'oradar_lidar'}
+[0.000420] (-) JobUnselected: {'identifier': 'paho.mqtt.c'}
+[0.000462] (-) JobUnselected: {'identifier': 'podao_detect'}
+[0.000485] (-) JobUnselected: {'identifier': 'safety_node'}
+[0.000499] (-) JobUnselected: {'identifier': 'scene_node'}
+[0.000513] (-) JobUnselected: {'identifier': 'scene_service'}
+[0.000528] (-) JobUnselected: {'identifier': 'sensor'}
+[0.000622] (-) JobUnselected: {'identifier': 'tft_manager'}
+[0.000639] (-) JobUnselected: {'identifier': 'ydlidar_ros2_driver'}
+[0.000661] (wheelchair_obstacle) JobQueued: {'identifier': 'wheelchair_obstacle', 'dependencies': OrderedDict([('interface', '/home/howard/code/freego_2025_tft/install/interface')])}
+[0.000690] (wheelchair_obstacle) JobStarted: {'identifier': 'wheelchair_obstacle'}
+[0.009466] (wheelchair_obstacle) JobEnded: {'identifier': 'wheelchair_obstacle', 'rc': 1}
+[0.019758] (-) EventReactorShutdown: {}

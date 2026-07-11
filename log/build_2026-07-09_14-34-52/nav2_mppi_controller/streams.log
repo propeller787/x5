@@ -1,0 +1,210 @@
+[0.005s] Invoking command in '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller': CMAKE_PREFIX_PATH=/opt/ros/humble PS1=\n(TraeAI-1) \w [$?] $ __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake /home/howard/code/freego_2025_tft/src/nav2_mppi_controller -DCMAKE_INSTALL_PREFIX=/home/howard/code/freego_2025_tft/install/nav2_mppi_controller
+[0.085s] -- The C compiler identification is GNU 11.4.0
+[0.140s] -- The CXX compiler identification is GNU 11.4.0
+[0.147s] -- Detecting C compiler ABI info
+[0.197s] -- Detecting C compiler ABI info - done
+[0.200s] -- Check for working C compiler: /usr/bin/cc - skipped
+[0.201s] -- Detecting C compile features
+[0.201s] -- Detecting C compile features - done
+[0.204s] -- Detecting CXX compiler ABI info
+[0.277s] -- Detecting CXX compiler ABI info - done
+[0.282s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[0.282s] -- Detecting CXX compile features
+[0.283s] -- Detecting CXX compile features - done
+[0.286s] -- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)
+[0.414s] -- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter 
+[0.513s] -- Performing Test arch_native_supported
+[0.577s] -- Performing Test arch_native_supported - Success
+[0.583s] -- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)
+[0.621s] -- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+[0.625s] -- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)
+[0.633s] -- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+[0.645s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.656s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.687s] -- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+[0.689s] -- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)
+[0.756s] -- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.2")  
+[0.774s] -- Found FastRTPS: /opt/ros/humble/include  
+[0.811s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[0.825s] -- Looking for pthread.h
+[0.914s] -- Looking for pthread.h - found
+[0.914s] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+[0.974s] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+[0.975s] -- Found Threads: TRUE  
+[1.015s] -- Found nav2_common: 1.1.20 (/opt/ros/humble/share/nav2_common/cmake)
+[1.016s] -- Found pluginlib: 5.1.4 (/opt/ros/humble/share/pluginlib/cmake)
+[1.037s] -- Found tf2: 0.25.20 (/opt/ros/humble/share/tf2/cmake)
+[1.052s] -- Found visualization_msgs: 4.9.1 (/opt/ros/humble/share/visualization_msgs/cmake)
+[1.079s] -- Found nav_msgs: 4.9.1 (/opt/ros/humble/share/nav_msgs/cmake)
+[1.091s] -- Found nav2_core: 1.1.20 (/opt/ros/humble/share/nav2_core/cmake)
+[1.227s] -- Found Eigen3: TRUE (found version "3.4.0") 
+[1.227s] -- Ensuring Eigen3 include directory is part of orocos-kdl CMake target
+[1.278s] -- Found tf2_eigen: 0.25.20 (/opt/ros/humble/share/tf2_eigen/cmake)
+[1.280s] -- Setting build type to Release as none was specified.
+[1.280s] -- Performing Test COMPILER_SUPPORTS_AVX512
+[1.352s] -- Performing Test COMPILER_SUPPORTS_AVX512 - Success
+[1.352s] -- Performing Test COMPILER_SUPPORTS_SSE4
+[1.436s] -- Performing Test COMPILER_SUPPORTS_SSE4 - Success
+[1.436s] -- Performing Test COMPILER_SUPPORTS_AVX2
+[1.494s] -- Performing Test COMPILER_SUPPORTS_AVX2 - Success
+[1.494s] -- Performing Test COMPILER_SUPPORTS_FMA
+[1.565s] -- Performing Test COMPILER_SUPPORTS_FMA - Success
+[1.667s] -- Found ament_lint_auto: 0.12.15 (/opt/ros/humble/share/ament_lint_auto/cmake)
+[1.670s] -- Found ament_cmake_gtest: 1.3.14 (/opt/ros/humble/share/ament_cmake_gtest/cmake)
+[1.745s] -- Found gtest sources under '/opt/ros/humble/src/gtest_vendor': C++ tests using 'Google Test' will be built
+[2.171s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[2.172s] -- Configured cppcheck include dirs: /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include
+[2.172s] -- Configured cppcheck exclude dirs and/or files: 
+[2.174s] -- Added test 'cpplint' to check C / C++ code against the Google style
+[2.174s] -- Configured cpplint exclude dirs and/or files: 
+[2.175s] -- Added test 'lint_cmake' to check CMake code style
+[2.177s] -- Added test 'uncrustify' to check C / C++ code style
+[2.177s] -- Configured uncrustify additional arguments: 
+[2.177s] -- Added test 'xmllint' to check XML markup files
+[2.179s] -- Configuring done
+[2.507s] -- Generating done
+[2.547s] -- Build files have been written to: /home/howard/code/freego_2025_tft/build/nav2_mppi_controller
+[2.557s] Invoked command in '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble PS1=\n(TraeAI-1) \w [$?] $ __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake /home/howard/code/freego_2025_tft/src/nav2_mppi_controller -DCMAKE_INSTALL_PREFIX=/home/howard/code/freego_2025_tft/install/nav2_mppi_controller
+[2.558s] Invoking command in '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller': CMAKE_PREFIX_PATH=/opt/ros/humble PS1=\n(TraeAI-1) \w [$?] $ __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --build /home/howard/code/freego_2025_tft/build/nav2_mppi_controller -- -j24 -l24
+[2.604s] [  4%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/path_align_legacy_critic.cpp.o
+[2.604s] [  4%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/cost_critic.cpp.o
+[2.604s] [  6%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/goal_critic.cpp.o
+[2.604s] [  8%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/goal_angle_critic.cpp.o
+[2.604s] [ 10%] Building CXX object CMakeFiles/mppi_controller.dir/src/controller.cpp.o
+[2.604s] [ 12%] Building CXX object gtest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+[2.604s] [ 14%] Building CXX object CMakeFiles/mppi_controller.dir/src/trajectory_visualizer.cpp.o
+[2.604s] [ 16%] Building CXX object CMakeFiles/mppi_controller.dir/src/optimizer.cpp.o
+[2.604s] [ 18%] Building CXX object CMakeFiles/mppi_controller.dir/src/critic_manager.cpp.o
+[2.604s] [ 22%] Building CXX object gtest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+[2.604s] [ 22%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/obstacles_critic.cpp.o
+[2.604s] [ 24%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/path_angle_critic.cpp.o
+[2.604s] [ 30%] Building CXX object CMakeFiles/mppi_controller.dir/src/parameters_handler.cpp.o
+[2.604s] [ 30%] Building CXX object CMakeFiles/mppi_controller.dir/src/path_handler.cpp.o
+[2.604s] [ 30%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/twirling_critic.cpp.o
+[2.605s] [ 32%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/constraint_critic.cpp.o
+[2.605s] [ 36%] Building CXX object CMakeFiles/mppi_controller.dir/src/noise_generator.cpp.o
+[2.605s] [ 36%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/path_align_critic.cpp.o
+[2.605s] [ 38%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/path_follow_critic.cpp.o
+[2.605s] [ 40%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/prefer_forward_critic.cpp.o
+[2.605s] [ 42%] Building CXX object CMakeFiles/mppi_critics.dir/src/critics/velocity_deadband_critic.cpp.o
+[4.164s] [ 44%] Linking CXX static library libgtest_main.a
+[4.224s] [ 44%] Built target gtest_main
+[12.811s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp: In lambda function:
+[12.811s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:18: error: no match for ‘operator-’ (operand types are ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’ and ‘rclcpp::Time’)
+[12.811s]    66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()
+[12.811s]       |            ~~~~~ ^ ~~~~~~~~~~~~~~~~~~~~~~
+[12.812s]       |            |       |
+[12.812s]       |            |       rclcpp::Time
+[12.812s]       |            const builtin_interfaces::msg::Time_<std::allocator<void> >
+[12.812s] In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+[12.812s]                  from /usr/include/c++/11/bits/char_traits.h:39,
+[12.812s]                  from /usr/include/c++/11/string:40,
+[12.812s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:18,
+[12.812s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[12.812s] /usr/include/c++/11/bits/stl_iterator.h:577:5: note: candidate: ‘template<class _IteratorL, class _IteratorR> constexpr decltype ((__y.base() - __x.base())) std::operator-(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_IteratorR>&)’
+[12.812s]   577 |     operator-(const reverse_iterator<_IteratorL>& __x,
+[12.812s]       |     ^~~~~~~~
+[12.812s] /usr/include/c++/11/bits/stl_iterator.h:577:5: note:   template argument deduction/substitution failed:
+[12.812s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’ is not derived from ‘const std::reverse_iterator<_Iterator>’
+[12.812s]    66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()
+[12.812s]       |                    ^~~~~~~~~~~~~~~~~~~~~~
+[12.813s] In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+[12.813s]                  from /usr/include/c++/11/bits/char_traits.h:39,
+[12.813s]                  from /usr/include/c++/11/string:40,
+[12.813s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:18,
+[12.813s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[12.813s] /usr/include/c++/11/bits/stl_iterator.h:1693:5: note: candidate: ‘template<class _IteratorL, class _IteratorR> constexpr decltype ((__x.base() - __y.base())) std::operator-(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorR>&)’
+[12.813s]  1693 |     operator-(const move_iterator<_IteratorL>& __x,
+[12.813s]       |     ^~~~~~~~
+[12.813s] /usr/include/c++/11/bits/stl_iterator.h:1693:5: note:   template argument deduction/substitution failed:
+[12.813s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’ is not derived from ‘const std::move_iterator<_IteratorL>’
+[12.813s]    66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()
+[12.814s]       |                    ^~~~~~~~~~~~~~~~~~~~~~
+[12.818s] In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+[12.819s]                  from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+[12.819s]                  from /usr/include/xsimd/xsimd.hpp:16,
+[12.819s]                  from /usr/include/xtensor/xtensor_config.hpp:75,
+[12.819s]                  from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+[12.819s]                  from /usr/include/xtensor/xtensor.hpp:19,
+[12.819s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+[12.819s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+[12.819s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[12.819s] /usr/include/c++/11/complex:362:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&, const std::complex<_Tp>&)’
+[12.819s]   362 |     operator-(const complex<_Tp>& __x, const complex<_Tp>& __y)
+[12.819s]       |     ^~~~~~~~
+[12.819s] /usr/include/c++/11/complex:362:5: note:   template argument deduction/substitution failed:
+[12.820s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’ is not derived from ‘const std::complex<_Tp>’
+[12.820s]    66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()
+[12.820s]       |                    ^~~~~~~~~~~~~~~~~~~~~~
+[12.820s] In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+[12.820s]                  from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+[12.820s]                  from /usr/include/xsimd/xsimd.hpp:16,
+[12.820s]                  from /usr/include/xtensor/xtensor_config.hpp:75,
+[12.820s]                  from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+[12.820s]                  from /usr/include/xtensor/xtensor.hpp:19,
+[12.820s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+[12.820s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+[12.820s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[12.821s] /usr/include/c++/11/complex:371:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&, const _Tp&)’
+[12.821s]   371 |     operator-(const complex<_Tp>& __x, const _Tp& __y)
+[12.821s]       |     ^~~~~~~~
+[12.821s] /usr/include/c++/11/complex:371:5: note:   template argument deduction/substitution failed:
+[12.821s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’ is not derived from ‘const std::complex<_Tp>’
+[12.821s]    66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()
+[12.821s]       |                    ^~~~~~~~~~~~~~~~~~~~~~
+[12.821s] In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+[12.821s]                  from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+[12.821s]                  from /usr/include/xsimd/xsimd.hpp:16,
+[12.821s]                  from /usr/include/xtensor/xtensor_config.hpp:75,
+[12.821s]                  from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+[12.821s]                  from /usr/include/xtensor/xtensor.hpp:19,
+[12.821s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+[12.828s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+[12.828s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[12.828s] /usr/include/c++/11/complex:380:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const _Tp&, const std::complex<_Tp>&)’
+[12.828s]   380 |     operator-(const _Tp& __x, const complex<_Tp>& __y)
+[12.828s]       |     ^~~~~~~~
+[12.828s] /usr/include/c++/11/complex:380:5: note:   template argument deduction/substitution failed:
+[12.828s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   ‘rclcpp::Time’ is not derived from ‘const std::complex<_Tp>’
+[12.828s]    66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()
+[12.828s]       |                    ^~~~~~~~~~~~~~~~~~~~~~
+[12.829s] In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+[12.829s]                  from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+[12.829s]                  from /usr/include/xsimd/xsimd.hpp:16,
+[12.829s]                  from /usr/include/xtensor/xtensor_config.hpp:75,
+[12.829s]                  from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+[12.829s]                  from /usr/include/xtensor/xtensor.hpp:19,
+[12.829s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+[12.829s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+[12.829s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[12.829s] /usr/include/c++/11/complex:457:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&)’
+[12.829s]   457 |     operator-(const complex<_Tp>& __x)
+[12.829s]       |     ^~~~~~~~
+[12.829s] /usr/include/c++/11/complex:457:5: note:   template argument deduction/substitution failed:
+[12.830s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:20: note:   ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’ is not derived from ‘const std::complex<_Tp>’
+[12.830s]    66 |         ? (stamp - dbg_last_pcloud_stamp_).seconds()
+[12.830s]       |                    ^~~~~~~~~~~~~~~~~~~~~~
+[12.865s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp: In member function ‘virtual geometry_msgs::msg::TwistStamped nav2_mppi_controller::MPPIController::computeVelocityCommands(const PoseStamped&, const Twist&, nav2_core::GoalChecker*)’:
+[12.865s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:133:17: error: ‘_frame_t0’ was not declared in this scope; did you mean ‘_frame_t1’?
+[12.865s]   133 |     _frame_t1 - _frame_t0).count();
+[12.865s]       |                 ^~~~~~~~~
+[12.865s]       |                 _frame_t1
+[12.921s] In file included from /opt/ros/humble/include/rclcpp/rclcpp/logging.hpp:24,
+[12.921s]                  from /opt/ros/humble/include/rclcpp/rclcpp/client.hpp:40,
+[12.921s]                  from /opt/ros/humble/include/rclcpp/rclcpp/callback_group.hpp:24,
+[12.921s]                  from /opt/ros/humble/include/rclcpp_lifecycle/rclcpp_lifecycle/lifecycle_node.hpp:55,
+[12.921s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/tools/path_handler.hpp:25,
+[12.921s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:21,
+[12.922s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[12.922s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:137:16: error: ‘_pcloud_age_s’ was not declared in this scope
+[12.922s]   137 |     _frame_ms, _pcloud_age_s, cmd.twist.linear.x, cmd.twist.angular.z);
+[12.922s]       |                ^~~~~~~~~~~~~
+[15.207s] [ 46%] Linking CXX static library libgtest.a
+[15.258s] [ 46%] Built target gtest
+[19.787s] gmake[2]: *** [CMakeFiles/mppi_controller.dir/build.make:76：CMakeFiles/mppi_controller.dir/src/controller.cpp.o] 错误 1
+[19.787s] gmake[2]: *** 正在等待未完成的任务....
+[19.946s] [ 48%] Linking CXX shared library libmppi_critics.so
+[20.231s] [ 48%] Built target mppi_critics
+[22.923s] gmake[1]: *** [CMakeFiles/Makefile2:196：CMakeFiles/mppi_controller.dir/all] 错误 2
+[22.923s] gmake: *** [Makefile:146：all] 错误 2
+[22.925s] Invoked command in '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller' returned '2': CMAKE_PREFIX_PATH=/opt/ros/humble PS1=\n(TraeAI-1) \w [$?] $ __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --build /home/howard/code/freego_2025_tft/build/nav2_mppi_controller -- -j24 -l24

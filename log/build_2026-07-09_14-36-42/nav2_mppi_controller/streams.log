@@ -1,0 +1,105 @@
+[0.006s] Invoking command in '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller': CMAKE_PREFIX_PATH=/opt/ros/humble PS1=\n(TraeAI-1) \w [$?] $ __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --build /home/howard/code/freego_2025_tft/build/nav2_mppi_controller -- -j24 -l24
+[0.055s] [  4%] Built target gtest_main
+[0.060s] [  8%] Built target gtest
+[0.074s] Consolidate compiler generated dependencies of target mppi_controller
+[0.082s] [ 34%] Built target mppi_critics
+[0.097s] [ 36%] Building CXX object CMakeFiles/mppi_controller.dir/src/controller.cpp.o
+[2.953s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp: In lambda function:
+[2.953s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:34: error: no match for ‘operator-’ (operand types are ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} and ‘rclcpp::Time’)
+[2.953s]    66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+[2.953s]       |                            ~~~~~ ^ ~~~~~~~~~~~~~~~~~~~~~~
+[2.953s]       |                            |       |
+[2.954s]       |                            |       rclcpp::Time
+[2.954s]       |                            const Time {aka const builtin_interfaces::msg::Time_<std::allocator<void> >}
+[2.954s] In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+[2.954s]                  from /usr/include/c++/11/bits/char_traits.h:39,
+[2.954s]                  from /usr/include/c++/11/string:40,
+[2.954s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:18,
+[2.954s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[2.954s] /usr/include/c++/11/bits/stl_iterator.h:577:5: note: candidate: ‘template<class _IteratorL, class _IteratorR> constexpr decltype ((__y.base() - __x.base())) std::operator-(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_IteratorR>&)’
+[2.954s]   577 |     operator-(const reverse_iterator<_IteratorL>& __x,
+[2.954s]       |     ^~~~~~~~
+[2.954s] /usr/include/c++/11/bits/stl_iterator.h:577:5: note:   template argument deduction/substitution failed:
+[2.954s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::reverse_iterator<_Iterator>’
+[2.954s]    66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+[2.954s]       |                                    ^~~~~~~~~~~~~~~~~~~~~~
+[2.954s] In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+[2.954s]                  from /usr/include/c++/11/bits/char_traits.h:39,
+[2.954s]                  from /usr/include/c++/11/string:40,
+[2.954s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:18,
+[2.955s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[2.955s] /usr/include/c++/11/bits/stl_iterator.h:1693:5: note: candidate: ‘template<class _IteratorL, class _IteratorR> constexpr decltype ((__x.base() - __y.base())) std::operator-(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorR>&)’
+[2.955s]  1693 |     operator-(const move_iterator<_IteratorL>& __x,
+[2.955s]       |     ^~~~~~~~
+[2.955s] /usr/include/c++/11/bits/stl_iterator.h:1693:5: note:   template argument deduction/substitution failed:
+[2.955s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::move_iterator<_IteratorL>’
+[2.955s]    66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+[2.955s]       |                                    ^~~~~~~~~~~~~~~~~~~~~~
+[2.955s] In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+[2.955s]                  from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+[2.955s]                  from /usr/include/xsimd/xsimd.hpp:16,
+[2.955s]                  from /usr/include/xtensor/xtensor_config.hpp:75,
+[2.955s]                  from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+[2.955s]                  from /usr/include/xtensor/xtensor.hpp:19,
+[2.955s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+[2.955s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+[2.955s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[2.955s] /usr/include/c++/11/complex:362:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&, const std::complex<_Tp>&)’
+[2.955s]   362 |     operator-(const complex<_Tp>& __x, const complex<_Tp>& __y)
+[2.956s]       |     ^~~~~~~~
+[2.956s] /usr/include/c++/11/complex:362:5: note:   template argument deduction/substitution failed:
+[2.956s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::complex<_Tp>’
+[2.956s]    66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+[2.956s]       |                                    ^~~~~~~~~~~~~~~~~~~~~~
+[2.956s] In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+[2.956s]                  from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+[2.956s]                  from /usr/include/xsimd/xsimd.hpp:16,
+[2.956s]                  from /usr/include/xtensor/xtensor_config.hpp:75,
+[2.956s]                  from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+[2.956s]                  from /usr/include/xtensor/xtensor.hpp:19,
+[2.956s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+[2.956s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+[2.956s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[2.956s] /usr/include/c++/11/complex:371:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&, const _Tp&)’
+[2.956s]   371 |     operator-(const complex<_Tp>& __x, const _Tp& __y)
+[2.956s]       |     ^~~~~~~~
+[2.956s] /usr/include/c++/11/complex:371:5: note:   template argument deduction/substitution failed:
+[2.957s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::complex<_Tp>’
+[2.957s]    66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+[2.957s]       |                                    ^~~~~~~~~~~~~~~~~~~~~~
+[2.957s] In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+[2.957s]                  from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+[2.957s]                  from /usr/include/xsimd/xsimd.hpp:16,
+[2.957s]                  from /usr/include/xtensor/xtensor_config.hpp:75,
+[2.957s]                  from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+[2.957s]                  from /usr/include/xtensor/xtensor.hpp:19,
+[2.957s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+[2.957s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+[2.957s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[2.957s] /usr/include/c++/11/complex:380:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const _Tp&, const std::complex<_Tp>&)’
+[2.957s]   380 |     operator-(const _Tp& __x, const complex<_Tp>& __y)
+[2.957s]       |     ^~~~~~~~
+[2.957s] /usr/include/c++/11/complex:380:5: note:   template argument deduction/substitution failed:
+[2.957s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘rclcpp::Time’ is not derived from ‘const std::complex<_Tp>’
+[2.957s]    66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+[2.958s]       |                                    ^~~~~~~~~~~~~~~~~~~~~~
+[2.958s] In file included from /usr/include/xsimd/types/xsimd_base.hpp:16,
+[2.958s]                  from /usr/include/xsimd/types/xsimd_traits.hpp:16,
+[2.958s]                  from /usr/include/xsimd/xsimd.hpp:16,
+[2.958s]                  from /usr/include/xtensor/xtensor_config.hpp:75,
+[2.958s]                  from /usr/include/xtensor/xbuffer_adaptor.hpp:21,
+[2.958s]                  from /usr/include/xtensor/xtensor.hpp:19,
+[2.958s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/optimizer.hpp:21,
+[2.958s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/include/nav2_mppi_controller/controller.hpp:22,
+[2.958s]                  from /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:17:
+[2.958s] /usr/include/c++/11/complex:457:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator-(const std::complex<_Tp>&)’
+[2.958s]   457 |     operator-(const complex<_Tp>& __x)
+[2.958s]       |     ^~~~~~~~
+[2.958s] /usr/include/c++/11/complex:457:5: note:   template argument deduction/substitution failed:
+[2.958s] /home/howard/code/freego_2025_tft/src/nav2_mppi_controller/src/controller.cpp:66:36: note:   ‘const Time’ {aka ‘const builtin_interfaces::msg::Time_<std::allocator<void> >’} is not derived from ‘const std::complex<_Tp>’
+[2.958s]    66 |         ? rclcpp::Duration(stamp - dbg_last_pcloud_stamp_).seconds()
+[2.958s]       |                                    ^~~~~~~~~~~~~~~~~~~~~~
+[5.681s] gmake[2]: *** [CMakeFiles/mppi_controller.dir/build.make:76：CMakeFiles/mppi_controller.dir/src/controller.cpp.o] 错误 1
+[5.681s] gmake[1]: *** [CMakeFiles/Makefile2:196：CMakeFiles/mppi_controller.dir/all] 错误 2
+[5.681s] gmake: *** [Makefile:146：all] 错误 2
+[5.683s] Invoked command in '/home/howard/code/freego_2025_tft/build/nav2_mppi_controller' returned '2': CMAKE_PREFIX_PATH=/opt/ros/humble PS1=\n(TraeAI-1) \w [$?] $ __trae_PS1=\n(TraeAI-1) \w [$?] $ /usr/bin/cmake --build /home/howard/code/freego_2025_tft/build/nav2_mppi_controller -- -j24 -l24

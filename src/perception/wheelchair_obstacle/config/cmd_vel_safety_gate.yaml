@@ -4,6 +4,15 @@ cmd_vel_safety_gate_node:
     cmd_vel_out: "/nav/control"
     # 透传（PASSTHROUGH）源：来自固件、已按挡位缩放的摇杆速度。
     handle_control_topic: "/handle/control"
+    # 原始摇杆（CAN 0x226, interface/msg/Joystick, rocker_x/y in [-100, 100]）。
+    # 用来在用户松手的那一刻立刻触发停车：/handle/control 来自 ODrive 的
+    # top_input_vel (0x220)，固件内部有 ramp/滤波，会有 100~500 ms 滞后；
+    # 原始摇杆只过 CAN 总线，几乎即时反映用户意图。
+    rocker_topic: "/sensor/joystick"
+    # |rocker_x|, |rocker_y| <= rocker_deadband 即视为回正（原始单位）。
+    rocker_deadband: 5.0
+    # 超过该时长没收到摇杆消息也判失效（fail-safe 停车）。
+    rocker_timeout: 0.30
     # 障碍物距离源：用于“透传<->避障”之间的仲裁。
     obstacle_points_topic: "/perception/obstacle_points"
     safety_state_topic: "/safety_state"

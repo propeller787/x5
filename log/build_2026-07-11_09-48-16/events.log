@@ -1,0 +1,222 @@
+[0.000000] (-) TimerEvent: {}
+[0.000174] (-) JobUnselected: {'identifier': 'PahoMqttCpp'}
+[0.000191] (-) JobUnselected: {'identifier': 'cloud_manager'}
+[0.000200] (-) JobUnselected: {'identifier': 'common'}
+[0.000209] (-) JobUnselected: {'identifier': 'cpr'}
+[0.000217] (-) JobUnselected: {'identifier': 'fdilink_ahrs'}
+[0.000225] (-) JobUnselected: {'identifier': 'interface'}
+[0.000232] (-) JobUnselected: {'identifier': 'ldlidar_stl_ros2'}
+[0.000240] (-) JobUnselected: {'identifier': 'lidar_fusion'}
+[0.000247] (-) JobUnselected: {'identifier': 'lidar_imu_fusion'}
+[0.000254] (-) JobUnselected: {'identifier': 'lidar_obstacle_groundmodel'}
+[0.000261] (-) JobUnselected: {'identifier': 'localization'}
+[0.000268] (-) JobUnselected: {'identifier': 'lx_camera_ros'}
+[0.000275] (-) JobUnselected: {'identifier': 'mqtt_module'}
+[0.000282] (-) JobUnselected: {'identifier': 'nav2_mppi_controller'}
+[0.000289] (-) JobUnselected: {'identifier': 'oradar_lidar'}
+[0.000296] (-) JobUnselected: {'identifier': 'paho.mqtt.c'}
+[0.000303] (-) JobUnselected: {'identifier': 'podao_detect'}
+[0.000314] (-) JobUnselected: {'identifier': 'safety_node'}
+[0.000373] (-) JobUnselected: {'identifier': 'scene_node'}
+[0.000381] (-) JobUnselected: {'identifier': 'scene_service'}
+[0.000389] (-) JobUnselected: {'identifier': 'sensor'}
+[0.000396] (-) JobUnselected: {'identifier': 'tft_manager'}
+[0.000404] (-) JobUnselected: {'identifier': 'ydlidar_ros2_driver'}
+[0.000413] (wheelchair_obstacle) JobQueued: {'identifier': 'wheelchair_obstacle', 'dependencies': OrderedDict([('interface', '/home/howard/code/freego_2025_tft/install/interface')])}
+[0.000429] (wheelchair_obstacle) JobStarted: {'identifier': 'wheelchair_obstacle'}
+[0.007242] (wheelchair_obstacle) JobProgress: {'identifier': 'wheelchair_obstacle', 'progress': 'cmake'}
+[0.008084] (wheelchair_obstacle) JobProgress: {'identifier': 'wheelchair_obstacle', 'progress': 'build'}
+[0.008720] (wheelchair_obstacle) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle', '--', '-j24', '-l24'], 'cwd': '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('AI_AGENT', 'TRAE'), ('LANGUAGE', 'zh_CN:en'), ('USER', 'howard'), ('LC_TIME', 'zh_CN.UTF-8'), ('XDG_SESSION_TYPE', 'x11'), ('GIT_ASKPASS', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass.sh'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/home/howard/code/freego_2025_tft/install/interface/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('INPUT_METHOD', 'fcitx5'), ('HOME', '/home/howard'), ('CHROME_DESKTOP', 'trae-cn.desktop'), ('CONDA_SHLVL', '0'), ('OLDPWD', '/home/howard/code/freego_2025_tft'), ('TERM_PROGRAM_VERSION', '1.107.1'), ('DESKTOP_SESSION', 'ubuntu'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/trae-cn.desktop'), ('TRAE_SANDBOX_CLI_PATH', '/usr/share/trae-cn/resources/app/modules/sandbox/trae-sandbox'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('PAGER', ''), ('VSCODE_GIT_ASKPASS_MAIN', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass-main.js'), ('PS1', '\\n(TraeAI-1) \\w [$?] $'), ('NUPLAN_DB_VERSION', '/home/howard/code/nuplan/dataset/nuplan-v1.1/mini/2021.07.16.20.45.29_veh-35_01095_01486.db'), ('LC_MONETARY', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_NODE', '/usr/share/trae-cn/trae-cn'), ('MANAGERPID', '2960'), ('TRAE_AI_SHELL_ID', '1'), ('NUPLAN_DATA_ROOT', '/home/howard/code/nuplan/dataset'), ('TRAE_SANDBOX_SOURCE_FLAG_PATH', '/tmp/sandbox-source-flag-53bd7860-f528-4258-962a-7f30283f1205'), ('SYSTEMD_EXEC_PID', '3332'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('_CE_M', ''), ('isArchMatched', '1'), ('_CONDA_ROOT', '/home/howard/miniconda3'), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '15487'), ('TRAE_JWT_TOKEN_PATH', '/home/howard/.trae-cn/trae-jwt-token'), ('TRAE_SANDBOX_STORAGE_PATH', '/home/howard/.config/Trae CN/ModularData/ai-agent/sandbox'), ('SAFE_RM_AUTO_ADD_TEMP', '1'), ('ROS_DISTRO', 'humble'), ('GTK_IM_MODULE', 'xim'), ('LOGNAME', 'howard'), ('SAFE_RM_DENIED_PATH', '/home/howard/code/freego_2025_tft/.git'), ('JOURNAL_STREAM', '8:19008'), ('_', '/home/howard/.local/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('USERNAME', 'howard'), ('TERM', 'xterm-256color'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('TRAE_SANDBOX_LOG_DIR', '/home/howard/.config/Trae CN/logs/20260706T173415/Modular'), ('_CE_CONDA', ''), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '1'), ('HISTCONTROL', 'ignorespace'), ('WINDOWPATH', '2'), ('NUPLAN_MAP_VERSION', 'nuplan-maps-v1.0'), ('PATH', '/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/usr/share/trae-cn/resources/app/bin:/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/home/howard/miniconda3/condabin:/opt/ros/humble/bin:/home/howard/.local/bin:/home/howard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/usr/share/trae-cn/resources/app/node_modules/@vscode/ripgrep/bin'), ('SESSION_MANAGER', 'local/howard-JIGUANG-Series:@/tmp/.ICE-unix/3304,unix/howard-JIGUANG-Series:/tmp/.ICE-unix/3304'), ('INVOCATION_ID', '8abb83de73b346259a660e3145f99a1d'), ('PAPERSIZE', 'a4'), ('XDG_MENU_PREFIX', 'gnome-'), ('LC_ADDRESS', 'zh_CN.UTF-8'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'x11'), ('DISPLAY', ':1'), ('FILESYSTEM_CASE_SENSITIVE', 'true'), ('LANG', 'zh_CN.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('LC_TELEPHONE', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_CONFIG_NAME', '6a33e8d309ba4e398e4917fc'), ('XMODIFIERS', '@im=fcitx'), ('TRAE_SANDBOX_DUMP_DIR', '/home/howard/.config/Trae CN/Crashpad/sandbox-pending'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/gdm/Xauthority'), ('TRAE_BRAND_NAME', 'Trae CN'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-f7db09f0d3.sock'), ('TERM_PROGRAM', 'vscode'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble'), ('CONDA_PYTHON_EXE', '/home/howard/miniconda3/bin/python'), ('SHELL', '/bin/bash'), ('LC_NAME', 'zh_CN.UTF-8'), ('__trae_PS1', '\\n(TraeAI-1) \\w [$?] $'), ('QT_ACCESSIBILITY', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('LC_MEASUREMENT', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_TRACE_FILE', '/tmp/trae_sandbox_trace_cc4c7897-0b0f-4a18-8cd3-5ab28d75b44d.jsonl'), ('GPG_AGENT_INFO', '/run/user/1000/gnupg/S.gpg-agent:0:1'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('_CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('LC_IDENTIFICATION', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('GIT_PAGER', ''), ('QT_IM_MODULE', 'xim'), ('NUPLAN_MAPS_ROOT', '/home/howard/code/nuplan/dataset/maps'), ('PWD', '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle'), ('LC_ALL', 'en_US.UTF-8'), ('SAFE_RM_ALLOWED_PATH', '/home/howard/code/freego_2025_tft:/home/howard/.config/Trae CN/ModularData/ai-agent/hooks_env:/tmp:/home/howard/.cache:/home/howard/.local/lib:/home/howard/.local/bin:/home/howard/.local/share:/home/howard/miniconda3:/home/howard/.conda:/home/howard/.dotnet:/home/howard/.bash_history'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('TERM_PRODUCT', 'Trae'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/home/howard/code/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('SAFE_RM_PROTECTION_FLAG', '/tmp/safe-rm-protection-flag-5c0e2042-b174-43f2-88dd-b1e9c6c0fb71'), ('LC_NUMERIC', 'zh_CN.UTF-8'), ('LC_PAPER', 'zh_CN.UTF-8'), ('COLCON', '1'), ('SAFE_RM_SOURCE_FLAG', '/tmp/safe-rm-source-flag-74684515-2807-4ff3-82b1-2103221c952f'), ('ROS_HOME', '/tmp/ros_home'), ('CMAKE_PREFIX_PATH', '/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble')]), 'shell': False}
+[0.042618] (wheelchair_obstacle) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target gtest_main\n'}
+[0.044555] (wheelchair_obstacle) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target gtest\n'}
+[0.045287] (wheelchair_obstacle) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target rebuild_obstacle_layer\n'}
+[0.047764] (wheelchair_obstacle) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target cmd_vel_safety_gate_node\n'}
+[0.047867] (wheelchair_obstacle) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target joystick_local_path_node\n'}
+[0.050161] (wheelchair_obstacle) StdoutLine: {'line': b'[ 14%] Built target gtest_main\n'}
+[0.052330] (wheelchair_obstacle) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target obstacle_cloud_filter_node\n'}
+[0.054191] (wheelchair_obstacle) StdoutLine: {'line': b'[ 28%] Built target gtest\n'}
+[0.056290] (wheelchair_obstacle) StdoutLine: {'line': b'[ 35%] Building CXX object CMakeFiles/cmd_vel_safety_gate_node.dir/src/cmd_vel_safety_gate_node.cpp.o\n'}
+[0.057577] (wheelchair_obstacle) StdoutLine: {'line': b'[ 50%] Built target rebuild_obstacle_layer\n'}
+[0.059671] (wheelchair_obstacle) StdoutLine: {'line': b'[ 64%] Built target joystick_local_path_node\n'}
+[0.063563] (wheelchair_obstacle) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target test_obstacle_cloud_filter_core\n'}
+[0.071284] (wheelchair_obstacle) StdoutLine: {'line': b'[ 78%] Built target obstacle_cloud_filter_node\n'}
+[0.073021] (wheelchair_obstacle) StdoutLine: {'line': b'[ 92%] Built target test_obstacle_cloud_filter_core\n'}
+[0.099756] (-) TimerEvent: {}
+[0.199993] (-) TimerEvent: {}
+[0.300221] (-) TimerEvent: {}
+[0.400376] (-) TimerEvent: {}
+[0.500579] (-) TimerEvent: {}
+[0.600786] (-) TimerEvent: {}
+[0.701157] (-) TimerEvent: {}
+[0.801370] (-) TimerEvent: {}
+[0.901569] (-) TimerEvent: {}
+[1.001767] (-) TimerEvent: {}
+[1.102069] (-) TimerEvent: {}
+[1.202318] (-) TimerEvent: {}
+[1.302556] (-) TimerEvent: {}
+[1.402770] (-) TimerEvent: {}
+[1.502989] (-) TimerEvent: {}
+[1.603202] (-) TimerEvent: {}
+[1.703412] (-) TimerEvent: {}
+[1.803600] (-) TimerEvent: {}
+[1.903843] (-) TimerEvent: {}
+[2.004039] (-) TimerEvent: {}
+[2.104281] (-) TimerEvent: {}
+[2.204564] (-) TimerEvent: {}
+[2.304776] (-) TimerEvent: {}
+[2.404985] (-) TimerEvent: {}
+[2.505491] (-) TimerEvent: {}
+[2.605707] (-) TimerEvent: {}
+[2.705918] (-) TimerEvent: {}
+[2.806208] (-) TimerEvent: {}
+[2.906500] (-) TimerEvent: {}
+[3.006792] (-) TimerEvent: {}
+[3.106986] (-) TimerEvent: {}
+[3.207182] (-) TimerEvent: {}
+[3.307551] (-) TimerEvent: {}
+[3.407755] (-) TimerEvent: {}
+[3.507996] (-) TimerEvent: {}
+[3.608281] (-) TimerEvent: {}
+[3.708491] (-) TimerEvent: {}
+[3.808697] (-) TimerEvent: {}
+[3.908897] (-) TimerEvent: {}
+[4.009120] (-) TimerEvent: {}
+[4.109345] (-) TimerEvent: {}
+[4.209556] (-) TimerEvent: {}
+[4.309771] (-) TimerEvent: {}
+[4.410077] (-) TimerEvent: {}
+[4.510403] (-) TimerEvent: {}
+[4.610606] (-) TimerEvent: {}
+[4.710790] (-) TimerEvent: {}
+[4.811005] (-) TimerEvent: {}
+[4.911222] (-) TimerEvent: {}
+[5.011387] (-) TimerEvent: {}
+[5.111589] (-) TimerEvent: {}
+[5.211781] (-) TimerEvent: {}
+[5.311989] (-) TimerEvent: {}
+[5.412188] (-) TimerEvent: {}
+[5.512443] (-) TimerEvent: {}
+[5.612710] (-) TimerEvent: {}
+[5.712985] (-) TimerEvent: {}
+[5.813204] (-) TimerEvent: {}
+[5.913377] (-) TimerEvent: {}
+[6.013601] (-) TimerEvent: {}
+[6.113829] (-) TimerEvent: {}
+[6.214144] (-) TimerEvent: {}
+[6.314342] (-) TimerEvent: {}
+[6.414571] (-) TimerEvent: {}
+[6.514747] (-) TimerEvent: {}
+[6.614924] (-) TimerEvent: {}
+[6.715116] (-) TimerEvent: {}
+[6.815424] (-) TimerEvent: {}
+[6.915598] (-) TimerEvent: {}
+[7.015782] (-) TimerEvent: {}
+[7.116072] (-) TimerEvent: {}
+[7.216332] (-) TimerEvent: {}
+[7.316597] (-) TimerEvent: {}
+[7.416799] (-) TimerEvent: {}
+[7.517072] (-) TimerEvent: {}
+[7.617363] (-) TimerEvent: {}
+[7.717679] (-) TimerEvent: {}
+[7.817975] (-) TimerEvent: {}
+[7.918258] (-) TimerEvent: {}
+[8.018446] (-) TimerEvent: {}
+[8.118626] (-) TimerEvent: {}
+[8.218826] (-) TimerEvent: {}
+[8.319005] (-) TimerEvent: {}
+[8.419285] (-) TimerEvent: {}
+[8.519478] (-) TimerEvent: {}
+[8.619631] (-) TimerEvent: {}
+[8.719832] (-) TimerEvent: {}
+[8.820066] (-) TimerEvent: {}
+[8.920327] (-) TimerEvent: {}
+[9.020497] (-) TimerEvent: {}
+[9.120749] (-) TimerEvent: {}
+[9.220982] (-) TimerEvent: {}
+[9.321211] (-) TimerEvent: {}
+[9.421443] (-) TimerEvent: {}
+[9.521592] (-) TimerEvent: {}
+[9.621754] (-) TimerEvent: {}
+[9.721977] (-) TimerEvent: {}
+[9.822210] (-) TimerEvent: {}
+[9.922392] (-) TimerEvent: {}
+[10.022622] (-) TimerEvent: {}
+[10.122769] (-) TimerEvent: {}
+[10.223003] (-) TimerEvent: {}
+[10.323231] (-) TimerEvent: {}
+[10.423452] (-) TimerEvent: {}
+[10.523601] (-) TimerEvent: {}
+[10.623765] (-) TimerEvent: {}
+[10.723932] (-) TimerEvent: {}
+[10.824152] (-) TimerEvent: {}
+[10.924405] (-) TimerEvent: {}
+[11.024560] (-) TimerEvent: {}
+[11.124824] (-) TimerEvent: {}
+[11.225082] (-) TimerEvent: {}
+[11.325241] (-) TimerEvent: {}
+[11.425474] (-) TimerEvent: {}
+[11.525721] (-) TimerEvent: {}
+[11.625967] (-) TimerEvent: {}
+[11.726220] (-) TimerEvent: {}
+[11.819150] (wheelchair_obstacle) StdoutLine: {'line': b'[100%] Linking CXX executable cmd_vel_safety_gate_node\n'}
+[11.826317] (-) TimerEvent: {}
+[11.926611] (-) TimerEvent: {}
+[12.026783] (-) TimerEvent: {}
+[12.126932] (-) TimerEvent: {}
+[12.227084] (-) TimerEvent: {}
+[12.327354] (-) TimerEvent: {}
+[12.427503] (-) TimerEvent: {}
+[12.488011] (wheelchair_obstacle) StdoutLine: {'line': b'[100%] Built target cmd_vel_safety_gate_node\n'}
+[12.527723] (-) TimerEvent: {}
+[12.529423] (wheelchair_obstacle) CommandEnded: {'returncode': 0}
+[12.531460] (wheelchair_obstacle) JobProgress: {'identifier': 'wheelchair_obstacle', 'progress': 'install'}
+[12.541195] (wheelchair_obstacle) Command: {'cmd': ['/usr/bin/cmake', '--install', '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle'], 'cwd': '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('AI_AGENT', 'TRAE'), ('LANGUAGE', 'zh_CN:en'), ('USER', 'howard'), ('LC_TIME', 'zh_CN.UTF-8'), ('XDG_SESSION_TYPE', 'x11'), ('GIT_ASKPASS', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass.sh'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/home/howard/code/freego_2025_tft/install/interface/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('INPUT_METHOD', 'fcitx5'), ('HOME', '/home/howard'), ('CHROME_DESKTOP', 'trae-cn.desktop'), ('CONDA_SHLVL', '0'), ('OLDPWD', '/home/howard/code/freego_2025_tft'), ('TERM_PROGRAM_VERSION', '1.107.1'), ('DESKTOP_SESSION', 'ubuntu'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/trae-cn.desktop'), ('TRAE_SANDBOX_CLI_PATH', '/usr/share/trae-cn/resources/app/modules/sandbox/trae-sandbox'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('PAGER', ''), ('VSCODE_GIT_ASKPASS_MAIN', '/usr/share/trae-cn/resources/app/extensions/git/dist/askpass-main.js'), ('PS1', '\\n(TraeAI-1) \\w [$?] $'), ('NUPLAN_DB_VERSION', '/home/howard/code/nuplan/dataset/nuplan-v1.1/mini/2021.07.16.20.45.29_veh-35_01095_01486.db'), ('LC_MONETARY', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_NODE', '/usr/share/trae-cn/trae-cn'), ('MANAGERPID', '2960'), ('TRAE_AI_SHELL_ID', '1'), ('NUPLAN_DATA_ROOT', '/home/howard/code/nuplan/dataset'), ('TRAE_SANDBOX_SOURCE_FLAG_PATH', '/tmp/sandbox-source-flag-53bd7860-f528-4258-962a-7f30283f1205'), ('SYSTEMD_EXEC_PID', '3332'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('_CE_M', ''), ('isArchMatched', '1'), ('_CONDA_ROOT', '/home/howard/miniconda3'), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '15487'), ('TRAE_JWT_TOKEN_PATH', '/home/howard/.trae-cn/trae-jwt-token'), ('TRAE_SANDBOX_STORAGE_PATH', '/home/howard/.config/Trae CN/ModularData/ai-agent/sandbox'), ('SAFE_RM_AUTO_ADD_TEMP', '1'), ('ROS_DISTRO', 'humble'), ('GTK_IM_MODULE', 'xim'), ('LOGNAME', 'howard'), ('SAFE_RM_DENIED_PATH', '/home/howard/code/freego_2025_tft/.git'), ('JOURNAL_STREAM', '8:19008'), ('_', '/home/howard/.local/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('USERNAME', 'howard'), ('TERM', 'xterm-256color'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('TRAE_SANDBOX_LOG_DIR', '/home/howard/.config/Trae CN/logs/20260706T173415/Modular'), ('_CE_CONDA', ''), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '1'), ('HISTCONTROL', 'ignorespace'), ('WINDOWPATH', '2'), ('NUPLAN_MAP_VERSION', 'nuplan-maps-v1.0'), ('PATH', '/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/usr/share/trae-cn/resources/app/bin:/home/howard/.trae-cn/tools/trae-gopls/current:/home/howard/.trae-cn/sdks/workspaces/eaddeeca/versions/node/current:/home/howard/.trae-cn/sdks/versions/node/current:/home/howard/.local/bin:/home/howard/miniconda3/condabin:/opt/ros/humble/bin:/home/howard/.local/bin:/home/howard/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/usr/share/trae-cn/resources/app/node_modules/@vscode/ripgrep/bin'), ('SESSION_MANAGER', 'local/howard-JIGUANG-Series:@/tmp/.ICE-unix/3304,unix/howard-JIGUANG-Series:/tmp/.ICE-unix/3304'), ('INVOCATION_ID', '8abb83de73b346259a660e3145f99a1d'), ('PAPERSIZE', 'a4'), ('XDG_MENU_PREFIX', 'gnome-'), ('LC_ADDRESS', 'zh_CN.UTF-8'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'x11'), ('DISPLAY', ':1'), ('FILESYSTEM_CASE_SENSITIVE', 'true'), ('LANG', 'zh_CN.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('LC_TELEPHONE', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_CONFIG_NAME', '6a33e8d309ba4e398e4917fc'), ('XMODIFIERS', '@im=fcitx'), ('TRAE_SANDBOX_DUMP_DIR', '/home/howard/.config/Trae CN/Crashpad/sandbox-pending'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/gdm/Xauthority'), ('TRAE_BRAND_NAME', 'Trae CN'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-f7db09f0d3.sock'), ('TERM_PROGRAM', 'vscode'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble'), ('CONDA_PYTHON_EXE', '/home/howard/miniconda3/bin/python'), ('SHELL', '/bin/bash'), ('LC_NAME', 'zh_CN.UTF-8'), ('__trae_PS1', '\\n(TraeAI-1) \\w [$?] $'), ('QT_ACCESSIBILITY', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('LC_MEASUREMENT', 'zh_CN.UTF-8'), ('TRAE_SANDBOX_TRACE_FILE', '/tmp/trae_sandbox_trace_cc4c7897-0b0f-4a18-8cd3-5ab28d75b44d.jsonl'), ('GPG_AGENT_INFO', '/run/user/1000/gnupg/S.gpg-agent:0:1'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('_CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('LC_IDENTIFICATION', 'zh_CN.UTF-8'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('GIT_PAGER', ''), ('QT_IM_MODULE', 'xim'), ('NUPLAN_MAPS_ROOT', '/home/howard/code/nuplan/dataset/maps'), ('PWD', '/home/howard/code/freego_2025_tft/build/wheelchair_obstacle'), ('LC_ALL', 'en_US.UTF-8'), ('SAFE_RM_ALLOWED_PATH', '/home/howard/code/freego_2025_tft:/home/howard/.config/Trae CN/ModularData/ai-agent/hooks_env:/tmp:/home/howard/.cache:/home/howard/.local/lib:/home/howard/.local/bin:/home/howard/.local/share:/home/howard/miniconda3:/home/howard/.conda:/home/howard/.dotnet:/home/howard/.bash_history'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('CONDA_EXE', '/home/howard/miniconda3/bin/conda'), ('TERM_PRODUCT', 'Trae'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/home/howard/code/freego_2025_tft/install/interface/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('SAFE_RM_PROTECTION_FLAG', '/tmp/safe-rm-protection-flag-5c0e2042-b174-43f2-88dd-b1e9c6c0fb71'), ('LC_NUMERIC', 'zh_CN.UTF-8'), ('LC_PAPER', 'zh_CN.UTF-8'), ('COLCON', '1'), ('SAFE_RM_SOURCE_FLAG', '/tmp/safe-rm-source-flag-74684515-2807-4ff3-82b1-2103221c952f'), ('ROS_HOME', '/tmp/ros_home'), ('CMAKE_PREFIX_PATH', '/home/howard/code/freego_2025_tft/install/interface:/opt/ros/humble')]), 'shell': False}
+[12.547023] (wheelchair_obstacle) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[12.547092] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rebuild_obstacle_layer.xml\n'}
+[12.547147] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/obstacle_cloud_filter_node\n'}
+[12.549129] (wheelchair_obstacle) StdoutLine: {'line': b'-- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/obstacle_cloud_filter_node" to ""\n'}
+[12.549166] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/joystick_local_path_node\n'}
+[12.551605] (wheelchair_obstacle) StdoutLine: {'line': b'-- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/joystick_local_path_node" to ""\n'}
+[12.551669] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/cmd_vel_safety_gate_node\n'}
+[12.556485] (wheelchair_obstacle) StdoutLine: {'line': b'-- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/wheelchair_obstacle/cmd_vel_safety_gate_node" to ""\n'}
+[12.556562] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/librebuild_obstacle_layer.so\n'}
+[12.556687] (wheelchair_obstacle) StdoutLine: {'line': b'-- Set runtime path of "/home/howard/code/freego_2025_tft/install/wheelchair_obstacle/lib/librebuild_obstacle_layer.so" to ""\n'}
+[12.556737] (wheelchair_obstacle) StdoutLine: {'line': b'-- Up-to-date: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rebuild_obstacle_layer.xml\n'}
+[12.556763] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config\n'}
+[12.556810] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/joystick_local_path.yaml\n'}
+[12.556855] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/cmd_vel_safety_gate.yaml\n'}
+[12.556879] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/obstacle_cloud_filter.yaml\n'}
+[12.556940] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/config/mppi_controller_server.yaml\n'}
+[12.556965] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch\n'}
+[12.556988] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/__pycache__\n'}
+[12.557010] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/__pycache__/mppi_wheelchair_controller.launch.cpython-310.pyc\n'}
+[12.557069] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/__pycache__/mppi_stack_no_sensors.launch.cpython-311.pyc\n'}
+[12.557094] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/obstacle_cloud_filter.launch.py\n'}
+[12.557117] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/mppi_stack_no_sensors.launch.py\n'}
+[12.557140] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/launch/mppi_wheelchair_controller.launch.py\n'}
+[12.557207] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rviz\n'}
+[12.557250] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rviz/wheelchair_obstacle_debug.rviz\n'}
+[12.557294] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/rviz/nav_debug.rviz\n'}
+[12.557319] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include\n'}
+[12.557362] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include/wheelchair_obstacle\n'}
+[12.557386] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include/wheelchair_obstacle/rebuild_obstacle_layer.hpp\n'}
+[12.557409] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/include/wheelchair_obstacle/obstacle_cloud_filter_core.hpp\n'}
+[12.557431] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/package_run_dependencies/wheelchair_obstacle\n'}
+[12.557491] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/parent_prefix_path/wheelchair_obstacle\n'}
+[12.557513] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/ament_prefix_path.sh\n'}
+[12.557535] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/ament_prefix_path.dsv\n'}
+[12.557579] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/path.sh\n'}
+[12.557604] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/environment/path.dsv\n'}
+[12.557649] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.bash\n'}
+[12.557673] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.sh\n'}
+[12.557716] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.zsh\n'}
+[12.557755] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/local_setup.dsv\n'}
+[12.557775] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/package.dsv\n'}
+[12.557819] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/packages/wheelchair_obstacle\n'}
+[12.557866] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/ament_index/resource_index/nav2_costmap_2d__pluginlib__plugin/wheelchair_obstacle\n'}
+[12.557916] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/cmake/wheelchair_obstacleConfig.cmake\n'}
+[12.557956] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/cmake/wheelchair_obstacleConfig-version.cmake\n'}
+[12.558001] (wheelchair_obstacle) StdoutLine: {'line': b'-- Installing: /home/howard/code/freego_2025_tft/install/wheelchair_obstacle/share/wheelchair_obstacle/package.xml\n'}
+[12.559196] (wheelchair_obstacle) CommandEnded: {'returncode': 0}
+[12.569264] (wheelchair_obstacle) JobEnded: {'identifier': 'wheelchair_obstacle', 'rc': 0}
+[12.569625] (-) EventReactorShutdown: {}

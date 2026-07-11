@@ -1,0 +1,5 @@
+[  4%] Built target gtest_main
+[  8%] Built target gtest
+Consolidate compiler generated dependencies of target mppi_controller
+[ 34%] Built target mppi_critics
+[ 36%] Building CXX object CMakeFiles/mppi_controller.dir/src/controller.cpp.o
