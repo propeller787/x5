@@ -76,6 +76,22 @@ struct Point {
         return *this;
     }
 
+    Point operator+(const Point& other) const {
+        return Point(x + other.x, y + other.y);
+    }
+    
+    Point operator-(const Point& other) const {
+        return Point(x - other.x, y - other.y);
+    }
+    
+    Point operator*(double scalar) const {
+        return Point(x * scalar, y * scalar);
+    }
+
+    Point operator/(double scalar) const {
+        return Point(x / scalar, y / scalar);
+    }
+
 };
 
 void initRosMsgFields(std::vector<sensor_msgs::msg::PointField>& fields);

@@ -21,12 +21,14 @@
 #             robot_state_publisher / URDF, started alongside the lidar layer)
 #
 # Set start_rviz:=true to also open the navigation debug view.
+# Set start_bag_record:=true to start cyclic rosbag2 recording (1 bag / interval,
+# keep bag_record_max_count newest segments under bag_record_output_dir).
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -50,11 +52,19 @@ def generate_launch_description():
     enable_safety_gate = LaunchConfiguration('enable_safety_gate')
     start_rviz = LaunchConfiguration('start_rviz')
     rviz_config = LaunchConfiguration('rviz_config')
+    start_bag_record = LaunchConfiguration('start_bag_record')
+    bag_record_interval_sec = LaunchConfiguration('bag_record_interval_sec')
+    bag_record_max_count = LaunchConfiguration('bag_record_max_count')
+    bag_record_output_dir = LaunchConfiguration('bag_record_output_dir')
 
     pkg_share = get_package_share_directory('wheelchair_obstacle')
     localization_params = os.path.join(
         get_package_share_directory('localization'), 'config', 'odom_fusion_params.yaml')
     default_rviz = os.path.join(pkg_share, 'rviz', 'nav_debug.rviz')
+    bag_record_script = os.path.join(pkg_share, 'scripts', 'cyclic_rosbag_record.sh')
+    default_bag_qos = os.path.join(pkg_share, 'config', 'mppi_stack_bag_qos.yaml')
+    default_bag_topics = os.path.join(pkg_share, 'config', 'mppi_stack_bag_topics.txt')
+    default_bag_output = os.path.join(os.path.expanduser('~'), 'bags', 'mppi_stack_cyclic')
 
     # --- perception layer ---
     lidar_fusion = _include(
@@ -91,6 +101,20 @@ def generate_launch_description():
         condition=IfCondition(start_rviz),
     )
 
+    # --- cyclic rosbag recorder (optional) ---
+    bag_record = ExecuteProcess(
+        cmd=[
+            bag_record_script,
+            '--interval', bag_record_interval_sec,
+            '--max-count', bag_record_max_count,
+            '--output-dir', bag_record_output_dir,
+            '--qos-file', default_bag_qos,
+            '--topics-file', default_bag_topics,
+        ],
+        output='screen',
+        condition=IfCondition(start_bag_record),
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_sim_time', default_value='false',
@@ -113,9 +137,22 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'rviz_config', default_value=default_rviz,
             description='RViz2 config file for the navigation stack'),
+        DeclareLaunchArgument(
+            'start_bag_record', default_value='false',
+            description='Start cyclic rosbag2 recording alongside the stack'),
+        DeclareLaunchArgument(
+            'bag_record_interval_sec', default_value='60',
+            description='Seconds per rosbag segment (default 60 = 1 minute)'),
+        DeclareLaunchArgument(
+            'bag_record_max_count', default_value='10',
+            description='Max rosbag segments to keep; oldest deleted when exceeded'),
+        DeclareLaunchArgument(
+            'bag_record_output_dir', default_value=default_bag_output,
+            description='Directory for cyclic rosbag segments (bag_YYYYMMDD_HHMMSS/)'),
         lidar_fusion,
         obstacle_filter,
         odom_fusion,
         control,
         rviz,
+        bag_record,
     ])

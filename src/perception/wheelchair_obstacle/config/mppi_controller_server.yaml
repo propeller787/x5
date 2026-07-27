@@ -1,4 +1,6 @@
 # 轮椅 MPPI 集成所用的 Nav2 controller_server + local_costmap 配置。
+# 绕障调参版（2026-07-27）：更早横向绕障、减少“先停后绕”。上一版备份见
+# mppi_controller_server_back3.yaml。
 #
 # local_costmap 直接通过原生 nav2 的 ObstacleLayer + InflationLayer 消费经过滤的障碍物
 # 点云（来自 obstacle_cloud_filter_node 的 /perception/obstacle_points）。此前自研的
@@ -37,7 +39,7 @@ controller_server:
 
       # 20 Hz 控制器 -> model_dt 必须 >= 控制周期；此处取相等。
       model_dt: 0.05
-      time_steps: 40
+      time_steps: 56
       batch_size: 1200
       iteration_count: 1
 
@@ -52,14 +54,15 @@ controller_server:
       vx_max: 5.0
       vx_min: -0.90
       vy_max: 0.0
-      wz_max: 0.60
+      # 对齐挡位角速度能力；原 0.57 过小导致只能停住再慢转。
+      wz_max: 1.20
 
-      # 更宽的采样标准差，使 MPPI 能在 rollout 时域内探索到更高的最高速度；在车上调参。
-      vx_std: 0.5
+      # 略减 vx 采样、加大 wz 采样，使 rollout 更多探索“低速+大角速度”绕障轨迹。
+      vx_std: 0.35
       vy_std: 0.0
-      wz_std: 0.25
+      wz_std: 0.42
 
-      temperature: 0.30
+      temperature: 0.25
       gamma: 0.01
       retry_attempt_limit: 1
       regenerate_noises: false
@@ -98,9 +101,9 @@ controller_server:
       CostCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 2.0
-        critical_cost: 300.0
-        collision_cost: 1000000.0
+        cost_weight: 4.5
+        critical_cost: 420.0
+        collision_cost: 500000.0
         consider_footprint: true
         near_goal_distance: 0.5
         inflation_layer_name: "inflation_layer"
@@ -108,8 +111,8 @@ controller_server:
       GoalCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 4.0
-        threshold_to_consider: 1.0
+        cost_weight: 2.5
+        threshold_to_consider: 1.5
 
       GoalAngleCritic:
         enabled: true
@@ -120,27 +123,27 @@ controller_server:
       PathAlignCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
-        max_path_occupancy_ratio: 0.10
+        cost_weight: 1.5
+        max_path_occupancy_ratio: 0.06
         trajectory_point_step: 4
         threshold_to_consider: 0.4
-        offset_from_furthest: 8
+        offset_from_furthest: 6
         use_path_orientations: false
 
       PathFollowCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 2.0
         offset_from_furthest: 5
-        threshold_to_consider: 0.8
+        threshold_to_consider: 1.2
 
       PathAngleCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 1.5
+        cost_weight: 1.0
         offset_from_furthest: 4
         threshold_to_consider: 0.4
-        max_angle_to_furthest: 1.0
+        max_angle_to_furthest: 1.2
         # 1.1.20 读取 forward_preference（bool），而非 1.4.x 的 "mode"（int）。
         # vx_min<0 允许倒车；forward_preference=true 偏好前进。
         forward_preference: true
@@ -148,14 +151,14 @@ controller_server:
       PreferForwardCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 2.5
         threshold_to_consider: 0.5
 
       VelocityDeadbandCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 20.0
-        deadband_velocities: [0.03, 0.0, 0.03]
+        cost_weight: 10.0
+        deadband_velocities: [0.02, 0.0, 0.02]
 
 local_costmap:
   local_costmap:
@@ -174,8 +177,8 @@ local_costmap:
       # 6x6 滚动窗口 -> 每个方向 3 m 范围（与 obstacle_max_range 3.0 匹配），使 MPPI 能看得
       # 够远，从而在高挡位下刹车。
       # 更大 = 更多 CPU/RAM；若循环无法保持 20 Hz，则退回到 4。
-      width: 4
-      height: 8
+      width: 8
+      height: 6
       resolution: 0.05
       always_send_full_costmap: true
       track_unknown_space: false
@@ -221,6 +224,7 @@ local_costmap:
         enabled: true
         # 由 footprint 自动推导的内切半径现在约为 0.20 m（受较短的后悬伸 r=0.2 限制）；
         # inflation_radius 必须 >= 该值。
-        inflation_radius: 5.0
-        cost_scaling_factor: 15.0
+        inflation_radius: 6.8
+        cost_scaling_factor: 12.0
         inflate_unknown: false
+

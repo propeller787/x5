@@ -36,6 +36,8 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 
@@ -63,6 +65,7 @@ public:
   using Twist = geometry_msgs::msg::Twist;
   using Odometry = nav_msgs::msg::Odometry;
   using Path = nav_msgs::msg::Path;
+  using PointCloud2 = sensor_msgs::msg::PointCloud2;
   using PoseStamped = geometry_msgs::msg::PoseStamped;
   using FollowPath = nav2_msgs::action::FollowPath;
   using GoalHandle = rclcpp_action::ClientGoalHandle<FollowPath>;
@@ -93,6 +96,18 @@ public:
     control_timeout_ = declare_parameter<double>("control_timeout", 0.30);
     odom_timeout_ = declare_parameter<double>("odom_timeout", 0.30);
 
+    obstacle_points_topic_ = declare_parameter<std::string>( "obstacle_points_topic", "/perception/obstacle_points");
+    avoidance_assist_enabled_ = declare_parameter<bool>("avoidance_assist_enabled", false);
+    assist_obstacle_timeout_ = declare_parameter<double>("assist_obstacle_timeout", 0.30);
+    assist_x_min_ = declare_parameter<double>("assist_x_min", 0.35);
+    assist_x_max_ = declare_parameter<double>("assist_x_max", 1.35);
+    assist_y_abs_ = declare_parameter<double>("assist_y_abs", 0.75);
+    assist_center_y_abs_ = declare_parameter<double>("assist_center_y_abs", 0.35);
+    assist_wz_ = declare_parameter<double>("assist_wz", 0.16);
+    assist_max_wz_ = declare_parameter<double>("assist_max_wz", 0.32);
+    assist_smoothing_ = declare_parameter<double>("assist_smoothing", 0.75);
+    assist_user_turn_override_ = declare_parameter<double>("assist_user_turn_override", 0.10);
+
     horizon_ = declare_parameter<double>("horizon", 1.5);
     dt_ = declare_parameter<double>("dt", 0.10);
     send_rate_hz_ = declare_parameter<double>("send_rate_hz", 5.0);
@@ -103,6 +118,10 @@ public:
     odom_sub_ = create_subscription<Odometry>(
       odom_topic_, 10,
       std::bind(&JoystickLocalPathNode::onOdom, this, std::placeholders::_1));
+
+    obstacle_sub_ = create_subscription<PointCloud2>(
+      obstacle_points_topic_, 10,
+      std::bind(&JoystickLocalPathNode::onObstaclePoints, this, std::placeholders::_1));
 
     path_pub_ = create_publisher<Path>(intent_path_topic_, 1);
 
@@ -136,6 +155,12 @@ private:
   {
     std::lock_guard<std::mutex> lock(odom_mutex_);
     latest_odom_ = msg;
+  }
+  void onObstaclePoints(const PointCloud2::SharedPtr msg)
+  {
+   std::lock_guard<std::mutex> lock(obstacle_mutex_);
+   latest_obstacles_ = msg;
+   latest_obstacles_stamp_ = now();
   }
 
   void onTimer()
@@ -189,7 +214,7 @@ private:
     // Gear-scaled velocity intent is taken verbatim from /handle/control: the
     // chassis firmware already applied the gear (挡位), so no scaling here.
     double v_user = ctrl->linear.x;
-    const double w_user = ctrl->angular.z;
+    double w_user = ctrl->angular.z;
 
     const bool zero_intent =
       (std::abs(v_user) <= lin_deadband_) && (std::abs(w_user) <= ang_deadband_);
@@ -209,11 +234,74 @@ private:
       v_user = std::copysign(turn_assist_vx_, (v_user != 0.0) ? v_user : 1.0);
     }
 
+    w_user = applyAvoidanceAssist(v_user, w_user, tnow);
     const Path path = buildPath(*odom, v_user, w_user);
     path_pub_->publish(path);
     sendGoal(path);
   }
+ 
+  double applyAvoidanceAssist(double v_user, double w_user, const rclcpp::Time & tnow)
+{
+  if (!avoidance_assist_enabled_ || v_user <= lin_deadband_) {
+    assist_wz_state_ *= assist_smoothing_;
+    return w_user + assist_wz_state_;
+  }
 
+  if (std::abs(w_user) >= assist_user_turn_override_) {
+    assist_wz_state_ *= assist_smoothing_;
+    return w_user + assist_wz_state_;
+  }
+
+  PointCloud2::SharedPtr cloud;
+  rclcpp::Time stamp;
+  {
+    std::lock_guard<std::mutex> lock(obstacle_mutex_);
+    cloud = latest_obstacles_;
+    stamp = latest_obstacles_stamp_;
+  }
+
+  if (!cloud || (tnow - stamp).seconds() > assist_obstacle_timeout_) {
+    assist_wz_state_ *= assist_smoothing_;
+    return w_user + assist_wz_state_;
+  }
+
+  double center_score = 0.0;
+  double left_score = 0.0;
+  double right_score = 0.0;
+
+  sensor_msgs::PointCloud2ConstIterator<float> iter_x(*cloud, "x");
+  sensor_msgs::PointCloud2ConstIterator<float> iter_y(*cloud, "y");
+
+  for (; iter_x != iter_x.end(); ++iter_x, ++iter_y) {
+    const double x = *iter_x;
+    const double y = *iter_y;
+
+    if (x < assist_x_min_ || x > assist_x_max_ || std::abs(y) > assist_y_abs_) {
+      continue;
+    }
+
+    const double weight = 1.0 / std::max(0.20, x);
+
+    if (std::abs(y) <= assist_center_y_abs_) {
+      center_score += weight;
+    } else if (y > 0.0) {
+      left_score += weight;
+    } else {
+      right_score += weight;
+    }
+  }
+
+  double target_assist = 0.0;
+  if (center_score > 0.0) {
+    target_assist = (left_score <= right_score) ? assist_wz_ : -assist_wz_;
+  }
+
+  target_assist = std::clamp(target_assist, -assist_max_wz_, assist_max_wz_);
+  assist_wz_state_ =
+    assist_smoothing_ * assist_wz_state_ + (1.0 - assist_smoothing_) * target_assist;
+
+  return w_user + assist_wz_state_;
+}
   Path buildPath(const Odometry & odom, double v_user, double w_user) const
   {
     Path path;
@@ -318,6 +406,7 @@ private:
   std::string control_topic_;
   std::string odom_topic_;
   std::string intent_path_topic_;
+  std::string obstacle_points_topic_;
   std::string action_name_;
   std::string global_frame_;
   std::string controller_id_;
@@ -327,6 +416,17 @@ private:
   double turn_assist_vx_{0.08};
   double control_timeout_{0.30};
   double odom_timeout_{0.30};
+  bool avoidance_assist_enabled_{false};
+  double assist_obstacle_timeout_{0.30};  
+  double assist_x_min_{0.35};
+  double assist_x_max_{1.35};
+  double assist_y_abs_{0.75};
+  double assist_center_y_abs_{0.35};
+  double assist_wz_{0.16};
+  double assist_max_wz_{0.32};
+  double assist_smoothing_{0.75};
+  double assist_user_turn_override_{0.10};
+  double assist_wz_state_{0.0};
   double horizon_{1.5};
   double dt_{0.10};
   double send_rate_hz_{5.0};
@@ -334,6 +434,7 @@ private:
   // Subscriptions / publishers / action client
   rclcpp::Subscription<Twist>::SharedPtr control_sub_;
   rclcpp::Subscription<Odometry>::SharedPtr odom_sub_;
+  rclcpp::Subscription<PointCloud2>::SharedPtr obstacle_sub_;
   rclcpp::Publisher<Path>::SharedPtr path_pub_;
   rclcpp_action::Client<FollowPath>::SharedPtr action_client_;
   rclcpp::TimerBase::SharedPtr timer_;
@@ -345,6 +446,10 @@ private:
 
   std::mutex odom_mutex_;
   Odometry::SharedPtr latest_odom_;
+
+  std::mutex obstacle_mutex_;
+  PointCloud2::SharedPtr latest_obstacles_;
+  rclcpp::Time latest_obstacles_stamp_{0, 0, RCL_ROS_TIME};
 
   std::mutex goal_mutex_;
   GoalHandle::SharedPtr current_goal_handle_;

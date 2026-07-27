@@ -13,6 +13,8 @@
 #include <pcl/search/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
 
+#include <queue>
+
 #define UN_PROCESSED 0
 #define PROCESSING 1
 #define PROCESSED 2
@@ -128,4 +130,73 @@ protected:
         return this->search_method_->radiusSearch(index, radius, k_indices, k_sqr_distances);
     }
 }; // class DBSCANCluster
+
+
+
+template <typename PointT>
+void extractClusterFromSeedPoint(
+    typename pcl::PointCloud<PointT>::Ptr cloud,
+    const PointT& seed_point,
+    double radius,
+    int max_points,
+    std::vector<int>& cluster_indices)
+{
+    cluster_indices.clear();
+    if (!cloud || cloud->empty()) return;
+
+    pcl::KdTreeFLANN<PointT> kdtree;
+    kdtree.setInputCloud(cloud);
+
+    /* ---------- Step 1: 找最近的 seed index ---------- */
+    std::vector<int> nn_indices(1);
+    std::vector<float> nn_dists(1);
+
+    if (kdtree.nearestKSearch(seed_point, 1, nn_indices, nn_dists) == 0)
+        return;
+
+    int seed_idx = nn_indices[0];
+
+    /* ---------- Step 2: 半径连通 BFS ---------- */
+    std::vector<bool> visited(cloud->size(), false);
+    std::queue<int> q;
+
+    visited[seed_idx] = true;
+    q.push(seed_idx);
+    cluster_indices.push_back(seed_idx);
+
+    std::vector<int> neighbors;
+    std::vector<float> distances;
+
+    while (!q.empty())
+    {
+        int idx = q.front();
+        q.pop();
+
+        neighbors.clear();
+        distances.clear();
+
+        if (kdtree.radiusSearch(
+                cloud->points[idx],
+                radius,
+                neighbors,
+                distances) > 0)
+        {
+            for (int nbr_idx : neighbors)
+            {
+                if (!visited[nbr_idx])
+                {
+                    visited[nbr_idx] = true;
+                    q.push(nbr_idx);
+                    cluster_indices.push_back(nbr_idx);
+
+                    if (max_points > 0 &&
+                        cluster_indices.size() >= max_points)
+                        return;
+                }
+            }
+        }
+    }
+}
+
+
 #endif

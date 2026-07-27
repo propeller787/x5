@@ -1,0 +1,21 @@
+# MPPI stack cyclic bag topics (one per line, # comments allowed)
+/scan/left
+/scan/right
+/scan/back
+/sensor/imu/data
+/wheel/twist
+/handle/control
+/sensor/joystick
+/nav/control
+/cmd_vel
+/odom/fused
+/perception/lidar_fusion/points
+/perception/obstacle_points
+/mppi/local_intent_path
+/local_costmap/costmap
+/local_costmap/costmap_updates
+/vlago/car/info
+/cmd_vel_safety_gate_node/mode
+/tf
+/tf_static
+/rosout

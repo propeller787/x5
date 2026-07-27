@@ -20,6 +20,7 @@ joystick_local_path_node:
     control_timeout: 0.30
     odom_timeout: 0.30
 
-    horizon: 1.5
-    dt: 0.10
-    send_rate_hz: 5.0
+    horizon: 1.8
+    dt: 0.05
+    send_rate_hz: 14.0
+

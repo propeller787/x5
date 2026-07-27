@@ -65,6 +65,7 @@ ament_target_dependencies(joystick_local_path_node
   rclcpp_action
   nav_msgs
   geometry_msgs
+  sensor_msgs
   nav2_msgs
   interface
   tf2
@@ -124,6 +125,10 @@ install(FILES rebuild_obstacle_layer.xml
 
 install(DIRECTORY config launch rviz
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(PROGRAMS scripts/cyclic_rosbag_record.sh
+  DESTINATION share/${PROJECT_NAME}/scripts
 )
 
 install(DIRECTORY include/
