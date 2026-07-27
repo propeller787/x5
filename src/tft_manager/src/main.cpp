@@ -11,9 +11,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "global.h"
 #include "service.h"
 #include <rclcpp/rclcpp.hpp>
+#include <csignal>
+
+namespace {
+void on_sigint(int) {
+    if (rclcpp::ok()) {
+        RCLCPP_INFO(rclcpp::get_logger("tft_service"), "Received Ctrl+C, shutting down node.");
+        rclcpp::shutdown();
+    }
+}
+}  // namespace
+
 int main(int argc, char* argv[])
 {
     auto logger = rclcpp::get_logger("tft_service");
@@ -23,15 +33,12 @@ int main(int argc, char* argv[])
     setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 
     rclcpp::init(argc, argv);
+    std::signal(SIGINT, on_sigint);
+
     rclcpp::executors::SingleThreadedExecutor exec;
     rclcpp::NodeOptions options;
-    auto global = tft_service::Global::getInstance();
-    exec.add_node(global->node_);
-
     auto serviceSptr = std::make_shared<tft_service::TftService>(options);
-
     exec.add_node(serviceSptr);
-
     exec.spin();
     rclcpp::shutdown();
 

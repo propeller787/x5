@@ -107,6 +107,74 @@ TEST_F(VehicleIoTest, FreshCenteredJoystickOverridesDecayingControl)
   EXPECT_DOUBLE_EQ(snapshot.twist.angular.z, 0.0);
 }
 
+TEST_F(VehicleIoTest, LatestJoystickReportsFreshSnapshot)
+{
+  auto node = std::make_shared<rclcpp::Node>("vehicle_io_latest_joystick_test");
+  VehicleIo io(node);
+  auto joystick_publisher =
+    node->create_publisher<interface ::msg::Joystick>(joystickTopic, 10);
+
+  interface ::msg::Joystick joystick;
+  joystick.rocker_x = 60;
+  joystick.rocker_y = -20;
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  JoystickSnapshot snapshot;
+  const auto deadline = std::chrono::steady_clock::now() + 1s;
+  while (std::chrono::steady_clock::now() < deadline) {
+    joystick_publisher->publish(joystick);
+    executor.spin_some();
+    snapshot = io.latestJoystick(node->now(), 0.25);
+    if (snapshot.received && snapshot.fresh) {
+      break;
+    }
+    std::this_thread::sleep_for(10ms);
+  }
+
+  ASSERT_TRUE(snapshot.received);
+  ASSERT_TRUE(snapshot.fresh);
+  EXPECT_EQ(snapshot.msg.rocker_x, 60);
+  EXPECT_EQ(snapshot.msg.rocker_y, -20);
+}
+
+TEST_F(VehicleIoTest, FreshReverseJoystickMarksReverseRequest)
+{
+  auto node = std::make_shared<rclcpp::Node>("vehicle_io_joystick_reverse_test");
+  VehicleIo io(node);
+  auto control_publisher =
+    node->create_publisher<geometry_msgs::msg::Twist>(handleControlTopic, 10);
+  auto joystick_publisher =
+    node->create_publisher<interface ::msg::Joystick>(joystickTopic, 10);
+
+  geometry_msgs::msg::Twist command;
+  command.linear.x = 0.8;
+  interface ::msg::Joystick joystick;
+  joystick.rocker_x = -80;
+  joystick.rocker_y = 0;
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  const auto deadline = std::chrono::steady_clock::now() + 1s;
+  ControlCommand snapshot;
+  while (std::chrono::steady_clock::now() < deadline) {
+    control_publisher->publish(command);
+    joystick_publisher->publish(joystick);
+    executor.spin_some();
+    snapshot = io.desiredControl(node->now(), 0.25, 0.25, 5, 20);
+    if (snapshot.received && snapshot.driver_reverse_request) {
+      break;
+    }
+    std::this_thread::sleep_for(10ms);
+  }
+
+  ASSERT_TRUE(snapshot.received);
+  ASSERT_TRUE(snapshot.fresh);
+  EXPECT_FALSE(snapshot.driver_neutral);
+  EXPECT_TRUE(snapshot.driver_reverse_request);
+  EXPECT_DOUBLE_EQ(snapshot.twist.linear.x, 0.8);
+}
+
 TEST_F(VehicleIoTest, WheelFeedbackExpiresAfterTimeout)
 {
   auto node = std::make_shared<rclcpp::Node>("vehicle_io_wheel_timeout_test");

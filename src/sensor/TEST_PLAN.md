@@ -360,6 +360,7 @@
 - [ ] `/car/speed` - 车辆速度信息发布
 - [ ] `/wheel/twist` - 车辆速度信息（带时间戳）发布
 - [ ] `/car/encoder` - 编码器数据发布
+- [ ] `/sensor/wheel_odom` - 轮式里程计发布（nav_msgs/Odometry，QoS 30）
 - [ ] `/sensor/backup/car` - 倒车状态发布
 - [ ] `/vlago/car/info` - 车辆信息发布
 - [ ] `/sensor/handle/control` - 健康计启动信号发布

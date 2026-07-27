@@ -1,0 +1,107 @@
+collision_monitor:
+  ros__parameters:
+    # Current vehicle integration: joystick command -> collision filter -> chassis command.
+    use_sim_time: False
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "/handle/control"
+    cmd_vel_out_topic: "/nav/control"
+
+    # Approach/TTC uses measured chassis motion. Before the first wheel message,
+    # the implementation falls back to the requested command velocity.
+    use_wheel_velocity_for_ttc: True
+    wheel_twist_topic: "/wheel/twist"
+
+    transform_tolerance: 0.1
+    # Slightly longer than one slow sensor frame to avoid false "no data" gaps.
+    source_timeout: 0.50
+    base_shift_correction: True
+    stop_pub_timeout: 2.0
+
+    # Recommended for ~6 km/h (1.67 m/s), assuming chassis decel >= 1.0 m/s^2
+    # and end-to-end latency <= 0.3 s.
+    #
+    # Design (near -> far):
+    #   1. StopZone: same as safety_node inflatedPolygon (collision body / 膨胀碰撞车体).
+    #   2. SlowdownZone: cut command to 35%; front +0.40 m vs body, sides/rear -0.30 m vs prior.
+    #   3. ApproachZone: footprint shifted +1.5 m forward + TTC 2.5 s.
+    #
+    # StopZone mirrors safety_node footprint (dual trapezoid + front/back/side margins):
+    #   rear_offset=0.23, rear 0.92×0.68→0.62, front 0.25×0.62→0.34,
+    #   front_margin=0.05, back_margin=0.03, side_margin=0.03.
+    polygons: ["StopZone", "SlowdownZone", "ApproachZone"]
+
+    StopZone:
+      type: "polygon"
+      # safety_node inflatedPolygon (base_link), same order as ApproachZone.
+      # Front 0.99 m (= physical 0.94 + front_margin 0.05).
+      points: [-0.26, -0.37, 0.74, -0.34, 0.99, -0.17,
+               0.99, 0.17, 0.74, 0.34, -0.26, 0.37]
+      action_type: "stop"
+      max_points: 2
+      visualize: True
+      polygon_pub_topic: "/collision_monitor/stop_zone"
+      enabled: True
+
+    SlowdownZone:
+      type: "polygon"
+      # Front 1.39 m (+0.40 m vs collision-body 0.99).
+      # Left/right/rear retracted 0.30 m vs previous SlowdownZone.
+      points: [-0.25, -0.42, 0.85, -0.39, 1.39, -0.25,
+               1.39, 0.25, 0.85, 0.39, -0.25, 0.42]
+      action_type: "slowdown"
+      max_points: 2
+      slowdown_ratio: 0.35
+      visualize: True
+      polygon_pub_topic: "/collision_monitor/slowdown_zone"
+      enabled: True
+
+    ApproachZone:
+      type: "polygon"
+      # APPROACH projects this footprint along measured velocity, so the effective
+      # outer boundary grows with speed instead of being a fixed ring.
+      # Footprint shifted +1.5 m forward relative to body-aligned points.
+      # Empty topic selects the static points below instead of a costmap footprint topic.
+      footprint_topic: ""
+      points: [1.24, -0.37, 2.19, -0.34, 2.49, -0.20,
+               2.49, 0.20, 2.19, 0.34, 1.24, 0.37]
+      action_type: "approach"
+      max_points: 2
+      time_before_collision: 2.5
+      simulation_time_step: 0.05
+      visualize: True
+      polygon_pub_topic: "/collision_monitor/approach_zone"
+      enabled: True
+
+    observation_sources:
+      ["scan_left", "scan_right", "scan_back", "cloud_left_tilt", "cloud_right_tilt"]
+
+    scan_left:
+      type: "scan"
+      topic: "/scan/left"
+      enabled: True
+
+    scan_right:
+      type: "scan"
+      topic: "/scan/right"
+      enabled: True
+
+    scan_back:
+      type: "scan"
+      topic: "/scan/back"
+      enabled: True
+
+    cloud_left_tilt:
+      type: "pointcloud"
+      topic: "/perception/left_tilt/pointcloud"
+      # Deliberately broad height bounds: raw point-cloud filtering is deferred.
+      min_height: -10.0
+      max_height: 10.0
+      enabled: True
+
+    cloud_right_tilt:
+      type: "pointcloud"
+      topic: "/perception/right_tilt/pointcloud"
+      min_height: -10.0
+      max_height: 10.0
+      enabled: True

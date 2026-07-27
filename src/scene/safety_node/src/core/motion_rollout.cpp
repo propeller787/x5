@@ -162,11 +162,16 @@ std::vector<TrajectoryRollout> MotionRollout::rolloutAll(
   double fb_linear,
   double fb_angular) const
 {
-  const auto candidates = sampleCandidates(cmd, fb_linear, fb_angular);
+  // NaN/Inf 反馈速度会污染整条轨迹积分，导致碰撞检测返回 +inf 净空，
+  // 候选被误选为最优安全速度。非有限值时回退为 0（视为静止）。
+  const double safe_fb_linear = std::isfinite(fb_linear) ? fb_linear : 0.0;
+  const double safe_fb_angular = std::isfinite(fb_angular) ? fb_angular : 0.0;
+
+  const auto candidates = sampleCandidates(cmd, safe_fb_linear, safe_fb_angular);
   std::vector<TrajectoryRollout> rollouts;
   rollouts.reserve(candidates.size());
   for (const auto & c : candidates) {
-    rollouts.push_back(rolloutCandidate(c, fb_linear, fb_angular));
+    rollouts.push_back(rolloutCandidate(c, safe_fb_linear, safe_fb_angular));
   }
   return rollouts;
 }

@@ -211,6 +211,48 @@ FootprintPolygon VehicleFootprint::physicalPolygon() const
     params_.robot_width_front_m);
 }
 
+double VehicleFootprint::physicalHalfWidthAtX(double x) const
+{
+  const double x_rear = -params_.robot_rear_offset;
+  const auto lerp_half = [](double x0, double x1, double h0, double h1, double xq) {
+      const double span = x1 - x0;
+      if (span <= kEps) {
+        return std::max(h0, h1);
+      }
+      const double t = std::clamp((xq - x0) / span, 0.0, 1.0);
+      return h0 + (h1 - h0) * t;
+    };
+
+  if (params_.footprint_use_dual_trapezoid) {
+    const double x_joint = x_rear + std::max(0.0, params_.footprint_rear_segment.length_m);
+    const double x_front = x_joint + std::max(0.0, params_.footprint_front_segment.length_m);
+    const double rear_half = std::max(0.0, params_.footprint_rear_segment.width_rear_m) * 0.5;
+    const double joint_half = std::max(0.0, params_.footprint_rear_segment.width_front_m) * 0.5;
+    const double front_half = std::max(0.0, params_.footprint_front_segment.width_front_m) * 0.5;
+    if (x <= x_rear) {
+      return rear_half;
+    }
+    if (x >= x_front) {
+      return front_half;
+    }
+    if (x <= x_joint) {
+      return lerp_half(x_rear, x_joint, rear_half, joint_half, x);
+    }
+    return lerp_half(x_joint, x_front, joint_half, front_half, x);
+  }
+
+  const double x_front = params_.robot_length - params_.robot_rear_offset;
+  const double rear_half = std::max(0.0, params_.robot_width_rear_m) * 0.5;
+  const double front_half = std::max(0.0, params_.robot_width_front_m) * 0.5;
+  if (x <= x_rear) {
+    return rear_half;
+  }
+  if (x >= x_front) {
+    return front_half;
+  }
+  return lerp_half(x_rear, x_front, rear_half, front_half, x);
+}
+
 FootprintPolygon VehicleFootprint::inflatedPolygon() const
 {
   const double front_margin = std::max(0.0, params_.footprint_front_margin);
@@ -222,16 +264,27 @@ FootprintPolygon VehicleFootprint::inflatedPolygon() const
     if (physical.vertices.size() != 6U) {
       return physical;
     }
-    // CCW：后左→分节左→前左→前右→分节右→后右
+    // 顶点顺序：后左→分节左→前左→前右→分节右→后右
+    // 车头朝前的三条边（前段左斜边、车头前缘、前段右斜边）统一用 front_margin，
+    // 保证车头前向膨胀距离一致；仅后段两条斜边用 side_margin。
     const std::vector<double> edge_margins = {
-      side_margin,
-      side_margin,
-      front_margin,
-      side_margin,
-      side_margin,
-      back_margin,
+      side_margin,   // 边0 后左→分节左（后段左斜边）
+      front_margin,  // 边1 分节左→前左（前段左斜边）
+      front_margin,  // 边2 前左→前右（车头前缘）
+      front_margin,  // 边3 前右→分节右（前段右斜边）
+      side_margin,   // 边4 分节右→后右（后段右斜边）
+      back_margin,   // 边5 后右→后左（车尾）
     };
-    return offsetPolygonByEdgeMargins(physical, edge_margins);
+    FootprintPolygon inflated = offsetPolygonByEdgeMargins(physical, edge_margins);
+    // 锁定车头前缘（上底）：宽度保持物理宽度不变，仅随 front_margin 前移到
+    // x = x_front + front_margin，不随前斜边法向膨胀被交点算宽（否则上底会变成 0.48）。
+    if (inflated.vertices.size() == 6U) {
+      const double front_half =
+        std::max(0.0, params_.footprint_front_segment.width_front_m) * 0.5;
+      inflated.vertices[2].second = front_half;    // 前左角锁定 +front_half
+      inflated.vertices[3].second = -front_half;   // 前右角锁定 -front_half
+    }
+    return inflated;
   }
 
   const double x_rear = -params_.robot_rear_offset;
@@ -340,6 +393,20 @@ double VehicleFootprint::clearanceToPolygon(
     return min_side - radius;
   }
   return (-min_side) - radius;
+}
+
+double VehicleFootprint::signedClearanceToPolygon(
+  double x, double y, double obstacle_radius,
+  const FootprintPolygon & polygon)
+{
+  const double radius = std::max(0.0, obstacle_radius);
+  // minOrientedSide：多边形内为正（穿深），外为负（−距离）。
+  // 取反得到跨界单调的符号净空：外正内负，越深越负。
+  const double min_side = minOrientedSide(x, y, polygon);
+  if (!std::isfinite(min_side)) {
+    return std::numeric_limits<double>::infinity();
+  }
+  return -min_side - radius;
 }
 
 FootprintPolygon VehicleFootprint::transformPolygon(

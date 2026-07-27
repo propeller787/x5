@@ -36,6 +36,13 @@ public:
   /** 物理轮廓，不含 margin */
   FootprintPolygon physicalPolygon() const;
 
+  /**
+   * 物理车体在纵向 x 处的半宽（m）。
+   * 双梯形时车头前段随两条斜边收窄；x 落在车体前/后端之外时按最近端半宽平推，
+   * 便于自车点过滤沿真实轮廓（含前段斜边）收窄，避免斜边外障碍被误当自车滤除。
+   */
+  double physicalHalfWidthAtX(double x) const;
+
   /** 含 front/back/side margin 的膨胀轮廓 */
   FootprintPolygon inflatedPolygon() const;
 
@@ -62,6 +69,15 @@ public:
 
   /** 圆到多边形边界净空（负值表示侵入/重叠） */
   static double clearanceToPolygon(
+    double x, double y, double obstacle_radius,
+    const FootprintPolygon & polygon);
+
+  /**
+   * 符号净空：圆心在多边形外为正（边界距离 − 半径），在内为负（−穿深 − 半径）。
+   * 与 clearanceToPolygon 不同，跨越边界单调递减，可用于「运动是否使障碍变得更危险」
+   * 的趋近性判定（方向掩码 / 近障方向豁免）。
+   */
+  static double signedClearanceToPolygon(
     double x, double y, double obstacle_radius,
     const FootprintPolygon & polygon);
 

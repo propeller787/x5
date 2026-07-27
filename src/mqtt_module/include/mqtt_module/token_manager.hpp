@@ -10,24 +10,27 @@ namespace mqtt_module {
 #endif
 
 struct DeviceInfo {
-    std::string vin = "VIN_001";
-    std::string model = "X5";
-    std::string root_private_key = "MOCK_ED25519_PRIVATE_KEY";
-    std::string root_public_key;
+    std::string vin = "ZQKJ001";
+    std::string model = "x5";
+    std::string root_private_key = "ydSKNkOGdKx0ITtDp2GtTN9MChiDo6SQXSSRRusli0U=";
+    std::string root_public_key = "p1c0dmOw6enDGkks5nwuwmr7mMpQm3xfDjrSDl7R0dg=";
     std::string private_key = "MOCK_ED25519_PRIVATE_KEY";
+    std::string gkey_no = "2;ZQKJ001;3";
+    std::string session_key_no = "";
     std::string session_private_key;
     std::string session_public_key;
-    std::string api_base_url = "https://your-api-server.com";
-    std::string client = "cloud_manager";
-    std::string app_version = "0.0.1";
+    std::string api_base_url = "http://10.66.66.10:22000";
+    std::string client = "vehicle";
+    std::string app_version = "1.0";
     std::string language = "zh-cn";
-    std::string version = "1.0";
+    std::string version = "1";
 };
 
 struct ChallengeResult {
     std::string challenge;
     int64_t exp;
     int64_t create_time;
+    int64_t gtime;
     bool success;
     std::string err_msg;
 };
@@ -42,6 +45,7 @@ struct TokenResult {
 struct SessionKeyResult {
     std::string public_key;
     std::string private_key;
+    std::string keyNo;
     bool success{false};
     std::string err_msg;
 };

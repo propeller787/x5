@@ -80,7 +80,7 @@ public:
 
         // build protobuf command
         vehicle::cmd::exe::VehicleCmdExe cmd;
-        cmd.set_vin(this->get_parameter("cmd.vin").as_string());
+        cmd.set_sn(this->get_parameter("cmd.vin").as_string());
         cmd.set_cmd_id(this->get_parameter("cmd.cmd_id").as_string());
         cmd.set_cmd(this->get_parameter("cmd.cmd").as_string());
         cmd.set_user_id(this->get_parameter("cmd.user_id").as_string());

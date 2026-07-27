@@ -15,10 +15,22 @@
 
 /**:
   ros__parameters:
+    # ── 配置 schema 版本（方案 9.3）──
+    # 与代码 kSupportedConfigSchemaVersion 不一致时节点拒绝启动（fail-fast）。
+    # 破坏性改名/语义变更时递增；车型配置发布 = 本文件 + git tag。
+    config_schema_version: 1
+
+    # ── 运行时（方案 7）──
+    runtime:
+      # true：MultiThreadedExecutor(3 线程) + 回调分组（控制/感知/后台隔离），
+      # 慢回调不再推迟安全控制环。生产默认开启；调试/逐位对照可改回 false。
+      multithreaded_executor: true
+
     # ── 控制循环 ──
     # 主安全控制循环频率。40 Hz 对应每周期约 25 ms。
     # 提高频率可缩短响应时间，但会增加轨迹评估、地图查询和日志发布的 CPU 开销。
-    control_rate_hz: 50.0
+    # 生产取 40 Hz（相对 50 Hz 降 CPU，仍快于代码 fallback 20 Hz）。
+    control_rate_hz: 40.0
 
     # ── 输入新鲜度与故障保护 ──
     # 任一必需输入超时、包含非有限值或有效感知源不足时，节点立即输出零速。
@@ -29,10 +41,15 @@
       joystick_timeout_s: 0.25
       # 原始摇杆中心死区，rocker_x/rocker_y 均满足绝对值不超过该值时触发平滑回中刹停。
       joystick_deadzone: 5
+      # 原始摇杆明确后退阈值，用于前进过程中快速阻断残留前进输出。
+      joystick_reverse_threshold: 20
       # 轮速反馈距当前时刻的最大允许时延。require_wheel_feedback=true 时超时会触发输入故障急停。
       wheel_feedback_timeout_s: 0.25
       # 是否强制要求轮速反馈。生产车辆建议保持 true，仿真单元测试可按需关闭。
       require_wheel_feedback: true
+      # 整车信息（/vlago/car/info：档位/驾驶模式/抱闸）新鲜度上限。
+      # 仅用于巡航限速与抱闸退出；过期时巡航按 absolute_max_linear_speed 兜底、不强制退出。
+      car_info_timeout_s: 1.0
       # 单路感知消息及其 TF 变换距当前时刻的最大允许时延。
       perception_timeout_s: 0.35
       # 单次 TF 查询最长等待时间。过大可能阻塞控制循环，过小会放大 TF 发布抖动。
@@ -40,9 +57,11 @@
       # 保持安全辅助运行所需的最少新鲜感知源数量。
       # 当前设为 1，允许部分雷达掉线时降级运行；若要求全传感器完备可提高此值。
       min_fresh_perception_sources: 1
-      # 主避障链路只统计水平雷达（left/right/back），斜雷达默认不参与 INPUT_FAULT。
+      # 主避障链路只统计已启用的水平雷达（left/right/back）。水平雷达为主时要求至少 1 路新鲜。
       min_fresh_horizontal_sources: 1
-      # 是否要求至少一路斜雷达新鲜；默认 false，斜雷达只作为近距补盲通道。
+      # 是否要求至少一路水平雷达新鲜；水平雷达主避障放开后置 true。
+      require_horizontal_perception: true
+      # 是否要求至少一路斜雷达新鲜；斜雷达 TTC 处理已关闭、仅作为 LocalMap 观测，置 false 不参与 INPUT_FAULT。
       require_tilt_perception: false
       # 是否要求至少存在有效感知源。关闭后无感知数据也可能输出运动指令，仅限受控测试。
       require_perception: true
@@ -55,6 +74,81 @@
       # 原始摇杆进入中心死区后，最终速度向零收敛的一阶低通时间常数。
       # 值越大刹停越柔和、停车距离越长；0.30 s 时约 0.90 s 衰减到初值的 5%。
       neutral_stop_filter_time_constant_s: 0.30
+      # 前进过程中检测到明确后退意图时，先快速制动到零，再交给原有逻辑发出后退。
+      direction_reversal_fast_stop_enabled: true
+      direction_reversal_stop_decel_m_s2: 2.5
+      direction_reversal_stop_jerk_m_s3: 8.0
+      direction_reversal_release_speed_m_s: 0.03
+
+      # ── 前向近障低通刹停 ──
+      # 前向走廊内障碍距物理车体前缘 ≤ trigger_distance_m，且轮速反馈线速度 > trigger_speed_m_s
+      # 时，用一阶低通把线速度柔和刹停到零。
+      #
+      # 与既有制动链的关系（按本文件实配算）：hard_stop_distance_m=0.03、
+      # braking_comfort_decel_m_s2=0.6 ⇒ MDB 反算上限 v ≤ √(2·0.6·(d−0.03))，16 cm 处约
+      # 0.395 m/s。故 trigger_speed_m_s=0.35 落在 MDB 允许区之内——本层触发的是「MDB 视角下
+      # 合规、但驾驶员逼近偏快」的正常状态（净空 ∈ [0.132, 0.16] 时 MDB 才允许 v>0.35），
+      # 不是 MDB 失效兜底。效果 = 快速逼近时比 MDB/precise_stop 的落点（3 cm 硬停线）更早、
+      # 更果断地停在 stop_buffer_m 外；慢速逼近（v ≤ 0.35）完全不介入，精准贴靠仍由
+      # precise_stop 指数律负责。调 trigger_speed_m_s 即调「多快算逼近偏快」。
+      #
+      # 启动级开关（节点无动态改参回调），改动需重启节点生效。
+      front_obstacle_lowpass_stop:
+        # 总开关；false 时输出与旧行为逐字节一致（不进状态机、不碰整形器状态）。
+        enabled: true
+        # 低通专用障碍来源：tilt_only 仅使用 left_tilt/right_tilt；
+        # 不改变水平 ObstacleField、LocalMap、MDB、L0-EB 或斜雷达 TTC 的输入。
+        source: tilt_only
+        # 触发净空 (m)：到「物理车体前缘」的距离，非膨胀 footprint。
+        # 只统计前向走廊（|y| ≤ 车体半宽 + avoidance.sudden_obstacle.corridor_margin_m）内的障碍，
+        # 避免转弯时侧向横穿的障碍误触发。
+        trigger_distance_m: 0.70
+        # 触发速度 (m/s)：轮速反馈线速度超过才触发。仅作触发下限，不是速度上限——
+        # 更高速入场时由下面的动态 τ 自动收紧；快到柔性停不住的帧由 hard_stop/L0-EB 先判急停。
+        trigger_speed_m_s: 0.80
+        # 低通时间常数上限 (s)，动态 τ 的柔和端。低通滑行距离 d = τ·v：
+        # 丢目标/+inf 时也会用到本上限，故不宜过大，否则进盲区后刹不住。
+        filter_time_constant_s: 0.10
+        # 低通时间常数下限 (s)，防 τ→0 退化成硬停顿挫；近障收紧刹停。
+        min_time_constant_s: 0.05
+        # 反算 τ 时预留的停车余量 (m)：目标停在离物理车体前缘该距离处。
+        # ⚠ 必须 ≥ 自车过滤盲区，否则瞄准的落点根本测不到：
+        #   physicalRect().x_max = -0.23 + 0.92 + 0.25 = 0.94（双梯形车头前缘）
+        #   perception.self_filter.x_max_m = 1.00（对齐膨胀 footprint 0.94+front_margin 0.05，留 1cm）
+        #   ⇒ 正前方(|y| ≤ front_half 0.17 + side_margin 0.02) 6 cm 以内的障碍被当自车滤除。
+        # 故取 0.10（盲区 0.06 + 余量）。同理 hard_stop_distance_m=0.03 正面也测不到。
+        stop_buffer_m: 0.10
+        # 连续满足触发条件的帧数，滤除单帧体素抖动。
+        confirm_frames: 1
+        # 滞回释放净空 (m)，必须 > trigger_distance_m。
+        # 释放只看净空不看速度：速度会被低通自己压没，拿它做释放判据必然在阈值附近反复启停。
+        # 净空 +inf 只在「障碍是在触发带之外消失的」时才算清空；带内失去目标（进自车过滤盲区
+        # 或丢帧）保守视为障碍仍在、保持锁存，出路是停稳松杆或后退。
+        release_distance_m: 0.81
+        # 释放前持续清空时间 (s)。
+        clear_hold_s: 0.15
+        # 停稳解锁的反馈线速度阈值 (m/s)：「已停稳 + 驾驶员撤销前进意图（松杆）」也解锁，
+        # 否则车会被锁在 stop_buffer 外直到退回 release_distance_m，贴近停靠永远做不到。
+        # 从静止再推杆时 MDB 在该净空下的上限已远低于 trigger_speed_m_s，不会立刻重触发。
+        # 注意巡航保持速度也算前进意图，巡航下松杆不解锁（需后退/抱闸退出巡航）。
+        standstill_release_speed_eps_m_s: 0.03
+        # true：低通只压线速度，角速度仍按安全候选下发，保留「转个向脱离」的出路；
+        # false：线角同时衰减（会连转向一起冻住，不建议）。
+        preserve_steering: true
+        # true：仅 MAP_VETO 且前向走廊净空仍 > hard_stop_distance_m 时，允许本闸
+        # 在触发带内柔停（输出整形层盖过 map_veto 急停零速）。只看走廊净空，
+        # 不用全向 Footprint min_clearance（侧向贴障会提前触硬停线，见 tilt_on_18）。
+        # hard_stop / L0-EB / brake_hold / 输入故障等仍绝对优先。false 时恢复
+        # 「任意急停都阻断低通」。
+        # tilt_only 无 MAP_VETO 障碍来源归因，保持 false，避免覆盖水平/地图障碍的硬裁决。
+        override_map_veto: false
+        # 相邻斜雷达帧之间按轮速反馈外推净空；新帧按源整体替换上一帧。
+        stale_prediction_enabled: true
+        # 旧帧最多在该时间内允许从未锁存状态新触发；超过后仅维持已锁存刹停。
+        # 应不大于 input_health.perception_timeout_s。
+        stale_prediction_max_s: 0.20
+        # 使用旧帧外推时额外扣减的保守净空裕量，只施加一次而非每周期累加。
+        prediction_uncertainty_margin_m: 0.01
 
     # ── 多雷达感知预处理 ──
     perception:
@@ -63,36 +157,63 @@
       # 等待写入 Rolling LocalMap 的累计点数上限，超限时淘汰最早数据。
       max_pending_points: 60000
 
-      # 斜雷达近距补盲通道：默认只进 tilt_field/TTC，不写入 LocalMap。
-      tilt:
-        # pointcloud2：订阅 /perception/*/pointcloud（默认，兼容 bag）
-        # tilt_scan：订阅 /perception/*/scan（interface/TiltObstacleScan，便于 ros2 topic echo）
-        input_type: "pointcloud2"
-        # 在 /safety/debug/tilt_left|right 发布过滤点 + 体素 primitive
-        publish_debug_scan: true
+      # 水平雷达主避障通道（left/right/back LaserScan）。已放开为主避障链。
+      horizontal:
         enabled: true
-        feed_local_map: false
-        max_range_m: 1.0
-        min_forward_x_m: 0.0
-        roi_x_min_m: -0.3
-        roi_x_max_m: 1.0
-        roi_y_abs_m: 0.45
+        left_enabled: true
+        right_enabled: true
+        back_enabled: true
+        # true：水平雷达点写入 LocalMap pending 队列，供 Map veto。
+        feed_local_map: true
+
+      # 斜雷达：TTC 处理逻辑已关闭（见 avoidance.tilt_ttc.enabled=false）；
+      # 现作为 LocalMap 观测接入主避障链（feed_local_map=true），供 Map veto 使用。
+      tilt:
+        # 订阅 /perception/left_tilt/pointcloud、/perception/right_tilt/pointcloud
+        # 与水平 LaserScan 相同：按 header.frame_id（默认 left/right_tilt_rotate）
+        # lookupTransform → base_link（x/y）；preserve_sensor_z 时 z 保留传感器原始值。
+        # 在 /safety/debug/tilt_left|right 发布过滤点 + 体素 primitive（生产关闭降 DDS）
+        publish_debug_scan: false
+        enabled: true
+        # true：斜雷达点写入 LocalMap pending 队列（接入主避障链的 Map veto）。
+        feed_local_map: true
+        # true：把斜雷达点并入水平雷达数据流，当作水平雷达使用——
+        # 直接进入水平 ObstacleField，参与 Footprint 选速/制动包络/MDB/Recovery，并计入水平雷达健康统计。
+        # 此时斜雷达不再单独走 tilt_field（tilt_obstacle_points_ 为空）。
+        treat_as_horizontal: true
+        # 斜雷达不做近距 ROI 裁剪：与水平雷达一样只经全局 ROI
+        # （perception_utils.cpp inRoi：x∈[-2.5,5.0], y∈[-1.8,1.8]）。
+        # 原 roi_enabled/max_range_m/min_forward_x_m/roi_x_min_m/roi_x_max_m/roi_y_abs_m 为死配置，已移除。
+        # false：不剔除 z < ground_reject_below_z_m 的斜雷达点。
+        # ⚠ 保持 false，勿开启：斜雷达并入水平主链（treat_as_horizontal=true），此开关
+        #   一旦置 true 会把 base_link 下 z < ground_reject_below_z_m(-0.06) 的斜雷达点当地面丢弃，
+        #   可能漏检低矮真实障碍（台阶/地面异物）。如需开启务必先用 bag 回放验证低障不漏。
+        ground_reject_enabled: false
+        # false：不对斜雷达点做 |z| 高度裁剪（仍要求 z 为有限值）。
+        z_filter_enabled: false
+        # false：不保留传感器系 z，做完整 3D TF 把 z 变换到 base_link（当作水平雷达，不做 preserve_sensor_z 过滤）。
+        preserve_sensor_z: false
+        # z_filter_enabled=true 时生效：保留 |z| <= 此值的点。
         z_filter_threshold: 0.0
         voxel_size_m: 0.08
         max_primitives: 48
 
-      # 自车点过滤包络。落在该三维盒体内的点被视为车体、支架或线束反射，不参与避障。
-      # 应与 footprint 膨胀轮廓对齐：后缘 ≈ -rear_offset - back_margin，前缘 ≈ length - rear_offset + front_margin，
-      # 半宽 ≈ max(width_rear/2, width_front/2) + narrow.side_margin，避免 margin 贴体点触发 hard_stop。
+      # 自车点过滤包络。落在包络内的点被视为车体、支架或线束反射，不参与避障。
+      # x/z 仍为盒体上下界；左右半宽不再是常数，而是沿真实 footprint 轮廓逐 x 收窄——
+      # 车头两段斜边（front_segment）处半宽随之减小，使斜边外侧障碍不再被误当自车滤除。
+      # 收窄后的半宽被 y_abs_m 盒体封顶，因此只会比常数盒滤除更少的点，不会新增盲区。
       self_filter:
         # 是否启用自车包络过滤。
-        enabled: false
+        enabled: true
         # 自车过滤盒在 x 方向的后边界（当前几何下膨胀后缘约 -0.31 m，留 ~5 cm 余量）。
-        x_min_m: -0.36
+        x_min_m: -0.27
         # 自车过滤盒在 x 方向的前边界（当前几何下膨胀前缘约 0.94 m，留 ~1 cm 余量）。
         x_max_m: 1.00
-        # 自车过滤盒左右半宽（后轴半宽 0.34 + narrow side_margin 0.01 = 0.35，留 ~1 cm 余量）。
+        # 自车过滤半宽的封顶值（后轴半宽 0.34 + ~2 cm）。实际半宽 = min(此值, 该 x 处车体半宽 + side_margin_m)。
         y_abs_m: 0.36
+        # 车体轮廓之外附加的横向余量：实际过滤半宽 = 该 x 处车体半宽 + 此值（再与 y_abs_m 取小）。
+        # 前段斜边处车体半宽从 0.31 收到 0.17，故过滤半宽随之收窄，让斜边生效。
+        side_margin_m: 0.02
         # 自车过滤盒最低高度。
         z_min_m: -0.15
         # 自车过滤盒最高高度。
@@ -103,31 +224,61 @@
       # 仅用于 PointCloud2：低于该 z 值的点按地面下方噪声剔除。
       ground_reject_below_z_m: -0.06
 
-    # 倾斜雷达点转换到 base_link 后允许的最大绝对高度，即要求 |z| <= 此值。
-    # 超出范围的高处物体或异常地面点不参与 LocalMap 和 ObstacleField。
+    # 历史兼容项；斜雷达 Z 裁剪由 perception.tilt.z_filter_enabled 控制。
     tilt_z_filter_threshold: 0.0
 
     # ── RViz2 感知调试输出 ──
-    # 只影响可视化与诊断开销，不改变避障计算结果。
+    # 只影响可视化与诊断开销，不改变避障计算结果。生产默认全关以降 CPU/DDS。
     debug:
       perception:
         # 发布过滤后点云、车体轮廓、障碍 primitive 和最终轨迹 Marker。
-        enabled: true
+        enabled: false
         # 调试数据发布频率。无需实时观察时可降低以减少带宽。
         rate_hz: 5.0
         # 调试点云最多包含的点数；仅限制显示，不限制内部障碍缓存。
-        max_points: 30000
+        max_points: 1000
+        # 由 /sensor/joystick 映射并积分的前视折线（joystick_intent_trajectory）。
+        joystick_trajectory:
+          enabled: false
+          max_linear_m_s: 2.22
+          max_angular_rad_s: 0.8
+      speed_intervention:
+        # true：摇杆/巡航期望速度相对最终输出被衰减或刹停时，在
+        # /safety/intervention_log 发布结构化原因，并输出节流 DEBUG 日志。
+        enabled: false
+        # 参考速度与输出速度绝对值差超过该值时判定为速度衰减；
+        # 显式刹停状态（回中、反向、急停、低通）不受该阈值遗漏。
+        min_delta_m_s: 0.03
+        # 控制台 DEBUG 日志节流周期；结构化 topic 日志仍跟随干预周期发布。
+        throttle_ms: 200
 
-    # ── 安全模式 ──
-    # 可选值：
-    #   pass_through：仅做绝对限速，不做障碍选择；仅用于受控调试。
-    #   safe_assist：标准 Footprint + LocalMap 安全辅助。
-    #   cruise：安全辅助基础上叠加巡航速度上限。
-    #   narrow：使用下方低净空专用几何与阈值。
-    #   estop：强制零速。
+    # ── 运行模式（两个正交开关，参照 scene_node 安全/巡航模型） ──
+    # 通过 interface/srv/SceneControls 开关服务独立控制，可任意组合（start=1 开 / 0 关）；
+    # 端点与 scene_node 一致：
+    #   安全（避障）开关：/scene/auxiliary
+    #       ON  → 输出经完整避障链（Footprint + LocalMap + 斜雷达 TTC + 急停）
+    #       OFF → 仅绝对限速透传，不做障碍避让
+    #   标准模式开关：/scene/standard
+    #       与 scene_services 模式编排对齐；开启时清空巡航保持速度缓存。
+    #       标准关且非巡航 → 停止发布 /nav/control，跳过避障链（对齐 scene_node）。
+    #   巡航（定速保持）开关：/scene/cruise
+    #       ON  → 注入定速保持速度；OFF → 使用原始手柄命令
+    #   巡航自动退出时异步回调 /manage/cruise start=0，通知 scene_services 切回标准模式。
+    # 输出权 = 标准开 OR 巡航开。安全开关仅在有输出权时决定是否避障：
+    #   标准ON  + 安全ON  + 巡航OFF：跟手 + 避障（默认，由 scene_services 开标准）
+    #   标准ON  + 安全ON  + 巡航ON ：定速保持 + 避障
+    #   标准ON  + 安全OFF + 巡航OFF：手柄透传（不避障）
+    #   标准ON  + 安全OFF + 巡航ON ：定速保持透传（不避障）
+    #   标准OFF + 巡航ON ：巡航输出（是否避障看安全开关）
+    #   标准OFF + 巡航OFF：静默（不发 /nav/control，不做避障）
+    # narrow / estop 模式已关闭，不对外暴露。
+    # 安全开关启动值：默认关，再从 /opt/freego/user_config.yaml 的 safety_warning_enabled 恢复
+    # （文件不存在 / 字段缺失 / 解析失败则保持关闭）。TFT 改开关后会写回该文件。
+    # 注意：本节点与 scene_node 的缺省不同——scene_node 无文件时默认开，本节点默认关。
+    # mode.default 仅决定巡航启动值：cruise → 巡航开，其余 → 巡航关。
     mode:
-      # 生产默认使用 narrow，以支持单侧约 4 cm 的已验证窄道场景。
-      default: "narrow"
+      # 生产默认：巡航关（安全开关见 user_config，缺省为关）。
+      default: "safe_assist"
 
       # narrow 模式会覆盖同名基础几何/阈值，但不会修改 YAML 中的基础值。
       narrow:
@@ -136,20 +287,68 @@
         # 每个激光表面点的等效碰撞半径。1 cm 用于表达测距/离散误差，不把点统一扩成 8 cm 圆。
         obstacle_radius_m: 0.01
         # 轨迹最小净空小于等于该值时直接判定硬停候选，不参与排序。
-        hard_stop_distance_m: 0.015
+        # P0-C：由 15 mm 抬到 30 mm，为停车过冲/感知晚检出预留物理余量，避免停后贴上/侵入。
+        hard_stop_distance_m: 0.03
         # 硬停释放所需净空，应大于 hard_stop_distance_m，用于形成释放滞回。
-        # SIM-034/035：原 20 mm 滞回过大，贴障 ~13 mm 停住后难以通过微动增大净空来解锁；
-        # 收窄至 17 mm（相对 15 mm 硬停仅 2 mm 滞回），便于脱困倒车略增净空后解除 EmergencyBrake。
-        hard_stop_release_distance_m: 0.017
+        # P0-C：随 hard_stop 抬到 30 mm 同步上移到 35 mm（保持 ~5 mm 滞回，便于脱困倒车解锁）。
+        hard_stop_release_distance_m: 0.035
         # narrow 模式 LocalMap 障碍膨胀半径。与 Footprint 余量和障碍半径叠加生效。
-        local_map_inflation_radius_m: 0.01
+        # P0-C：由 10 mm 抬到 30 mm，让膨胀真正生效（>resolution 0.05 才有邻格效果，此处折中取 30 mm）。
+        local_map_inflation_radius_m: 0.03
         # LocalMap 单元代价达到该概率时视为致命区域并 veto 轨迹。
         lethal_threshold: 0.65
+
+    # ── 巡航（定速保持）模式 ──
+    # 进入巡航后记录摇杆推到的最大前向线速度并持续保持（松杆不减速）；
+    # 保持速度受 CarInfo 档位/驾驶模式最高速限制（档位下降时平滑降速），档位信息缺失时按 absolute_max 兜底；
+    # 转向角速度过大时按平方比例降低线速度，转直后逐步恢复；
+    # 检测到后退意图、手动抱闸开启、或进入巡航后 speed_timeout_s 内未给出前进速度时自动关闭巡航（不影响安全开关）。
+    # 巡航速度是否经过避障由「安全」开关独立决定：安全ON 时遇障会被限速/急停，安全OFF 时透传不避障。
+    cruise:
+      # 角速度阈值 (rad/s)：|w| 超过时按 (阈值/|w|)² 压低线速度，防止转弯倾倒。
+      angular_speed_threshold_rad_s: 0.5
+      # 转向降速后，线速度每控制周期的恢复增量 (m/s)。
+      speed_recovery_rate_m_s: 0.05
+      # 启动超时 (s)：进入巡航后该时间内未给出前进速度则自动退出。
+      speed_timeout_s: 8.0
+      # 巡航建立后，干预输出线速度 ≤ 此值视为「被障碍物压停」(m/s)。
+      # 持续 speed_timeout_s 则退出巡航并上报 /vlago/cruise/status = 2。
+      obstacle_zero_speed_eps_m_s: 0.02
+
+    # ── 对外状态/预警上报 ──
+    # 与 scene_node 完全同构的三个话题，供 TFT / 灯效 / 语音 / 底盘消费。
+    # 关闭任一项只影响上报，不改变避障计算与控制输出。
+    reporting:
+      # /scene_auxiliary/status (std_msgs/Bool)：安全（避障）开关状态。
+      auxiliary_status:
+        enabled: true
+        # 心跳频率 (Hz)。开关跳变时另外立即发一帧；心跳用于让晚启动的消费端对齐状态。
+        rate_hz: 1.0
+
+      # /vlago/cruise/status (std_msgs/Int32)：巡航过程/结束原因码。
+      #   1 = 启动窗口内未给出前进速度，巡航退出（对应 cruise.speed_timeout_s）
+      #   2 = 巡航中被障碍物压停超过 speed_timeout_s，巡航退出
+      #   3 = 巡航激活成功（开关置 ON）
+      #   4 = 检测到前进速度，巡航开启成功
+      # 后退意图 / 手动抱闸导致的退出不带原因码（与 scene_node 一致）。
+      cruise_status:
+        enabled: true
+
+      # /vlago/collision/warning (interface/CollisionWarning)：四向碰撞预警。
+      #   warning_type : 1 前向 2 左向 3 右向 4 后向（负平面 5~7 无对应感知，不上报）
+      #   warning_level: 1 减速 2 刹停 3 驶离减速区 4 驶离刹停区
+      collision_warning:
+        enabled: true
+        # 同方向同等级的心跳重发间隔 (s)。等级跳变（含驶离事件）立即发，不受此节流约束。
+        repeat_interval_s: 1.0
+        # 障碍类急停（map_veto / 斜雷达近距硬闸 / 突发障碍等）但四向等级为空时，
+        # 是否按运动意图方向补一条刹停预警。关闭则这类真实停车不会有任何提示。
+        report_emergency_fallback: true
 
     # ── Footprint 轨迹评估、急停与脱困 ──
     avoidance:
       # 正常候选轨迹预测时域。越长越保守、计算量越大。
-      horizon_s: 1.2
+      horizon_s: 0.8
       # 轨迹离散步长。越小碰撞检测越细，但轨迹点和计算量增加。
       dt_s: 0.1
       # 对期望线速度向零速方向采样的档位数，内部实现最大使用 6 档。
@@ -166,12 +365,12 @@
       use_ttc_emergency_stop: false
       # 旧 TTC 急停阈值。仅在 use_ttc_emergency_stop=true 时参与控制。
       emergency_ttc_s: 0.45
-      # 基础模式的硬停净空。narrow 模式运行时由 mode.narrow 对应值覆盖。
-      hard_stop_distance_m: 0.12
+      # 基础模式的硬停净空。P0-C：由 15 mm 抬到 30 mm，为停车过冲/晚检出留物理余量。
+      hard_stop_distance_m: 0.03
       # 旧 TTC 恢复阈值，仅在 use_ttc_emergency_stop=true 时生效。
       emergency_ttc_release_s: 0.70
-      # 基础模式硬停释放净空，需不小于 hard_stop_distance_m。
-      hard_stop_release_distance_m: 0.20
+      # 基础模式硬停释放净空，需不小于 hard_stop_distance_m。P0-C：随 hard_stop 同步到 35 mm。
+      hard_stop_release_distance_m: 0.035
       # TTC 与净空恢复后必须连续安全的保持时间，满足后才解除 EmergencyBrake 锁存。
       emergency_clear_hold_s: 0.15
 
@@ -190,12 +389,23 @@
       # 是否启用基于沿轨迹剩余距离的制动速度包络。
       # true 时会先沿期望直线/圆弧向前扫描，再反算当前允许的最高线速度。
       braking_envelope_enabled: true
+      # 制动包络是否用 LocalMap 致命轨迹分支压制可用制动距离。
+      # 关闭原因：制动探针前视 5m > 地图前向 3m，探针冲出 6m 地图前边界后被
+      # gridCostAt「越界→满代价 1.0」误判为致命，把可用制动距离恒定钳到 ~2.025m、
+      # 与真实前障无关地长期把线速度限到 ~1.1（见 speed_01/02 回放）。制动距离改由
+      # 激光 footprint 链决定。候选轨迹的 Map veto（map_constraint）不受此开关影响。
+      braking_use_local_map: false
       # 制动路径最大前视距离。该值应覆盖最高生产速度下的完整停车距离；
       # 增大该值可让减速区更早开始，但会增加每周期的 Footprint/LocalMap 查询量。
       braking_lookahead_m: 5.0
       # 制动路径离散步长。2.5 cm 用于兼顾最近停车位置精度与 40 Hz 实时性；
       # 减小后停车边界更细，但计算量按比例增加。
       braking_path_step_m: 0.025
+      # 前向制动探针累计航向变化上限 (rad)。大角速度+小线速度时转弯半径 v/w 极小，
+      # 沿固定弧长积分会原地打转数圈，把车后/车侧障碍误当作前向即时硬停而冻结整车。
+      # 探针一旦累计航向变化超过此值即截断——打转弧长不计入前向可停距离；紧转弯净空交由
+      # turn_clearance_guard 与 direction_mask 角轴处理。π/2≈1.5708；≤0 表示不截断（旧行为）。
+      braking_probe_max_heading_rad: 1.5708
       # 从发现需要减速到制动真正建立之间的等效延迟，包含控制、通信和执行器响应。
       # 制动包络还会计入 jerk 建立减速度的积分距离，并额外预留 4 个控制周期用于目标跟踪。
       braking_reaction_delay_s: 0.10
@@ -208,22 +418,328 @@
       # 在 hard_stop_distance_m 之外额外预留的停车距离。
       # 2 cm 用于吸收 2.5 cm 路径离散和低速执行器尾差，仍保持接近最近安全停车位置。
       braking_stop_buffer_m: 0.02
+      # ── P0-A 动态障碍接近速度储备 (m/s) ──
+      # 制动包络按「障碍在整个停车过程中还会以此速度继续逼近」额外预留距离，
+      # 使车辆面对对向来物/行人靠近时提前减速、停稳后不被侵入。
+      # 0 = 按静止障碍处理（旧行为）；建议按现场行人/对向车典型速度取 0.3~0.5。
+      braking_obstacle_closing_reserve_m_s: 0.3
 
-      # 斜雷达近距 TTC 通道：独立于水平雷达主避障链路，只对前进命令做近距限速/急停。
-      tilt_ttc:
+      # ── 最小距离制动（MDB）：前向接近时由剩余距离反算速度，仅在 hard-stop 边界归零 ──
+      min_distance_braking_enabled: true
+      # MDB only uses current footprint clearance as an extra speed cap inside
+      # hard_stop_release_distance_m. Wider side clearance is still checked by
+      # swept footprint, but does not reduce straight-line speed by itself.
+      # 精确停到 hard-stop 线，仅保留半个路径步长离散误差
+      braking_exact_stop_enabled: true
+      # 判定已到达最小停车距离的容差 (m)，narrow 下建议 0.5 * path_step
+      braking_at_stop_distance_eps_m: 0.0125
+      # 到达 hard-stop 后禁止正向再加速（消除停后蠕行）
+      braking_no_forward_reaccel_at_hard_stop: true
+      # MDB 期间不用 EmergencyBrake 距离型锁存（braking_distance / brake_hold）
+      braking_suppress_distance_emergency: true
+      # Stop-hold after MDB has already brought the vehicle to a near-obstacle stop.
+      # Forward stick is held at zero until reverse escape or obstacle release.
+      forward_stop_hold:
         enabled: true
+        confirm_s: 0.10
+        feedback_speed_m_s: 0.03
+        speed_limit_m_s: 0.20
+        remaining_m: 0.08
+        release_distance_m: 0.20
+
+      # ── P0-B 停稳看护（standstill guard）──
+      # 车辆停稳后，制动包络/MDB/TTC 均以自车前进为门控而失效；此时障碍物（人/对向车）
+      # 主动逼近原本无任何反应会被侵入车体。停稳看护在停稳状态下持续跟踪最近物理净空：
+      #   · 净空以 approach_rate_m_s 以上速率缩小（有物体接近），且已进入 band_m 看护带；或
+      #   · 净空低于 floor_m 绝对地板（即将触碰）
+      # 满足 confirm_s 后锁存急停并上报，迫使车辆保持零速。倒车意图始终放行（供退让/脱困）。
+      # 说明：只在净空「正在缩小」或「触地板」时触发，故贴墙静止停车不会误锁。
+      standstill_guard:
+        enabled: true
+        band_m: 0.12
+        floor_m: 0.03
+        approach_rate_m_s: 0.05
+        confirm_s: 0.10
+        release_m: 0.15
+
+      # ── L1 方向解耦掩码（direction mask，见 core/direction_mask.h） ──
+      # 障碍进入硬停带（含虚拟/物理车体内）后，用 ±v/±w 四组短探针判定各轴运动
+      # 是否将其推向物理接触，仅封锁受威胁分量：
+      #   · 前障不影响后向与左右操控；后障不影响前向与左右；
+      #   · 左障不影响前后向与右转；右障不影响前后向与左转。
+      # 同一威胁谓词用于 Footprint 扫掠近障方向豁免与 LocalMap veto 豁免圆。
+      # enabled: false 完全回退旧「全向封锁」行为（回滚开关）。
+      direction_mask:
+        enabled: true
+        probe_distance_m: 0.15      # 线速度探针长度，应 ≥ standstill_guard.band_m
+        probe_angle_rad: 0.30       # 角速度探针角度
+        probe_step_m: 0.03
+        probe_step_rad: 0.06
+        contact_buffer_m: 0.03      # 探针使符号净空跌破该值即判定威胁
+        approach_eps_m: 0.005       # 趋近判定死区，过滤数值噪声
+        map_exempt_radius_m: 0.22   # LocalMap 豁免圆半径，应 ≥ 地图膨胀半径+分辨率
+
+      # ── 转弯净空护栏（turn clearance guard，见 core/avoidance_types.h） ──
+      # 方向解耦让前向制动包络对侧向近障免疫；转弯时旋转车体会侧扫入前侧近障，
+      # 前向净空与 ±v/±w 探针都漏判。仅在 |w| ≥ min_angular 时，取沿实际 (v,w)
+      # 曲线扫掠 Footprint 的最近净空（含近障方向豁免），按 v ≤
+      # √(2·braking_comfort_decel·(净空−hard_stop)) 钳制线速度、角速度同比缩放
+      #（保持转弯半径）。直线/微转完全不介入。
+      turn_clearance_guard:
+        # 方案 2.1 重启：当年的关闭原因（制动探针紧转弯原地打转）已被
+        # braking_probe_max_heading_rad 航向截断单独修复，护栏复用同一探针。
+        # ⚠ 上车前必须完成 bag 组合回放验证：tilt_on_2（应限速）+ tilt_on_8
+        #（走廊调头不得卡顿）+ 2026011 卡顿（不得复发），任一失败改回 false。
+        enabled: true
+        min_angular_rad_s: 0.5       # 旧角速度门控（min_curvature_1_m=0 时生效）
+        # 曲率门控 (1/m)：>0 时替代角速度门控，|w|/max(|v|,0.1) ≥ 此值才介入。
+        # 1.2 对应转弯半径 ≤ 0.83 m——低速大转弯（tilt_on_2）比固定角速度介入更及时，
+        # 直行/大半径高速转弯不受影响。置 0 回退旧门控（回滚开关）。
+        min_curvature_1_m: 1.2
+        band_m: 0.6                  # 生效净空带，曲线扫掠净空 ≤ 此值才参与限速
+
+      # ── 转弯合成速度包络（turn speed envelope，见 core/avoidance_types.h） ──
+      # v/ω 各自钳位不管合成运动：两轴同时较大时外缘线速度 |v|+|ω|·r 与横向加速度
+      # |v·ω| 均无界（打满时外缘≈4.2 m/s、横加≈6.7 m/s²，即「转弯外圈太快」）。
+      # 超限时 v、ω 等比缩放保持转弯半径，只降快慢不改轨迹。直线（ω≈0）不介入；
+      # 默认参数下纯旋转上限 ≈3.4 rad/s 宽于绝对角速度上限 3.0，原地调头不受影响。
+      turn_speed_envelope:
+        enabled: true
+        edge_radius_m: 0.655         # 车体角点回转半径 sqrt((1.12/2)²+(0.68/2)²)
+        max_edge_speed_m_s: 2.222    # 外缘合成线速度上限，取 absolute_max_linear_speed 同值
+        max_lat_accel_m_s2: 1.2      # 横向加速度上限，嫌压得狠调大到 1.5，≤0 关闭该判据
+
+      # ── 急速转向线速度硬帽（rapid steer cap，见 core/avoidance_types.h） ──
+      # turn_speed_envelope 等比缩放 v/ω 保转弯半径，压不动「满线速 + 猛打转」：bag
+      # speed_test_tilt_on_2 临界帧 v=1.57、ω=1.04 只得 k≈0.86 → v≈1.35 m/s，仍高于
+      # 已致碰的 ~1.3 m/s；实测净空在 ~0.3 s 内被从 0.55 m 吃到 0，EB 到贴障(0.007m)
+      # 才闩锁、来不及。本层不保半径：|ω| ≥ trigger 即判「急速转向」，把 v 硬钳到
+      # max_linear_m_s，直接压低前向逼近速度，给净空/EB 留出制动距离。
+      # 阈值取 0.6 rad/s：该 bag 直行段 ω≈0~0.07 不触发，打转段 ω≈1.0~1.2 稳定触发。
+      # 上限取 0.6 m/s：约为致碰逼近速度(~1.3)的一半，0.55 m 净空下 EB 有停车余量。
+      # ⚠ 默认关，上车前须回放 speed_test_tilt_on_2（应不再致碰）+ 直行段（不得误限速）
+      # + 走廊原地调头（v≈0 本就不受影响）组合验证；enabled: false 逐字节回退旧行为。
+      rapid_steer_cap:
+        enabled: false
+        trigger_angular_rad_s: 0.6   # 判定「急速转向」的角速度阈值；≤0 视为未配置、不介入
+        max_linear_m_s: 0.6          # 急速转向期间线速度上限（前后向同帽）
+
+      # ── L2 被困脱困（pinned escape，见 avoidance_types.h） ──
+      # 四向候选全被 LocalMap veto、车已停稳且驾驶员仍在给令的「夹死」死状态下，
+      # 原本无条件 MAP_VETO 硬停清零。本层在硬停前枚举一组低速微动作，逐个用现有
+      # Footprint 扫掠碰撞 + LocalMap veto 复验（同一把闸，不放松判据），择净空严格
+      # 改善且最贴驾驶员意图者放行；均不过则回退到与原先完全一致的硬停。
+      # 默认关闭：仅在该死状态触发，不影响任何可选到候选/侵入 recovery/正常制动的场景。
+      # 若微动作全不过（口袋比车长+硬停带还窄），保持零速即正确答案。
+      pinned_escape:
+        # 方案 2.3 灰度上车：enabled+shadow_mode → 夹死死状态微动作复验通过时
+        # 只写日志（pinned_escape_shadow / 健康摘要计数），仍回退到原 MAP_VETO 硬停。
+        # 用 tilt_on_6 bag 回放确认影子微动作合理后置 shadow_mode: false 转正。
+        enabled: true
+        shadow_mode: true
+        confirm_s: 0.20              # 连续处于夹死死状态的去抖确认时间
+        creep_linear_m_s: 0.06       # 脱困蠕行线速度，须略高于底盘速度死区
+        creep_angular_rad_s: 0.25    # 脱困蠕行角速度
+        escape_margin_m: 0.03        # 微动作扫掠净空地板，取 max(本值, hard_stop_distance_m)
+        min_clearance_gain_m: 0.005  # 相对当前净空的最小改善量，保证脱困有进展
+        standstill_speed_eps_m_s: 0.03  # 判定已停稳的反馈线速度阈值
+
+      # ── 原地转向豁免（rotation escape，见 core/avoidance_types.h） ──
+      # 急停全停帧（MAP_VETO / BRAKE_HOLD / 净空-TTC 类）本会把线速度与角速度整帧清零，
+      # 连「贴障/被 veto 时只转个向就能脱离」这种现实可行动作也一并冻结（bag 车辆原地转向
+      # 问题 tilt_on_10：净空≈6mm、has_collision，纯原地转向指令被全零）。本层在急停输出后
+      # 复验驾驶员的纯原地转向意图，沿实际转向方向做有界角探针扫掠，要求：
+      #   ① Footprint 扫掠（复用 direction_mask 谓词）不把任一近障推向物理接触；
+      #   ② LocalMap 不踏入起始姿势未占用的新 lethal 栅格。
+      # 判据为「不恶化」（非 pinned_escape 的「净空严格改善」），故接触态也能只转向脱离。
+      # 均过则以 recovery 契约放行受控低速原地转向（线速度恒零，急停解除）。standstill_guard /
+      # sudden_obstacle / input_fault / mode_estop 这些「有物逼近或系统失效」的急停走早返回、
+      # 不经本层，故不被放宽。⚠ 上车前须完成 tilt_on_10 回放（原地转向应放行）+ tilt_on_6/7
+      # （不得误放行恶化方向）+ 直行贴障（不得放行）组合验证；enabled: false 逐字节回退旧行为。
+      rotation_escape:
+        enabled: true
+        min_angular_rad_s: 0.10     # 触发所需的最小转向意图（|驾驶员角速度|）
+        max_angular_rad_s: 0.60     # 放行的原地转向速度上限（受控低速），0.60 rad/s ≈ 34°/s
+        probe_angle_rad: 0.35       # 验证扫掠角行程，覆盖单周期原地转向的角行程
+        probe_step_rad: 0.05        # 角探针离散步长（独立于 direction_mask_probe_step_rad）
+
+      # ── 斜雷达前向近障软限速（见 core/front_tilt_speed_cap.h） ──
+      # 只用斜雷达 left_tilt/right_tilt 原始源（即使 treat_as_horizontal 也单独取，不借合并场）。
+      # 前向走廊（|y| ≤ 车体半宽 + corridor_margin_m）探到障碍且净空 ≤ trigger_distance_m 时，
+      # 把前向线速度上限钳到 speed_cap_m_s（含巡航保持速度）。只压正向 v，不刹停、不动角速度、
+      # 不动后退；与 cruise/degradation 限速一样在 evaluate 入口取 min。障碍清除后经 shape 平滑恢复。
+      # enabled: false 时 cap 恒 +inf，输出逐字节等价旧行为。
+      # ⚠ 上车前须回放确认斜雷达在 trigger_distance_m 处的前向覆盖可靠（斜雷达带俯角，远距可能照地面）。
+      front_tilt_speed_cap:
+        enabled: true              # 总开关；默认关，灰度回放通过后再开
+        corridor_margin_m: 0.40     # 走廊半宽 = 车体半宽 + 此值
+        trigger_distance_m: 2.5     # 障碍进此净空内 → 触发限速
+        release_distance_m: 2.8     # 净空恢复到此值以上持续 clear_hold_s → 解除（须 > trigger）
+        speed_cap_m_s: 1.0         # 限速上限，4.5 km/h ≈ 1.25 m/s
+        confirm_frames: 1           # 连续满足帧数，滤单帧体素抖动
+        clear_hold_s: 0.15          # 释放前持续清空时间
+
+      # ── L0-EB 突发障碍动态紧急制动（见 SUDDEN_BRAKE_PLAN.md） ──
+      # 每周期按所需减速度 a_req = v²/(2·d_eff) 判定，d_eff = 前向净空 − v·t_react − d_safe。
+      # a_req 超过 comfort_decel 即视为突发/切入（MDB 没能提前压住），锁存急停并绕过
+      # max_decel 限幅，由底盘按 emergency_decel 全力制动。emergency_decel 取实测值。
+      sudden_obstacle:
+        # 方案 2.2 灰度上车：enabled+shadow_mode → 触发条件满足只写日志
+        #（sudden_obstacle_shadow / 健康摘要计数），不实际急停。实车跑 ≥1 周
+        # 正常运营路况、逐条回看影子触发全部为真实突发后置 shadow_mode: false 转正。
+        enabled: true
+        shadow_mode: true
+        # 底盘紧急减速能力上限 (m/s²)。实测有效 ~1.86、峰值 ~2.2，取 2.0；勿填 2.5（够不到）。
+        emergency_decel_m_s2: 2.0
+        # 舒适减速度门限：a_req 低于此值交由 MDB/制动包络平滑减速，不触发。
+        comfort_decel_m_s2: 0.6
+        # 执行器等效延迟 (s)，实测 ~0.2~0.5，用于 d_eff 预留滑行距离。
+        t_react_s: 0.30
+        # 仅当前向净空 < 此值 (m) 时参与判定。
+        emergency_distance_m: 2.0
+        # 低于此前向速度 (m/s) 不触发（静止/倒车不管）。
+        min_forward_speed_m_s: 0.15
+        # 连续满足触发条件的帧数，防单帧噪声。
+        confirm_frames: 2
+        # a_req 一阶低通系数 [0,1]。
+        a_req_filter_alpha: 0.5
+        # d_eff 下限 (m)，防分母趋零时 a_req 爆大。
+        d_eff_floor_m: 0.03
+        # 前向走廊裁剪：只看 |y| ≤ 车体半宽 + 此余量 (m) 的前方障碍。
+        corridor_margin_m: 0.05
+        # 滞回释放净空 (m)。
+        release_distance_m: 0.30
+        # 释放前持续清空时间 (s)。
+        clear_hold_s: 0.20
+
+      # 水平雷达主避障链总开关（MDB/制动包络/候选/Recovery）。已放开。
+      horizontal_avoidance:
+        enabled: true
+
+      # 【deprecated，方案 2.5】斜雷达近距 TTC 通道：已被 treat_as_horizontal
+      # 并入水平主链（Footprint/MDB/Map veto 全覆盖）替代，保持 enabled=false。
+      # 物理删除（含 test_avoidance_controller / test_safety_node_io 两个测试
+      # 套件重写）作为带编译环境的独立 commit 执行；勿再开启或加新功能。
+      tilt_ttc:
+        enabled: false
         horizon_s: 0.5
-        max_probe_distance_m: 1.0
+        max_probe_distance_m: 0.7
+        # 沿轨迹硬停边距，与水平 hard_stop 对齐；高于近端盲区 0.03 m。
         hard_stop_distance_m: 0.12
-        limiting_distance_m: 0.35
-        release_distance_m: 0.40
+        # 与有效量程上沿对齐，障碍一进入视场即 jerk 限速。
+        limiting_distance_m: 0.7
+        release_distance_m: 0.75
+        # 最高速最近停车边距：8 km/h 时在 ~0.45 m 触发硬闸（仍落在 0.7 m 量程内）。
+        distance_emergency_m: 0.45
+        emergency_clear_hold_s: 0.15
+        obstacle_radius_m: 0.01
+        use_command_velocity_for_ttc: true
+        # 以下 TTC 参数用于近距限速和急停锁存释放。
         limiting_ttc_s: 0.55
         emergency_ttc_s: 0.35
         emergency_ttc_release_s: 0.50
-        emergency_clear_hold_s: 0.15
         min_speed_for_ttc_m_s: 0.25
-        obstacle_radius_m: 0.01
-        use_command_velocity_for_ttc: true
+
+      # ── P0 精准停车：近距指数速度律 + 停短脉冲补偿 ──
+      # 与 MDB 叠加：中远距仍由 jerk 制动包络反算速度（二次函数区）；
+      # 剩余距离进入 near_zone_m 后用 v = scale·(1−exp(−s/λ)) 渐近软着陆，
+      # s→0 时 v→0 天然无过冲；底盘死区导致停短时由脉冲补偿逐步逼近目标线。
+      # 目标停车线 = hard-stop 边界（净空 = hard_stop_distance_m 处），
+      # 实际车头物理距离 ≈ front_margin_m + hard_stop_distance_m ≈ 6.5 cm，可按需调整两者。
+      precise_stop:
+        enabled: true
+        # 进入近距指数段的剩余距离，以 hard-stop 线为零点。
+        near_zone_m: 0.35
+        # 指数律长度常数 λ，越小终端收敛越急、减速区越短。
+        exp_lambda_m: 0.08
+        # 指数段速度尺度：v_cap = scale·(1−exp(−s/λ))，与包络限速取 min。
+        near_speed_scale_m_s: 0.45
+        # 判定已精准到位的剩余距离容差，应不小于 braking_at_stop_distance_eps_m。
+        stop_tolerance_m: 0.015
+        pulse:
+          enabled: true
+          # 微脉冲速度，须略高于底盘速度死区才能推动车辆。
+          creep_speed_m_s: 0.08
+          # 单次脉冲最长时间；实际还受过冲护栏（creep·t ≤ 残差−容差）约束。
+          max_duration_s: 0.25
+          # 判定停短的反馈速度阈值。
+          stall_speed_eps_m_s: 0.02
+          # 停短须持续该时间才发脉冲，过滤正常减速过程。
+          stall_hold_s: 0.20
+          # 两次脉冲间冷却时间，等待反馈稳定。
+          cooldown_s: 0.20
+
+      # ── P1 人机共享控制：连续接管 α + 转向保真 ──
+      # α 由驾驶员自身轨迹 TTC/净空归一化：output = driver + α·(safety − driver)。
+      # α=0 完全跟手；风险逼近时平滑上升（软接管）；α=1 安全临界点完全过载。
+      # 制动包络限速、Map veto、EmergencyBrake 硬闸均在融合之后仍然生效。
+      shared_control:
+        enabled: true
+        # true：限速干预只压线速度，保留驾驶员转向速率（转向保真）。
+        preserve_steering: true
+        # 驾驶员轨迹 TTC ≥ 此值 → α=0；≤ alpha_ttc_full_s → α=1。
+        alpha_ttc_zero_s: 1.5
+        alpha_ttc_full_s: 0.45
+        # 驾驶员轨迹最小净空 ≥ 此值 → α=0；≤ full → α=1（应 ≥ hard_stop_distance_m）。
+        alpha_clearance_zero_m: 0.30
+        alpha_clearance_full_m: 0.05
+        # α 回落速率 (1/s)；上升瞬时不限速，保证安全响应。
+        alpha_release_rate_per_s: 2.0
+
+      # ── P2 窄道通过：走廊提取 + 贝塞尔中线导引 ──
+      # 检出「足够窄且足够长」的走廊后注入居中候选并按侧向净空平滑限速，
+      # 将单纯制动的振荡卡顿转变为减速居中的连贯通过。
+      # 候选仍需通过 Footprint 扫掠与 Map veto 全部安全检查，不放宽任何判据。
+      narrow_passage_planner:
+        enabled: true
+        # true：safe_assist/cruise 下自动检出窄道并启用导引。
+        auto_detect_enabled: true
+        # 前向走廊提取距离。
+        look_ahead_m: 2.0
+        # ROI 左右半宽。
+        roi_half_width_m: 1.2
+        # 纵向 bin 尺寸。
+        bin_size_m: 0.15
+        # 有效走廊最短连续长度。
+        min_corridor_len_m: 0.45
+        # 每侧最小可行余量：gap ≥ 车宽 + 2·此值才视为可通行。
+        min_side_margin_m: 0.03
+        # 窄道检出上限：gap − 车宽 ≤ 此值才注入导引（更宽视为开阔区不干预）。
+        narrow_width_max_m: 0.60
+        # 净空→限速增益：v_cap = min_pass + gain·(侧向净空 − min_side_margin)。
+        speed_per_clearance: 3.0
+        # 走廊有效时保持前进的下限速度，避免蠕行卡死。
+        min_pass_speed_m_s: 0.15
+        # 居中候选曲率上限。
+        max_curvature_1_m: 1.5
+        # 居中候选 command_cost 折减，同等安全下优先被选中。
+        cost_bias: 0.15
+
+      # ── P0-A' 动态障碍逼近速度估计（方案 5，见 closing_speed_estimator.h）──
+      # 前向走廊净空差分（扣除自车前进分量）估计障碍自身逼近速度：
+      #   · 制动包络动态预留 = max(braking_obstacle_closing_reserve_m_s, 估计值)，
+      #     行人/对向车逼近更快时预留自动加大，静态环境不再白留距离；
+      #   · L0-EB 的 a_req 用相对速度 v_rel = 自车速度 + 估计值，切入触发提前。
+      # 能力边界：横穿目标在进入前向走廊前不可预判；不做多目标跟踪。
+      closing_speed:
+        enabled: true
+        filter_alpha: 0.4            # 一阶低通系数，越大越跟手
+        confirm_frames: 3            # 连续逼近确认帧数，滤单帧体素抖动
+        max_rate_m_s: 2.0            # 估计输出上限，防离散跳变爆大
+        jump_reset_m: 0.30           # 净空增大突变（漏检恢复/障碍离开）复位阈值
+
+      # ── 方案 8 扫掠预裁剪 ──
+      # 障碍到「轨迹 AABB 外扩 Footprint 外接圆」距离超过此带宽时整体跳过。
+      # 校验器强制 ≥ 一切净空判据阈值（turn_guard band 0.6 等），故不改变任何
+      # 控制决策，仅远障净空在日志中由有限值变为 null。≤0 关闭（旧行为）。
+      swept_cull_band_m: 1.0
+
+      # ── 方案 1 步骤 A：影子仲裁（纯观测）──
+      # evaluate 各层旁路记录 LayerVerdict，末尾用 SafetyArbiter 复算并与真实
+      # 输出比对；不一致计入干预日志与健康摘要 arbiter_shadow_mismatch_count。
+      # 步骤 B（逐层切换为 verdict 真源）以 bag 回归守门后再启动。
+      arbiter_shadow:
+        enabled: true
 
       # 候选允许提速前需要持续稳定的时间，避免障碍边缘导致速度跳变。
       candidate_speed_up_hold_s: 0.30
@@ -299,12 +815,14 @@
       width_front_m: 0.62
       width_m: 0.68
       # 车头方向附加安全余量。
+      # P0-C：由 5 cm 抬到 12 cm。前向物理停车距离 ≈ front_margin_m + hard_stop_distance_m ≈ 15 cm，
+      # 为停车过冲/单帧漏检/近场盲区留可见余量，避免减速停车后障碍侵入车体。只影响前向纵深，不改车宽。
       front_margin_m: 0.05
       # 车尾方向附加安全余量。
-      back_margin_m: 0.08
+      back_margin_m: 0.03
       # safe_assist/cruise 模式左右单侧余量；narrow 模式由 mode.narrow 覆盖。
       side_margin_m: 0.03
-      # 基础障碍 primitive 半径；narrow 模式由 mode.narrow.obstacle_radius_m 覆盖。
+      # 基础障碍 primitive 半径。已同步 narrow（原 0.005）。
       obstacle_radius_default: 0.005
 
     # ── Rolling LocalMap：空间记忆与轨迹 veto ──
@@ -320,8 +838,9 @@
       height_m: 6.0
       # 栅格分辨率，0.05 m 表示每格 5 cm。减小可提高精度但显著增加内存和查询量。
       resolution_m: 0.05
-      # 基础模式地图膨胀半径；narrow 模式由 mode.narrow 对应值覆盖。
-      inflation_radius_m: 0.15
+      # 基础模式地图膨胀半径。P0-C：由 1 cm 抬到 3 cm，让膨胀真正生效（原 0.01 < resolution 0.05
+      # 时 applyInflation 仅作用于种子格自身、近乎关闭）。恢复空间记忆兜底安全带；如偏保守可下调。
+      inflation_radius_m: 0.03
       # 栅格综合代价大于等于该值时判定为致命区域。
       lethal_threshold: 0.65
       # 非重建模式下占据概率衰减到一半所需时间。
@@ -332,9 +851,23 @@
       observation_weight: 0.85
       # true：每周期根据当前待融合点重建地图，不保留跨周期概率。
       # false：启用带衰减的历史空间记忆。
+      # ⚠ 地图固定在 base_link 车体系：rebuild=false 必须同时开启下方
+      # ego_motion_compensation，否则车动后历史栅格整体错位（几何不正确），
+      # 参数校验器会对该组合告警。见 PRODUCTION_HARDENING_PLAN.md 方案 6。
       rebuild_each_frame: true
-      # 是否发布 /safety/local_map OccupancyGrid。
-      publish_viz: true
+      # ── 方案 6A 自运动补偿（启用跨帧记忆的前置条件）──
+      # 每个地图周期用轮速积分把历史栅格反向平移（整格滚动 + 亚格残差累积）；
+      # 旋转不做重采样，累计角行程超阈值时全图概率乘惩罚衰减（转弯多则记忆
+      # 快速失效，直行时记忆完整）。启用跨帧记忆的推荐组合：
+      #   rebuild_each_frame: false + ego_motion_compensation: true
+      # 当前保持 rebuild=true（补偿无动作），待 SIL/bag 验证后切换。
+      ego_motion_compensation: false
+      # 旋转惩罚触发阈值 (rad)：累计 |dθ| 超过后施加一次额外衰减。
+      rotation_decay_threshold_rad: 0.20
+      # 旋转惩罚衰减系数 (0,1]：触发时全图概率乘以该值。
+      rotation_decay_factor: 0.5
+      # 是否发布 /safety/local_map OccupancyGrid（生产关闭降 DDS/构图开销）。
+      publish_viz: false
       # LocalMap 可视化发布频率。
       viz_rate_hz: 5.0
       # 地图融合阶段允许的点云最高 z 值；感知前处理可能已经用更严格阈值过滤。
@@ -353,3 +886,31 @@
       veto_on_lethal: true
       # true：检查轨迹中车体中心、四角和 Footprint 内部采样点；false 时仅检查中心。
       check_footprint_corners: true
+      # ── L2 单调退离逃逸放宽（默认关，见 avoidance_types.h / map_constraint_check.cpp）──
+      # 贴障脱困（如前障贴身倒退）在受控速度下常无法在逃逸窗内「完全清空」初始 lethal，
+      # 被误判不可逃逸而钉死（tilt_on_7）。开启后额外接受「不进任何新 lethal 且对初始
+      # lethal 集单调退离」的轨迹——仅放行、方向天然朝安全。关闭时行为逐位一致。
+      retreat_escape_enabled: false
+      # 退离接受所需最小进展：末位姿覆盖的初始-lethal 格数须比起始至少少这么多。
+      retreat_min_progress_cells: 1.0
+
+    # ── 方案 4 传感器降级矩阵（见 core/degradation_policy.h）──
+    # 把「哪路雷达失效 → 封哪个运动轴 + 限速几档」显式化。单路失效时其覆盖侧
+    # 盲区不再被当作自由空间跑全速；多源失效封锁轴取并集、限速取最小。
+    # 已知边界：recovery/pinned 脱困用驾驶员原始命令评估，不受降级封锁
+    #（脱困本身低速受控且经 Footprint/Map 复验）。全局 min_fresh_* 兜底不变。
+    # speed_cap_m_s ≤ 0 表示不限速。source 索引：left/right/back 为水平雷达，
+    # left_tilt/right_tilt 为前向覆盖对（treat_as_horizontal 合并后仍按物理源判定）。
+    degradation:
+      enabled: true
+      # 左侧雷达失效：左侧盲 → 封锁左转，全局限速 0.8 m/s
+      left:        { block_forward: false, block_backward: false, block_left: true,  block_right: false, speed_cap_m_s: 0.8 }
+      # 右侧雷达失效：右侧盲 → 封锁右转，全局限速 0.8 m/s
+      right:       { block_forward: false, block_backward: false, block_left: false, block_right: true,  speed_cap_m_s: 0.8 }
+      # 后向雷达失效：后向盲 → 封锁倒车（speed_cap 0 = 不额外限前向速度）
+      back:        { block_forward: false, block_backward: true,  block_left: false, block_right: false, speed_cap_m_s: 0.0 }
+      # 单路斜雷达失效：前向覆盖减半 → 仅全局限速 1.0 m/s
+      left_tilt:   { block_forward: false, block_backward: false, block_left: false, block_right: false, speed_cap_m_s: 1.0 }
+      right_tilt:  { block_forward: false, block_backward: false, block_left: false, block_right: false, speed_cap_m_s: 1.0 }
+      # 两路斜雷达同时失效：前向覆盖对丢失 → 封锁前进 + 蠕行限速
+      forward_pair_lost: { block_forward: true, block_backward: false, block_left: false, block_right: false, speed_cap_m_s: 0.3 }

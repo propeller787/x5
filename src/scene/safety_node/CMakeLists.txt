@@ -24,12 +24,22 @@ add_definitions(${PCL_DEFINITIONS})
 
 set(SAFETY_NODE_CORE_SOURCES
   src/core/avoidance_utils.cpp
+  src/core/direction_mask.cpp
   src/core/vehicle_footprint.cpp
   src/core/motion_rollout.cpp
   src/core/swept_footprint_checker.cpp
   src/core/safety_filter.cpp
   src/core/emergency_brake.cpp
+  src/core/sudden_obstacle_detector.cpp
   src/core/obstacle_field.cpp
+  src/core/pulse_compensator.cpp
+  src/core/narrow_passage_planner.cpp
+  src/core/safety_verdict.cpp
+  src/core/closing_speed_estimator.cpp
+  src/core/degradation_policy.cpp
+  src/core/front_lowpass_stop.cpp
+  src/core/front_tilt_speed_cap.cpp
+  src/core/warning_reporter.cpp
 )
 
 set(SAFETY_NODE_SOURCES
@@ -41,6 +51,7 @@ set(SAFETY_NODE_SOURCES
   src/avoidance_controller.cpp
   src/output_shaper.cpp
   src/perception_utils.cpp
+  src/joystick_utils.cpp
   src/lidar_perception.cpp
   src/vehicle_io.cpp
   src/safety_node.cpp
@@ -137,6 +148,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_perception_utils ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
   ament_target_dependencies(test_perception_utils rclcpp)
 
+  ament_add_gtest(test_joystick_utils test/test_joystick_utils.cpp)
+  target_link_libraries(test_joystick_utils ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_joystick_utils interface geometry_msgs)
+
   ament_add_gtest(test_lidar_perception test/test_lidar_perception.cpp)
   target_link_libraries(test_lidar_perception ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
   ament_target_dependencies(test_lidar_perception rclcpp sensor_msgs tf2_ros)
@@ -152,6 +167,55 @@ if(BUILD_TESTING)
   ament_add_gtest(test_t3_sil test/test_t3_sil.cpp)
   target_link_libraries(test_t3_sil ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
   ament_target_dependencies(test_t3_sil rclcpp geometry_msgs)
+
+  ament_add_gtest(test_precise_stop_narrow test/test_precise_stop_narrow.cpp)
+  target_link_libraries(test_precise_stop_narrow ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_precise_stop_narrow rclcpp geometry_msgs)
+
+  ament_add_gtest(test_direction_mask test/test_direction_mask.cpp)
+  target_link_libraries(test_direction_mask ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_direction_mask rclcpp geometry_msgs)
+
+  # ── PRODUCTION_HARDENING_PLAN 新增测试 ──
+  ament_add_gtest(test_param_validation test/test_param_validation.cpp)
+  target_link_libraries(test_param_validation ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_param_validation rclcpp)
+
+  ament_add_gtest(test_safety_arbiter test/test_safety_arbiter.cpp)
+  target_link_libraries(test_safety_arbiter ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_safety_arbiter rclcpp geometry_msgs)
+
+  ament_add_gtest(test_closing_speed_estimator test/test_closing_speed_estimator.cpp)
+  target_link_libraries(test_closing_speed_estimator ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_closing_speed_estimator rclcpp)
+
+  ament_add_gtest(test_degradation_policy test/test_degradation_policy.cpp)
+  target_link_libraries(test_degradation_policy ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_degradation_policy rclcpp)
+
+  ament_add_gtest(test_swept_cull test/test_swept_cull.cpp)
+  target_link_libraries(test_swept_cull ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_swept_cull rclcpp geometry_msgs)
+
+  ament_add_gtest(test_ego_motion_map test/test_ego_motion_map.cpp)
+  target_link_libraries(test_ego_motion_map ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_ego_motion_map rclcpp nav_msgs)
+
+  ament_add_gtest(test_retreat_escape test/test_retreat_escape.cpp)
+  target_link_libraries(test_retreat_escape ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_retreat_escape rclcpp)
+
+  ament_add_gtest(test_front_lowpass_stop test/test_front_lowpass_stop.cpp)
+  target_link_libraries(test_front_lowpass_stop ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_front_lowpass_stop rclcpp geometry_msgs)
+
+  ament_add_gtest(test_front_tilt_speed_cap test/test_front_tilt_speed_cap.cpp)
+  target_link_libraries(test_front_tilt_speed_cap ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_front_tilt_speed_cap rclcpp geometry_msgs)
+
+  ament_add_gtest(test_warning_reporter test/test_warning_reporter.cpp)
+  target_link_libraries(test_warning_reporter ${PROJECT_NAME}_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_warning_reporter rclcpp)
 endif()
 
 ament_export_include_directories(include)

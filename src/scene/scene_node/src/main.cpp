@@ -101,7 +101,12 @@ int main(int argc, char** argv) {
             executor.add_node(clustering);
             RCLCPP_INFO(rclcpp::get_logger("main"), "  ✓ 已添加 Clustering");
         }
-        
+
+        if (auto env_detector = g_node->getEnvironmentDetector()) {
+            executor.add_node(env_detector);
+            RCLCPP_INFO(rclcpp::get_logger("main"), "  ✓ 已添加 EnvironmentDetector");
+        }
+
         // ==================== 5. 启动执行器 ====================
         RCLCPP_INFO(rclcpp::get_logger("main"), "=================================");
         RCLCPP_INFO(rclcpp::get_logger("main"), "  系统启动成功！开始运行...");

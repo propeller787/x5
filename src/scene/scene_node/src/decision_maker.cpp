@@ -15,10 +15,20 @@
  */
 
 #include "decision_maker.h"
+#include "decision_maker_params_io.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <limits>
+
+namespace {
+/** 两位小数取整；若原值 >0 但取整后为 0（亚厘米），保留原值，避免误判为贴脸 0 m */
+double round_distance_keep_subcentimeter(double v)
+{
+    const double r = std::round(v * 100.0) / 100.0;
+    return (v > 1e-9 && std::abs(r) < 1e-9) ? v : r;
+}
+} // namespace
 
 // ==================== 构造函数和初始化 ====================
 
@@ -27,9 +37,16 @@ DecisionMaker::DecisionMaker()
 {
     RCLCPP_DEBUG(this->get_logger(), "[L%d] 初始化决策器", __LINE__);
 
+    decision_maker_params_io::declare_and_load_decision_params(*this, decision_params_);
+
     // 初始化参数
     last_nearest_distance_ = decision_params_.warning_zone;
     has_handle_control_ = false;
+    last_forward_brake_time_ = this->now();
+    last_backward_limit_time_ = this->now();
+    backward_emergency_start_time_ = this->now();
+    last_backward_limited_linear_x_ = 0.0;
+    backward_emergency_active_ = false;
 
     // 初始化状态保持相关（已废弃，保留用于兼容性）
     last_detected_distance_ = decision_params_.warning_zone;
@@ -64,14 +81,16 @@ DecisionMaker::DecisionMaker()
     right_state_.recovery_start_time = now_time;
     right_state_.last_detection_time = now_time;
 
-    // 初始化机器人主体尺寸与碰撞区域（默认来源于URDF碰撞几何体尺寸与合理区域）
-    robot_dimensions_ = RobotDimensions::getBaseDimensions();
+    // 车体尺寸：由 decision_params_（YAML / ros2 param 的 robot_*）同步，见 syncRobotDimensionsFromParams
+    syncRobotDimensionsFromParams();
     collision_zones_ = RobotDimensions::getCollisionZones();
+    declareSweptAvoidanceParams();
 
     // 初始化平滑滤波器
     smooth_filter_ = std::make_unique<SmoothFilter>();
     smooth_filter_->setFilterType(FilterType::RATE_LIMITED);
     smooth_filter_->setAlpha(0.3); // 指数平滑系数
+    updateSmoothFilterCommandLimits();
 
     // 初始化卡尔曼滤波器
     kalman_filter_ = std::make_unique<SmoothFilter>();
@@ -94,10 +113,58 @@ DecisionMaker::DecisionMaker()
         auxiliaryAlarmTopic, 1);
     auxiliary_alarm_publisher_back_ = this->create_publisher<interface::msg::AuxiliaryAlarm>(
         auxiliaryAlarmBackTopic, 1);
-
+    collision_warning_publisher_ = this->create_publisher<interface::msg::CollisionWarning>(
+        collisionWarningTopic, 1);
+    narrow_end_publisher_ = this->create_publisher<std_msgs::msg::Empty>("/narrow/end", 10);
+    
+    // 初始化预警消息的 warning_type 字段
+    forward_warning_msg_.warning_type = static_cast<int16_t>(WarningType::FORWARD);
+    backward_warning_msg_.warning_type = static_cast<int16_t>(WarningType::BACKWARD);
+    left_warning_msg_.warning_type = static_cast<int16_t>(WarningType::LEFT);
+    right_warning_msg_.warning_type = static_cast<int16_t>(WarningType::RIGHT);
+    negative_plane_forward_warning_msg_.warning_type = static_cast<int16_t>(WarningType::NEGATIVE_PLANE_FORWARD);
+    negative_plane_left_warning_msg_.warning_type = static_cast<int16_t>(WarningType::NEGATIVE_PLANE_LEFT);
+    negative_plane_right_warning_msg_.warning_type = static_cast<int16_t>(WarningType::NEGATIVE_PLANE_RIGHT);
+    
+    // 初始化预警消息的 warning_level 字段为 NONE
+    forward_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::NONE);
+    backward_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::NONE);
+    left_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::NONE);
+    right_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::NONE);
+    negative_plane_forward_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::NONE);
+    negative_plane_left_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::NONE);
+    negative_plane_right_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::NONE);
+    
+    // 初始化摇杆订阅器
+    joystick_subscription_ = this->create_subscription<interface::msg::Joystick>(
+        joystickTopic, 1, std::bind(&DecisionMaker::joystickCallback, this, std::placeholders::_1));
+    tft_car_mode_subscription_ = this->create_subscription<std_msgs::msg::Int32>(
+        tftCarModeTopic, 1, std::bind(&DecisionMaker::tftCarModeCallback, this, std::placeholders::_1));
     // 初始化档位订阅器
     car_info_subscription_ = this->create_subscription<interface::msg::CarInfo>(
         carInfoTopic, 1, std::bind(&DecisionMaker::carInfoCallback, this, std::placeholders::_1));
+
+    decision_params_cb_handle_ = this->add_on_set_parameters_callback(
+        [this](const std::vector<rclcpp::Parameter>& parameters) {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            auto result = decision_maker_params_io::apply_ros_parameter_updates(decision_params_, parameters);
+            if (result.successful) {
+                RCLCPP_INFO(this->get_logger(), "决策参数已通过 ROS 动态更新");
+                syncRobotDimensionsFromParams();
+                syncObstaclePredictorParams();
+                syncEvasionDetectorParams();
+            }
+            return result;
+        });
+
+    // 阶段 A：决策与摇杆解耦，默认定时 20Hz（可用 decision_rate_hz 覆盖）
+    this->declare_parameter<double>("decision_rate_hz", 20.0);
+    const double decision_rate_hz = std::max(1.0, this->get_parameter("decision_rate_hz").as_double());
+    const auto decision_period = std::chrono::duration<double>(1.0 / decision_rate_hz);
+    decision_timer_ = this->create_wall_timer(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(decision_period),
+        [this]() { this->runDecisionTick(); });
+    RCLCPP_INFO(this->get_logger(), "[DecisionMaker] 决策定时器已启动: %.1f Hz", decision_rate_hz);
 
     RCLCPP_DEBUG(this->get_logger(), "[L%d] 报警发布器初始化完成", __LINE__);
 
@@ -106,6 +173,165 @@ DecisionMaker::DecisionMaker()
 }
 
 DecisionMaker::~DecisionMaker() { }
+
+void DecisionMaker::declareSweptAvoidanceParams()
+{
+    this->declare_parameter<std::string>("avoidance_engine", avoidance_engine_);
+    this->declare_parameter<bool>("avoidance_shadow_log", avoidance_shadow_log_);
+    this->declare_parameter<double>("rollout_horizon_s", swept_avoidance_params_.rollout.horizon_s);
+    this->declare_parameter<double>("rollout_dt_s", swept_avoidance_params_.rollout.dt_s);
+    this->declare_parameter<int>("rollout_speed_samples", swept_avoidance_params_.rollout.speed_samples);
+    this->declare_parameter<int>("rollout_angular_samples", swept_avoidance_params_.rollout.angular_samples);
+    this->declare_parameter<double>("swept_radar_timeout_s", swept_avoidance_params_.obstacle.radar_timeout_s);
+    this->declare_parameter<int>("swept_max_obstacles", static_cast<int>(swept_avoidance_params_.obstacle.max_obstacles));
+    this->declare_parameter<double>("footprint_back_extent_m", swept_footprint_back_extent_);
+    this->declare_parameter<double>("footprint_front_margin", swept_avoidance_params_.margins.front);
+    this->declare_parameter<double>("footprint_back_margin", swept_avoidance_params_.margins.back);
+    this->declare_parameter<double>("footprint_side_margin", swept_avoidance_params_.margins.side);
+    this->declare_parameter<double>("footprint_obstacle_radius_default", swept_avoidance_params_.obstacle.default_radius);
+    this->declare_parameter<double>("comfort_clearance", swept_avoidance_params_.risk.comfort_clearance_m);
+    this->declare_parameter<double>("swept_warning_ttc_s", swept_avoidance_params_.risk.warning_ttc_s);
+    this->declare_parameter<double>("swept_limiting_ttc_s", swept_avoidance_params_.risk.limiting_ttc_s);
+    this->declare_parameter<double>("swept_emergency_ttc_s", swept_avoidance_params_.risk.emergency_ttc_s);
+    this->declare_parameter<double>("swept_hard_stop_distance_m", swept_avoidance_params_.risk.hard_stop_distance_m);
+    this->declare_parameter<double>("safety_filter_angular_weight", swept_avoidance_params_.filter.angular_weight);
+    updateSweptAvoidanceParamsFromRos();
+}
+
+void DecisionMaker::updateSweptAvoidanceParamsFromRos()
+{
+    avoidance_engine_ = this->get_parameter("avoidance_engine").as_string();
+    avoidance_shadow_log_ = this->get_parameter("avoidance_shadow_log").as_bool();
+
+    swept_avoidance_params_.rollout.horizon_s = this->get_parameter("rollout_horizon_s").as_double();
+    swept_avoidance_params_.rollout.dt_s = this->get_parameter("rollout_dt_s").as_double();
+    swept_avoidance_params_.rollout.speed_samples = static_cast<int>(this->get_parameter("rollout_speed_samples").as_int());
+    swept_avoidance_params_.rollout.angular_samples = static_cast<int>(this->get_parameter("rollout_angular_samples").as_int());
+
+    swept_avoidance_params_.obstacle.radar_timeout_s = this->get_parameter("swept_radar_timeout_s").as_double();
+    swept_avoidance_params_.obstacle.max_obstacles = static_cast<std::size_t>(
+        std::max<int64_t>(1, this->get_parameter("swept_max_obstacles").as_int()));
+    swept_avoidance_params_.obstacle.default_radius = this->get_parameter("footprint_obstacle_radius_default").as_double();
+
+    swept_footprint_back_extent_ = this->get_parameter("footprint_back_extent_m").as_double();
+    swept_avoidance_params_.margins.front = this->get_parameter("footprint_front_margin").as_double();
+    swept_avoidance_params_.margins.back = this->get_parameter("footprint_back_margin").as_double();
+    swept_avoidance_params_.margins.side = this->get_parameter("footprint_side_margin").as_double();
+
+    swept_avoidance_params_.risk.comfort_clearance_m = this->get_parameter("comfort_clearance").as_double();
+    swept_avoidance_params_.risk.warning_ttc_s = this->get_parameter("swept_warning_ttc_s").as_double();
+    swept_avoidance_params_.risk.limiting_ttc_s = this->get_parameter("swept_limiting_ttc_s").as_double();
+    swept_avoidance_params_.risk.emergency_ttc_s = this->get_parameter("swept_emergency_ttc_s").as_double();
+    swept_avoidance_params_.risk.hard_stop_distance_m = this->get_parameter("swept_hard_stop_distance_m").as_double();
+    swept_avoidance_params_.filter.angular_weight = this->get_parameter("safety_filter_angular_weight").as_double();
+    swept_avoidance_params_.filter.emergency_ttc_s = swept_avoidance_params_.risk.emergency_ttc_s;
+}
+
+scene_node::avoidance::SafetyFilterResult DecisionMaker::evaluateSweptAvoidance(
+    const geometry_msgs::msg::Twist& handle_control,
+    const rclcpp::Time& now)
+{
+    std::map<std::string, std::vector<ClusterInfo>> radar_clusters;
+    std::map<std::string, rclcpp::Time> radar_times;
+    VehicleState vehicle_state;
+    RobotDimensions::BaseDimensions robot_dimensions;
+    DecisionParams decision_params_snapshot;
+    double feedback_linear = 0.0;
+    double feedback_angular = 0.0;
+
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        radar_clusters = radar_cluster_map_;
+        radar_times = radar_last_update_time_map_;
+        vehicle_state = current_vehicle_state_;
+        robot_dimensions = robot_dimensions_;
+        decision_params_snapshot = decision_params_;
+        feedback_linear = tracking_ ? tracking_->getWheelSpeedLinearVelocity() : current_vehicle_state_.linear_velocity;
+        feedback_angular = tracking_ ? tracking_->getWheelSpeedAngularVelocity() : current_vehicle_state_.angular_velocity;
+    }
+
+    auto params = swept_avoidance_params_;
+    params.obstacle.radar_timeout_s = std::max(params.obstacle.radar_timeout_s, decision_params_snapshot.radar_timeout);
+    params.footprint.front = robot_dimensions.length;
+    params.footprint.back = std::max(0.0, swept_footprint_back_extent_);
+    params.footprint.half_width = robot_dimensions.width * 0.5;
+
+    const scene_node::avoidance::MotionCommand desired{
+        handle_control.linear.x,
+        handle_control.angular.z
+    };
+    const scene_node::avoidance::VehicleFeedback feedback{
+        feedback_linear,
+        feedback_angular,
+        vehicle_state.timestamp
+    };
+
+    return swept_risk_assessment_.evaluate(
+        desired, feedback, radar_clusters, radar_times, now, params);
+}
+
+geometry_msgs::msg::Twist DecisionMaker::smoothDecisionOutput(const geometry_msgs::msg::Twist& control)
+{
+    geometry_msgs::msg::Twist filtered_control;
+    updateSmoothFilterCommandLimits();
+
+    const double kEmergencyStopThreshold = 0.02;
+    if (std::abs(control.linear.x) <= kEmergencyStopThreshold
+        && std::abs(control.angular.z) <= kEmergencyStopThreshold) {
+        filtered_control = smooth_filter_->filter(control);
+        const double kBrakeDecay = 0.3;
+        if (std::abs(filtered_control.linear.x) > kEmergencyStopThreshold) {
+            filtered_control.linear.x *= kBrakeDecay;
+        } else {
+            filtered_control.linear.x = 0.0;
+        }
+        if (std::abs(filtered_control.angular.z) > kEmergencyStopThreshold) {
+            filtered_control.angular.z *= kBrakeDecay;
+        } else {
+            filtered_control.angular.z = 0.0;
+        }
+    } else {
+        filtered_control = smooth_filter_->filter(control);
+    }
+
+    if (std::abs(filtered_control.angular.z) > decision_params_.absolute_max_angular_speed) {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+            "[L%d] å·¦ä¾§-è§’é€Ÿåº¦è¶…é™ï¼%.3f rad/s -> %.3f rad/s",
+            __LINE__,
+            filtered_control.angular.z,
+            std::copysign(decision_params_.absolute_max_angular_speed, filtered_control.angular.z));
+        filtered_control.angular.z = std::copysign(decision_params_.absolute_max_angular_speed, filtered_control.angular.z);
+    }
+
+    return filtered_control;
+}
+
+void DecisionMaker::logSweptAvoidanceShadow(
+    const scene_node::avoidance::SafetyFilterResult& result,
+    const geometry_msgs::msg::Twist& output_control)
+{
+    if (!avoidance_shadow_log_) {
+        return;
+    }
+
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+        "[SweptAvoidance][%s] level=%s emergency=%s ttc=%.3f clearance=%.3f "
+        "selected=(%.3f, %.3f) output=(%.3f, %.3f) obstacles=%zu trajectories=%zu source=%s collision=(%.2f, %.2f)",
+        avoidance_engine_ == "swept_footprint" ? "takeover" : "shadow",
+        scene_node::avoidance::riskLevelName(result.risk.level),
+        result.emergency_brake ? "true" : "false",
+        result.risk.time_to_collision,
+        result.risk.min_distance,
+        result.selected_command.linear_x,
+        result.selected_command.angular_z,
+        output_control.linear.x,
+        output_control.angular.z,
+        result.obstacle_count,
+        result.trajectory_count,
+        result.risk.source.c_str(),
+        result.risk.collision_x,
+        result.risk.collision_y);
+}
 
 // ==================== 公共接口函数 ====================
 
@@ -184,13 +410,49 @@ void DecisionMaker::applySpeedForwardIntervention(geometry_msgs::msg::Twist& out
     } else {
         is_forward_obstacle_negative_plane_ = false;
     }
+    double approach_velocity = 0.0;
+    double feedback_angular_z = 0.0;
+    double feedback_linear_x = 0.0;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        // 使用指令速度与实测速度的较大值，确保 TTC 计算不低估（实测可能延迟或为0）
+        if (current_handle_control_.linear.x > 0.0) {
+            approach_velocity = std::max(current_vehicle_state_.linear_velocity, current_handle_control_.linear.x);
+        }
+        // 避让意图：与 applySpeedLimit 底盘门限一致，使用轮速反馈（Tracking 与 /wheel/twist 同源）
+        if (tracking_) {
+            feedback_angular_z = tracking_->getWheelSpeedAngularVelocity();
+            feedback_linear_x = tracking_->getWheelSpeedLinearVelocity();
+        } else {
+            feedback_angular_z = current_vehicle_state_.angular_velocity;
+            feedback_linear_x = current_vehicle_state_.linear_velocity;
+        }
+    }
 
     applyDirectionalInterventionInternal(
         min_distance,
         decision_params_.warning_zone,
         decision_params_.emergency_brake_distance,
+        decision_params_.warning_ttc,
+        approach_velocity,
         forward_state_,
-        [this](double dist) { return this->calculateSpeedLimit(dist); },
+        [this, feedback_angular_z, feedback_linear_x](double dist, double vel) {
+            SpeedLimit limit = this->calculateSpeedLimit(dist, vel);
+            // 轮速反馈推断避让运动，衰减前向限速；与 calculateSpeedLimit 使用同一有效距离 dist（含状态保持后）
+            if (decision_params_.enable_evasion_detection && evasion_detector_
+                && limit.max_linear_speed < decision_params_.max_speed_limit) {
+                double factor = evasion_detector_->computeEvasionFactor(feedback_angular_z, feedback_linear_x, dist);
+                if (factor < 1.0) {
+                    double relaxed = evasion_detector_->applyEvasionRelax(
+                        limit.max_linear_speed, decision_params_.max_speed_limit, factor);
+                    RCLCPP_INFO(this->get_logger(),
+                        "[L%d][前向-避让衰减] omega_fb=%.3f v_fb=%.3f factor=%.3f 限速 %.3f -> %.3f m/s",
+                        __LINE__, feedback_angular_z, feedback_linear_x, factor, limit.max_linear_speed, relaxed);
+                    limit.max_linear_speed = relaxed;
+                }
+            }
+            return limit;
+        },
         [this](const geometry_msgs::msg::Twist& ctrl, const SpeedLimit& limit) {
             return this->applySpeedLimit(ctrl, limit);
         },
@@ -204,12 +466,21 @@ void DecisionMaker::applySpeedBackwardIntervention(geometry_msgs::msg::Twist& ou
     double min_distance = min_directional_distance_.min_backward_distance;
     bool use_predicted = false;
 
+    double approach_velocity = 0.0;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (current_handle_control_.linear.x < 0.0) {
+            approach_velocity = std::max(std::abs(current_vehicle_state_.linear_velocity), std::abs(current_handle_control_.linear.x));
+        }
+    }
     applyDirectionalInterventionInternal(
         min_distance,
         decision_params_.warning_zone_backward,
         decision_params_.emergency_brake_distance_backward,
+        decision_params_.warning_ttc_backward,
+        approach_velocity,
         backward_state_,
-        [this](double dist) { return this->calculateSpeedLimitForBackward(dist); },
+        [this](double dist, double vel) { return this->calculateSpeedLimitForBackward(dist, vel); },
         [this](const geometry_msgs::msg::Twist& ctrl, const SpeedLimit& limit) {
             return this->applySpeedLimitForBackward(ctrl, limit);
         },
@@ -233,12 +504,25 @@ void DecisionMaker::applySpeedLeftIntervention(geometry_msgs::msg::Twist& output
             min_directional_distance_.min_lateral_left_distance, min_distance, lateral_tilt_radar_distance_adjustment_);
     }
 
+    double approach_velocity = 0.0;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        double half_width = robot_dimensions_.width * 0.5;
+        // Bug3 修复：取命令角速度与轮速反馈的较大值，快速转向命令刚下达时不滞后
+        if (current_handle_control_.angular.z > 0.0) {
+            double cmd_vel = std::abs(current_handle_control_.angular.z) * half_width;
+            double fb_vel = std::abs(current_vehicle_state_.angular_velocity) * half_width;
+            approach_velocity = std::max(cmd_vel, fb_vel);
+        }
+    }
     applyDirectionalInterventionInternal(
         min_distance,
         decision_params_.warning_zone_lateral,
         decision_params_.emergency_brake_distance_lateral,
+        decision_params_.warning_ttc_lateral,
+        approach_velocity,
         left_state_,
-        [this](double dist) { return this->calculateSpeedLimitForLateral(dist); },
+        [this](double dist, double vel) { return this->calculateSpeedLimitForLateral(dist, vel); },
         [this](const geometry_msgs::msg::Twist& ctrl, const SpeedLimit& limit) {
             return this->applySpeedLimitForLeft(ctrl, limit);
         },
@@ -262,12 +546,25 @@ void DecisionMaker::applySpeedRightIntervention(geometry_msgs::msg::Twist& outpu
             min_directional_distance_.min_lateral_right_distance, min_distance, lateral_tilt_radar_distance_adjustment_);
     }
 
+    double approach_velocity = 0.0;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        double half_width = robot_dimensions_.width * 0.5;
+        // Bug3 修复：取命令角速度与轮速反馈的较大值
+        if (current_handle_control_.angular.z < 0.0) {
+            double cmd_vel = std::abs(current_handle_control_.angular.z) * half_width;
+            double fb_vel = std::abs(current_vehicle_state_.angular_velocity) * half_width;
+            approach_velocity = std::max(cmd_vel, fb_vel);
+        }
+    }
     applyDirectionalInterventionInternal(
         min_distance,
         decision_params_.warning_zone_lateral,
         decision_params_.emergency_brake_distance_lateral,
+        decision_params_.warning_ttc_lateral,
+        approach_velocity,
         right_state_,
-        [this](double dist) { return this->calculateSpeedLimitForLateral(dist); },
+        [this](double dist, double vel) { return this->calculateSpeedLimitForLateral(dist, vel); },
         [this](const geometry_msgs::msg::Twist& ctrl, const SpeedLimit& limit) {
             return this->applySpeedLimitForRight(ctrl, limit);
         },
@@ -332,15 +629,15 @@ double DecisionMaker::applySpeedRecoveryLogic(
         double recovery_elapsed = (current_time - state.recovery_start_time).seconds();
         double recovery_ratio = std::min(1.0, recovery_elapsed / speed_recovery_time);
 
-        // 线性插值恢复速度
-        state.current_speed_limit = state.current_speed_limit + (state.target_speed_limit - state.current_speed_limit) * recovery_ratio;
+        // 真正的线性插值：从恢复起始速度到目标速度
+        state.current_speed_limit = state.recovery_start_speed
+            + (state.target_speed_limit - state.recovery_start_speed) * recovery_ratio;
 
         final_speed_limit = state.current_speed_limit;
 
         RCLCPP_DEBUG(this->get_logger(), "[L%d][%s-速度恢复] 恢复进度 %.1f%%, 当前限速 %.3f m/s (%.1f km/h)",
             __LINE__, direction_name.c_str(), recovery_ratio * 100.0, state.current_speed_limit, state.current_speed_limit * 3.6);
 
-        // 恢复完成
         if (recovery_ratio >= 1.0) {
             state.is_recovering = false;
             state.current_speed_limit = max_speed_limit;
@@ -348,10 +645,10 @@ double DecisionMaker::applySpeedRecoveryLogic(
                 __LINE__, direction_name.c_str(), state.current_speed_limit, state.current_speed_limit * 3.6);
         }
     } else if (should_start_recovery) {
-        // 如果需要启动恢复，检查条件并启动
         if (state.current_speed_limit < max_speed_limit) {
             state.is_recovering = true;
             state.recovery_start_time = current_time;
+            state.recovery_start_speed = state.current_speed_limit;
             state.target_speed_limit = max_speed_limit;
             RCLCPP_DEBUG(this->get_logger(), "[L%d][%s-速度恢复] 开始恢复，从 %.3f m/s 恢复到 %.3f m/s，用时 %.1f 秒",
                 __LINE__, direction_name.c_str(), state.current_speed_limit, state.target_speed_limit, speed_recovery_time);
@@ -365,8 +662,10 @@ void DecisionMaker::applyDirectionalInterventionInternal(
     double min_distance,
     double warning_zone,
     double emergency_brake_distance,
+    double warning_ttc,
+    double approach_velocity,
     DirectionalState& state,
-    std::function<SpeedLimit(double)> calc_limit_func,
+    std::function<SpeedLimit(double, double)> calc_limit_func,
     std::function<geometry_msgs::msg::Twist(const geometry_msgs::msg::Twist&, const SpeedLimit&)> apply_limit_func,
     const std::string& direction_name,
     geometry_msgs::msg::Twist& output_control,
@@ -377,64 +676,126 @@ void DecisionMaker::applyDirectionalInterventionInternal(
     // 步骤1：应用状态保持逻辑，得到有效距离
     double effective_distance = applyStateHoldLogic(min_distance, warning_zone, state, direction_name, current_time);
     RCLCPP_DEBUG(this->get_logger(), "[L%d] [%s] 应用状态保持逻辑，得到有效距离 %.3f m", __LINE__, direction_name.c_str(), effective_distance);
-    // 步骤2：根据有效距离计算速度限制
+
+    // TTC + 距离双重模式：TTC 用于高速自适应，距离用于低速兜底
+    const double v_eps = 0.01;
+    const bool use_ttc = (approach_velocity >= decision_params_.min_approach_velocity_for_ttc);
+    double effective_ttc = (approach_velocity > v_eps) ? (effective_distance / approach_velocity) : 999.0;
+
+    bool need_intervention = false;
+    if (use_ttc) {
+        // TTC 触发 或 距离低于制动距离时均需干预（低速距离兜底）
+        need_intervention = (effective_ttc < warning_ttc)
+                         || (effective_distance < emergency_brake_distance);
+    } else {
+        need_intervention = (effective_distance < warning_zone);
+    }
+
     double final_speed_limit = decision_params_.max_speed_limit;
     bool should_start_recovery = false;
 
-    if (effective_distance < warning_zone) {
-        // 有效距离在预警区内，需要干预
-        SpeedLimit speed_limit = calc_limit_func(effective_distance);
-        RCLCPP_DEBUG(this->get_logger(), "[L%d] [%s] 计算速度限制，得到限速 线速度: %.3f m/s, 角速度: %.3f rad/s",
-            __LINE__, direction_name.c_str(), speed_limit.max_linear_speed, speed_limit.max_angular_speed);
-        // 更新当前速度限制
-        // 对于侧向碰撞，max_linear_speed 总是 max()，但 max_angular_speed 可能有限制
-        // 因此需要同时检查线速度和角速度是否有限制
+    if (need_intervention) {
+        SpeedLimit speed_limit = calc_limit_func(effective_distance, approach_velocity);
+        RCLCPP_DEBUG(this->get_logger(), "[L%d] [%s] 计算速度限制(TTC=%.3fs)，得到限速 线速度: %.3f m/s, 角速度: %.3f rad/s",
+            __LINE__, direction_name.c_str(), effective_ttc, speed_limit.max_linear_speed, speed_limit.max_angular_speed);
         if (speed_limit.max_linear_speed < std::numeric_limits<double>::max() || speed_limit.max_angular_speed < std::numeric_limits<double>::max()) {
-            RCLCPP_DEBUG(this->get_logger(), "[L%d] [%s] 应用速度限制 - 线速度: %.3f m/s, 角速度: %.3f rad/s",
-                __LINE__, direction_name.c_str(), state.current_speed_limit, state.current_speed_limit);
             output_control = apply_limit_func(output_control, speed_limit);
 
-            // 输出干预信息
-            if (effective_distance <= emergency_brake_distance) {
-                RCLCPP_WARN(this->get_logger(), "[L%d]%s[%s-制动区] 紧急制动！距离 %.3f m",
-                    __LINE__, use_predicted ? "[预测]" : "[实时]", direction_name.c_str(), effective_distance);
+            bool in_emergency = (speed_limit.max_linear_speed <= 0.01) || (speed_limit.max_angular_speed <= 0.01);
+            if (in_emergency) {
+                RCLCPP_WARN(this->get_logger(), "[L%d]%s[%s-制动区] 紧急制动！距离 %.3f m, TTC %.3f s",
+                    __LINE__, use_predicted ? "[预测]" : "[实时]", direction_name.c_str(), effective_distance, effective_ttc);
+                if (shouldPublishPhysicalIntervention(direction_name, WarningLevel::BRAKE)) {
+                    publishInterventionState(direction_name, WarningLevel::BRAKE, effective_distance);
+                } else {
+                    RCLCPP_DEBUG(this->get_logger(), "[L%d][%s-制动区] 决策已限幅，轮速尚未体现减速/刹停，跳过干预等级发布",
+                        __LINE__, direction_name.c_str());
+                }
             } else {
-                RCLCPP_DEBUG(this->get_logger(), "[L%d]%s[%s-减速区] 平滑减速，距离 %.3f m",
-                    __LINE__, use_predicted ? "[预测]" : "[实时]", direction_name.c_str(), effective_distance);
+                RCLCPP_WARN(this->get_logger(), "[L%d]%s[%s-减速区] 平滑减速，距离 %.3f m, TTC %.3f s",
+                    __LINE__, use_predicted ? "[预测]" : "[实时]", direction_name.c_str(), effective_distance, effective_ttc);
+                if (shouldPublishPhysicalIntervention(direction_name, WarningLevel::DECELERATION)) {
+                    publishInterventionState(direction_name, WarningLevel::DECELERATION, effective_distance);
+                } else {
+                    RCLCPP_DEBUG(this->get_logger(), "[L%d][%s-减速区] 决策已限幅，轮速尚未体现减速，跳过干预等级发布",
+                        __LINE__, direction_name.c_str());
+                }
             }
         }
     } else {
-        // 预警区或正常区，不限制速度，可能需要启动恢复
         state.current_speed_limit = decision_params_.max_speed_limit;
-        should_start_recovery = !state.has_last_detection; // 如果障碍物已消失，可能需要恢复
-        RCLCPP_DEBUG(this->get_logger(), "[L%d]%s[%s-正常区] 无需干预，距离 %.3f m",
-            __LINE__, use_predicted ? "[预测]" : "[实时]", direction_name.c_str(), effective_distance);
+        should_start_recovery = !state.has_last_detection;
+        RCLCPP_DEBUG(this->get_logger(), "[L%d]%s[%s-正常区] 无需干预，距离 %.3f m, TTC %.3f s",
+            __LINE__, use_predicted ? "[预测]" : "[实时]", direction_name.c_str(), effective_distance, effective_ttc);
     }
 
-    // 步骤3：应用速度恢复逻辑（包括启动恢复和恢复过程）
     final_speed_limit = applySpeedRecoveryLogic(
         state, decision_params_.max_speed_limit, decision_params_.speed_recovery_time,
         direction_name, current_time, should_start_recovery);
 
-    // 步骤4：如果正在恢复中，需要应用恢复的速度限制
     if (state.is_recovering) {
+        // Bug5 修复：侧向恢复使用 absolute_max_angular_speed 作为目标，而非 max_speed_limit（线速度）
+        bool is_lateral = (direction_name == "左侧" || direction_name == "右侧");
+        double recovery_ratio = (decision_params_.max_speed_limit > 1e-6)
+            ? (final_speed_limit / decision_params_.max_speed_limit) : 1.0;
         SpeedLimit recovery_limit;
-        recovery_limit.max_linear_speed = final_speed_limit;
-        recovery_limit.max_angular_speed = final_speed_limit * 0.5;
+        recovery_limit.max_linear_speed = is_lateral ? std::numeric_limits<double>::max() : final_speed_limit;
+        recovery_limit.max_angular_speed = is_lateral
+            ? (decision_params_.absolute_max_angular_speed * recovery_ratio)
+            : (final_speed_limit * 0.5);
         recovery_limit.distance_threshold = 0.0;
         output_control = apply_limit_func(output_control, recovery_limit);
     }
 }
 
-// ==================== 摇杆控制处理主函数 ====================
+// ==================== 摇杆缓存与定时决策 ====================
+
+void DecisionMaker::updateDesiredTwist(const geometry_msgs::msg::Twist& handle_control)
+{
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    desired_handle_control_ = handle_control;
+    has_handle_control_ = true;
+}
 
 void DecisionMaker::processHandleControl(const geometry_msgs::msg::Twist& handle_control)
 {
-    // 步骤1：保存摇杆控制命令
+    updateDesiredTwist(handle_control);
+}
+
+void DecisionMaker::setDecisionOutputEnabled(bool enabled)
+{
+    decision_output_enabled_.store(enabled, std::memory_order_release);
+}
+
+void DecisionMaker::runDecisionTick()
+{
+    if (!decision_output_enabled_.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    geometry_msgs::msg::Twist handle_control;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
+        if (!has_handle_control_) {
+            return;
+        }
+        handle_control = desired_handle_control_;
         current_handle_control_ = handle_control;
-        has_handle_control_ = true;
+    }
+
+    // 本周期轮速反馈采样（与上一 control 周期对比，供干预等级发布前判断真实减速/制动）
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        const double v_fb = tracking_ ? tracking_->getWheelSpeedLinearVelocity() : current_vehicle_state_.linear_velocity;
+        const double w_fb = tracking_ ? tracking_->getWheelSpeedAngularVelocity() : current_vehicle_state_.angular_velocity;
+        fb_linear_prev_ = fb_linear_last_;
+        fb_linear_last_ = v_fb;
+        fb_angular_prev_ = fb_angular_last_;
+        fb_angular_last_ = w_fb;
+        ++speed_feedback_sample_count_;
+        if (speed_feedback_sample_count_ >= 2) {
+            speed_feedback_ready_ = true;
+        }
     }
 
     // 步骤2：检查回调函数
@@ -445,56 +806,115 @@ void DecisionMaker::processHandleControl(const geometry_msgs::msg::Twist& handle
 
     // 步骤4：收集前向相关的所有雷达数据
     auto current_time = this->now();
-    double min_forward_distance = decision_params_.warning_zone;
-    bool use_predicted = false;
+    updateSweptAvoidanceParamsFromRos();
+    if (avoidance_engine_ != last_avoidance_engine_) {
+        resetBrakeHoldState();
+        last_avoidance_engine_ = avoidance_engine_;
+    }
+
+    const bool swept_shadow_enabled = avoidance_engine_ == "shadow";
+    const bool swept_takeover_enabled = avoidance_engine_ == "swept_footprint";
+    if (avoidance_engine_ != "legacy" && !swept_shadow_enabled && !swept_takeover_enabled) {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
+            "[SweptAvoidance] unknown avoidance_engine='%s', falling back to legacy",
+            avoidance_engine_.c_str());
+    }
+
+    scene_node::avoidance::SafetyFilterResult swept_result;
+    const bool has_swept_result = swept_shadow_enabled || swept_takeover_enabled;
+    if (has_swept_result) {
+        swept_result = evaluateSweptAvoidance(handle_control, current_time);
+    }
+
+    if (swept_takeover_enabled) {
+        geometry_msgs::msg::Twist output_control = handle_control;
+        output_control.linear.x = swept_result.selected_command.linear_x;
+        output_control.angular.z = swept_result.selected_command.angular_z;
+        current_handle_control_ = output_control;
+
+        forward_brake_hold_.store(false, std::memory_order_relaxed);
+        backward_brake_hold_.store(false, std::memory_order_relaxed);
+
+        const auto filtered_control = smoothDecisionOutput(output_control);
+        logSweptAvoidanceShadow(swept_result, filtered_control);
+        control_output_callback_(filtered_control);
+        return;
+    }
     bool has_valid_data = false;
 
     std::vector<ClusterInfo> merged_forward_clusters;
     std::map<size_t, std::string> cluster_radar_map; // 聚类索引到雷达名称的映射
 
     // 锁定状态以读取雷达数据
+    // 优先从 ObstaclePredictor 获取轮速补偿后的聚类，否则回退到原始 radar_cluster_map_
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
 
-        // 收集所有雷达的前向数据（主要关注 left, right, left_tilt, right_tilt 雷达）
-        for (const auto& radar_pair : radar_cluster_map_) {
+        // 决定数据源：有预测器且开启时从预测器读取，否则从原始映射读取
+        const bool use_predictor = obstacle_predictor_ && decision_params_.enable_obstacle_prediction;
+        auto predicted_all = use_predictor ? obstacle_predictor_->getAllPredictedClusters()
+                                           : std::map<std::string, std::vector<ClusterInfo>>{};
+
+        const auto& cluster_source = use_predictor ? predicted_all : radar_cluster_map_;
+
+        // 阶段 A：分通道合并 — 前向主决策仅 left/right；侧向含 tilt；后向仅倒车时启用 back
+        const bool reversing = handle_control.linear.x < -0.01;
+        for (const auto& radar_pair : cluster_source) {
             const std::string& radar_name = radar_pair.first;
             const std::vector<ClusterInfo>& radar_clusters = radar_pair.second;
 
-            // 检查该雷达是否与前向检测相关
-            // 前向碰撞主要关注：left, right, left_tilt, right_tilt
-            bool is_forward_relevant = (radar_name == "left" || radar_name == "right" || radar_name == "left_tilt" || radar_name == "right_tilt" || radar_name == "back");
+            const bool is_lateral_relevant =
+                (radar_name == "left" || radar_name == "right"
+                 || radar_name == "left_tilt" || radar_name == "right_tilt");
+            const bool is_backward_relevant = (radar_name == "back" && reversing);
 
-            if (!is_forward_relevant) {
-                RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 不参与前向碰撞检测", __LINE__, radar_name.c_str());
+            if (!is_lateral_relevant && !is_backward_relevant) {
+                RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 本周期不参与距离融合", __LINE__, radar_name.c_str());
                 continue;
             }
 
             // 时效性判断
             double t_diff = decision_params_.radar_timeout + 1.0; // 默认超时
-            auto t_it = radar_last_update_time_map_.find(radar_name);
-            if (t_it != radar_last_update_time_map_.end()) {
-                t_diff = (current_time - t_it->second).seconds();
+            if (use_predictor) {
+                // 预测器已内部管理时效性，直接查询雷达帧年龄
+                t_diff = obstacle_predictor_->getRadarDataAge(radar_name, current_time);
+            } else {
+                auto t_it = radar_last_update_time_map_.find(radar_name);
+                if (t_it != radar_last_update_time_map_.end()) {
+                    t_diff = (current_time - t_it->second).seconds();
+                }
             }
 
             // 数据有效性和超时补偿逻辑
             std::vector<ClusterInfo> valid_clusters;
 
-            if (t_diff <= decision_params_.radar_timeout) {
-                // 数据新鲜，直接使用
-                valid_clusters = radar_clusters;
-                has_valid_data = true;
-                RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 数据新鲜 (%.3f s)，聚类数: %zu", __LINE__, radar_name.c_str(), t_diff, radar_clusters.size());
-            } else if (t_diff <= decision_params_.radar_timeout * 3.0 && !radar_clusters.empty()) {
-                // 数据轻微超时（不超过3倍超时阈值），基于车辆运动进行预测补偿
-                valid_clusters = radar_clusters; // predictTargetsBasedOnWheelSpeed(radar_clusters, t_diff, current_vehicle_state_);
-                use_predicted = true;
-                has_valid_data = true;
-                RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 数据超时 (%.3f s)，使用预测补偿，预测聚类数: %zu", __LINE__, radar_name.c_str(), t_diff, valid_clusters.size());
+            if (use_predictor) {
+                // 预测器模式：预测器内部已做超时丢弃(max_prediction_age)，
+                // 此处仅做宽松的上限检查
+                if (t_diff <= decision_params_.obstacle_prediction_max_age && !radar_clusters.empty()) {
+                    valid_clusters = radar_clusters;
+                    has_valid_data = true;
+                    RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 预测器数据 (age=%.3f s)，聚类数: %zu",
+                                 __LINE__, radar_name.c_str(), t_diff, radar_clusters.size());
+                } else {
+                    RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 预测器数据过期 (age=%.3f s) 或为空，跳过",
+                                 __LINE__, radar_name.c_str(), t_diff);
+                    continue;
+                }
             } else {
-                // 数据严重超时或为空，跳过该雷达
-                RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 数据严重超时 (%.3f s) 或为空，跳过", __LINE__, radar_name.c_str(), t_diff);
-                continue;
+                // 原始模式（无预测器或预测器关闭）
+                if (t_diff <= decision_params_.radar_timeout) {
+                    valid_clusters = radar_clusters;
+                    has_valid_data = true;
+                    RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 数据新鲜 (%.3f s)，聚类数: %zu", __LINE__, radar_name.c_str(), t_diff, radar_clusters.size());
+                } else if (t_diff <= decision_params_.radar_timeout * 3.0 && !radar_clusters.empty()) {
+                    valid_clusters = radar_clusters;
+                    has_valid_data = true;
+                    RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 数据超时 (%.3f s)，使用原始数据，聚类数: %zu", __LINE__, radar_name.c_str(), t_diff, valid_clusters.size());
+                } else {
+                    RCLCPP_DEBUG(this->get_logger(), "[L%d] 雷达 %s 数据严重超时 (%.3f s) 或为空，跳过", __LINE__, radar_name.c_str(), t_diff);
+                    continue;
+                }
             }
 
             // 记录每个聚类对应的雷达名称
@@ -512,10 +932,13 @@ void DecisionMaker::processHandleControl(const geometry_msgs::msg::Twist& handle
     if (has_valid_data && !merged_forward_clusters.empty()) {
         calculateMinDirectionalDistance(merged_forward_clusters, cluster_radar_map);
     } else {
-        MinDirectionalDistance distances { decision_params_.warning_zone,
-            decision_params_.warning_zone_backward,
-            decision_params_.warning_zone_lateral,
-            decision_params_.warning_zone_lateral };
+        // 无雷达数据时，用“远大于预警区”的哨兵值表示“无障碍物”，
+        // 避免 warning_zone 原值在高速下被 TTC 判定为减速（例如 2.0m / 2.25m·s = 0.889s < warning_ttc）。
+        const double kNoObstacleDistance = 1e6;
+        MinDirectionalDistance distances { kNoObstacleDistance,
+            kNoObstacleDistance,
+            kNoObstacleDistance,
+            kNoObstacleDistance };
         min_directional_distance_ = distances;
         forward_min_distance_radar_source_.clear();
         forward_min_distance_nearest_z_ = 0.0;
@@ -525,46 +948,197 @@ void DecisionMaker::processHandleControl(const geometry_msgs::msg::Twist& handle
         right_min_distance_nearest_z_ = 0.0;
     }
 
+    // 回传侧向距离给环境检测器（锁外调用，避免与 env_detector 锁产生死锁）
+    if (lateral_distance_callback_) {
+        lateral_distance_callback_(
+            min_directional_distance_.min_lateral_left_distance,
+            min_directional_distance_.min_lateral_right_distance);
+    }
+
     // 步骤6：平滑速度干预并输出
     // 为了保证平稳性，即使没有障碍物也要经过平滑滤波
     // 支持多方向同时干预（例如：前进+左转）
     geometry_msgs::msg::Twist output_control = current_handle_control_;
+    //WarningType last_warning_type = WarningType::NONE;
 
-    // 根据控制命令方向，同时应用多个方向的干预（使用独立的if语句，而非if-else链）
-    if (current_handle_control_.linear.x > 0.0) {
-        applySpeedForwardIntervention(output_control);
-    }
-    if (current_handle_control_.linear.x < 0.0) {
-        applySpeedBackwardIntervention(output_control);
-    }
-    if (is_backward_distance_nearest_ && std::abs(joystick_msg_.rocker_angle) > 140.0 && joystick_msg_.rocker_x < -50) {
-
-    } else {
-        if (current_handle_control_.angular.z > 0.0) {
-            applySpeedLeftIntervention(output_control);
+    // 摇杆回中 / 无前进量 → 解除前向制动保持
+    if (handle_control.linear.x <= 0.01) {
+        if (forward_brake_hold_.load(std::memory_order_relaxed)) {
+            RCLCPP_INFO(this->get_logger(), "[L%d][前向-制动保持] 摇杆回中(%.3f)，解除制动保持",
+                __LINE__, handle_control.linear.x);
         }
-        if (current_handle_control_.angular.z < 0.0) {
-            applySpeedRightIntervention(output_control);
+        forward_brake_hold_.store(false, std::memory_order_relaxed);
+    }
+    // 无后退量（与上对称）→ 解除后向制动保持
+    if (handle_control.linear.x >= -0.01) {
+        if (backward_brake_hold_.load(std::memory_order_relaxed)) {
+            RCLCPP_INFO(this->get_logger(), "[L%d][后向-制动保持] 无后退量(%.3f)，解除制动保持",
+                __LINE__, handle_control.linear.x);
         }
+        backward_brake_hold_.store(false, std::memory_order_relaxed);
     }
 
-    // if (current_handle_control_.angular.z > 0.0) {
-    //    applySpeedLeftIntervention(output_control);
-    // }
-    // if (current_handle_control_.angular.z < 0.0) {
-    //    applySpeedRightIntervention(output_control);
-    // }
+    // 根据控制命令方向，结合碰撞检测开关，应用多个方向的干预
+    constexpr double kNoObstacleDistance = 1e6; // 无障碍物哨兵值
+    if (decision_params_.enable_forward_collision && current_handle_control_.linear.x > 0.0) {
+        if (cruise_mode_active_.load(std::memory_order_acquire)) {
+            // 巡航模式下不启用前向“制动保持”，避免障碍移除后因保持状态导致速度恢复困难
+            forward_brake_hold_.store(false, std::memory_order_relaxed);
+            applySpeedForwardIntervention(output_control);
+        } else {
+        double current_forward_dist = min_directional_distance_.min_forward_distance;
 
+        if (forward_brake_hold_.load(std::memory_order_relaxed)) {
+            // 读到哨兵值(1e6)或已不在预警区，立即退出保持
+            if (current_forward_dist >= kNoObstacleDistance
+                || forward_brake_hold_distance_ >= kNoObstacleDistance
+                || current_forward_dist >= decision_params_.warning_zone) {
+                RCLCPP_INFO(this->get_logger(),
+                    "[L%d][前向-制动保持] 退出保持(当前=%.3f, 记录=%.3f, 预警区=%.3f)",
+                    __LINE__, current_forward_dist, forward_brake_hold_distance_, decision_params_.warning_zone);
+                forward_brake_hold_.store(false, std::memory_order_relaxed);
+                applySpeedForwardIntervention(output_control);
+            }
+            // 障碍物距离变化 <= 2cm → 保持制动，跳过前向干预计算
+            else if (std::abs(current_forward_dist - forward_brake_hold_distance_) <= 0.02) {
+                output_control.linear.x = 0.0;
+
+                // 维护 forward_state_：保持检测状态与速度限制一致，避免解除后恢复逻辑异常
+                auto current_time = this->now();
+                forward_state_.has_last_detection = true;
+                forward_state_.last_detected_distance = current_forward_dist;
+                forward_state_.last_detection_time = current_time;
+                forward_state_.current_speed_limit = 0.0;
+                if (forward_state_.is_recovering) {
+                    forward_state_.is_recovering = false;
+                }
+
+                // 保持碰撞预警发布，确保 UI 持续显示制动状态
+                //publishInterventionState("前侧", WarningLevel::BRAKE, current_forward_dist);
+
+                RCLCPP_DEBUG(this->get_logger(),
+                    "[L%d][前向-制动保持] 障碍物未移动(当前%.3fm, 记录%.3fm, Δ%.3fm)，摇杆%.3f，保持制动",
+                    __LINE__, current_forward_dist, forward_brake_hold_distance_,
+                    std::abs(current_forward_dist - forward_brake_hold_distance_),
+                    handle_control.linear.x);
+            } else {
+                // 障碍物已明显移动(>2cm)，解除保持，恢复正常干预
+                RCLCPP_INFO(this->get_logger(),
+                    "[L%d][前向-制动保持] 障碍物已移动(当前%.3fm, 记录%.3fm, Δ%.3fm)，解除制动保持",
+                    __LINE__, current_forward_dist, forward_brake_hold_distance_,
+                    std::abs(current_forward_dist - forward_brake_hold_distance_));
+                forward_brake_hold_.store(false, std::memory_order_relaxed);
+                applySpeedForwardIntervention(output_control);
+            }
+        } else {
+            applySpeedForwardIntervention(output_control);
+
+            // 紧急制动判定：仅在确实有障碍物(距离在预警区内且非哨兵)时允许进入保持
+            if (output_control.linear.x <= 0.01 && handle_control.linear.x > 0.01
+                && current_forward_dist < decision_params_.warning_zone
+                && current_forward_dist < kNoObstacleDistance) {
+                forward_brake_hold_.store(true, std::memory_order_relaxed);
+                forward_brake_hold_distance_ = current_forward_dist;
+                RCLCPP_INFO(this->get_logger(),
+                    "[L%d][前向-制动保持] 触发制动保持，障碍物距离 %.3f m，摇杆 %.3f",
+                    __LINE__, forward_brake_hold_distance_, handle_control.linear.x);
+            }
+        }
+        }
+    }
+    if (decision_params_.enable_backward_collision && current_handle_control_.linear.x < 0.0) {
+        double current_backward_dist = min_directional_distance_.min_backward_distance;
+        if (backward_brake_hold_.load(std::memory_order_relaxed)) {
+            // 读到哨兵值(1e6)或已不在预警区，立即退出保持
+            if (current_backward_dist >= kNoObstacleDistance
+                || backward_brake_hold_distance_ >= kNoObstacleDistance
+                || current_backward_dist >= decision_params_.warning_zone_backward) {
+                RCLCPP_INFO(this->get_logger(),
+                    "[L%d][后向-制动保持] 退出保持(当前=%.3f, 记录=%.3f, 预警区=%.3f)",
+                    __LINE__, current_backward_dist, backward_brake_hold_distance_, decision_params_.warning_zone_backward);
+                backward_brake_hold_.store(false, std::memory_order_relaxed);
+                applySpeedBackwardIntervention(output_control);
+            } else if (std::abs(current_backward_dist - backward_brake_hold_distance_) <= 0.02) {
+                output_control.linear.x = 0.0;
+                {
+                    const auto t = this->now();
+                    backward_state_.has_last_detection = true;
+                    backward_state_.last_detected_distance = current_backward_dist;
+                    backward_state_.last_detection_time = t;
+                    backward_state_.current_speed_limit = 0.0;
+                    if (backward_state_.is_recovering) {
+                        backward_state_.is_recovering = false;
+                    }
+                }
+                RCLCPP_DEBUG(this->get_logger(),
+                    "[L%d][后向-制动保持] 障碍物未移动(当前%.3fm, 记录%.3fm, Δ%.3fm)，线速度保持为 0, handle=%.3f",
+                    __LINE__, current_backward_dist, backward_brake_hold_distance_,
+                    std::abs(current_backward_dist - backward_brake_hold_distance_),
+                    handle_control.linear.x);
+            } else {
+                RCLCPP_INFO(this->get_logger(),
+                    "[L%d][后向-制动保持] 障碍物已移动(当前%.3fm, 记录%.3fm, Δ%.3fm)，解除制动保持",
+                    __LINE__, current_backward_dist, backward_brake_hold_distance_,
+                    std::abs(current_backward_dist - backward_brake_hold_distance_));
+                backward_brake_hold_.store(false, std::memory_order_relaxed);
+                applySpeedBackwardIntervention(output_control);
+            }
+        } else {
+            applySpeedBackwardIntervention(output_control);
+            // 仅在确实有障碍物(距离在预警区内且非哨兵)时允许进入保持
+            if (output_control.linear.x >= -0.01 && handle_control.linear.x < -0.01
+                && current_backward_dist < decision_params_.warning_zone_backward
+                && current_backward_dist < kNoObstacleDistance) {
+                backward_brake_hold_.store(true, std::memory_order_relaxed);
+                backward_brake_hold_distance_ = current_backward_dist;
+                RCLCPP_INFO(this->get_logger(),
+                    "[L%d][后向-制动保持] 触发，障碍物距离 %.3f m，handle %.3f",
+                    __LINE__, backward_brake_hold_distance_, handle_control.linear.x);
+            }
+        }
+    }
+    if (decision_params_.enable_lateral_collision) {
+        if (is_backward_distance_nearest_ && std::abs(joystick_msg_.rocker_angle) > 140.0 && joystick_msg_.rocker_x < -50) {
+            // 后退紧急状态下跳过侧向干预
+        } else {
+            // Bug2 修复：即使 angular.z==0（直行），侧向距离极近时也需干预（窄道防刮蹭）
+            bool left_emergency = (min_directional_distance_.min_lateral_left_distance
+                                   <= decision_params_.emergency_brake_distance_lateral);
+            bool right_emergency = (min_directional_distance_.min_lateral_right_distance
+                                    <= decision_params_.emergency_brake_distance_lateral);
+            if (current_handle_control_.angular.z > 0.0 || (current_handle_control_.angular.z != 0.0 && left_emergency)) {
+                applySpeedLeftIntervention(output_control);
+            }
+            if (current_handle_control_.angular.z < 0.0 || (current_handle_control_.angular.z != 0.0 && right_emergency)) {
+                applySpeedRightIntervention(output_control);
+            }
+        }
+    }
+    
     // 更新当前控制命令
     current_handle_control_ = output_control;
-    // 应用平滑滤波（保证行驶平稳性）
-    geometry_msgs::msg::Twist filtered_control = smooth_filter_->filter(current_handle_control_);
-    // geometry_msgs::msg::Twist filtered_control = current_handle_control_;
-    //  最终输出前的安全检查（使用决策参数中的配置）
-    if (std::abs(filtered_control.linear.x) > decision_params_.absolute_max_linear_speed) {
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "[L%d] 左侧-线速度超限！%.3f m/s -> %.3f m/s", __LINE__, filtered_control.linear.x,
-            std::copysign(decision_params_.absolute_max_linear_speed, filtered_control.linear.x));
-        filtered_control.linear.x = std::copysign(decision_params_.absolute_max_linear_speed, filtered_control.linear.x);
+
+    // 紧急制动处理：使用快速衰减而非瞬断，减少急停突兀感
+    geometry_msgs::msg::Twist filtered_control;
+    updateSmoothFilterCommandLimits();
+    const double kEmergencyStopThreshold = 0.02;
+    if (std::abs(current_handle_control_.linear.x) <= kEmergencyStopThreshold
+        && std::abs(current_handle_control_.angular.z) <= kEmergencyStopThreshold) {
+        // 快速衰减：每帧保留 30% 的上一帧速度，比瞬断平滑
+        filtered_control = smooth_filter_->filter(current_handle_control_);
+        const double kBrakeDecay = 0.3;
+        if (std::abs(filtered_control.linear.x) > kEmergencyStopThreshold) {
+            filtered_control.linear.x *= kBrakeDecay;
+        } else {
+            filtered_control.linear.x = 0.0;
+        }
+        if (std::abs(filtered_control.angular.z) > kEmergencyStopThreshold) {
+            filtered_control.angular.z *= kBrakeDecay;
+        } else {
+            filtered_control.angular.z = 0.0;
+        }
+    } else {
+        filtered_control = smooth_filter_->filter(current_handle_control_);
     }
 
     if (std::abs(filtered_control.angular.z) > decision_params_.absolute_max_angular_speed) {
@@ -574,6 +1148,10 @@ void DecisionMaker::processHandleControl(const geometry_msgs::msg::Twist& handle
     }
 
     // 输出控制命令
+    if (has_swept_result) {
+        logSweptAvoidanceShadow(swept_result, filtered_control);
+    }
+
     if (control_output_callback_) {
         control_output_callback_(filtered_control);
     }
@@ -583,6 +1161,43 @@ void DecisionMaker::setTracking(std::shared_ptr<Tracking> tracking)
 {
     tracking_ = tracking;
     RCLCPP_DEBUG(this->get_logger(), "[L%d] 设置跟踪器引用", __LINE__);
+}
+
+void DecisionMaker::setObstaclePredictor(std::shared_ptr<ObstaclePredictor> predictor)
+{
+    obstacle_predictor_ = predictor;
+    syncObstaclePredictorParams();
+    RCLCPP_INFO(this->get_logger(), "[L%d] 设置障碍物位置预测器引用", __LINE__);
+}
+
+void DecisionMaker::setEvasionDetector(std::shared_ptr<EvasionDetector> detector)
+{
+    evasion_detector_ = detector;
+    syncEvasionDetectorParams();
+    RCLCPP_INFO(this->get_logger(), "[L%d] 设置操作者避让意图检测器引用", __LINE__);
+}
+
+void DecisionMaker::syncObstaclePredictorParams()
+{
+    if (!obstacle_predictor_) return;
+    ObstaclePredictorParams pp;
+    pp.enable = decision_params_.enable_obstacle_prediction;
+    pp.max_prediction_age = decision_params_.obstacle_prediction_max_age;
+    pp.max_distance_drift_ratio = decision_params_.obstacle_prediction_drift_ratio;
+    pp.min_valid_x = decision_params_.obstacle_prediction_min_valid_x;
+    obstacle_predictor_->updateParams(pp);
+}
+
+void DecisionMaker::syncEvasionDetectorParams()
+{
+    if (!evasion_detector_) return;
+    EvasionDetectorParams ep;
+    ep.enable = decision_params_.enable_evasion_detection;
+    ep.angular_threshold = decision_params_.evasion_angular_threshold;
+    ep.angular_full_evasion = decision_params_.evasion_angular_full;
+    ep.min_factor = decision_params_.evasion_min_factor;
+    ep.safe_distance_override = decision_params_.fixed_stopping_distance_forward;
+    evasion_detector_->updateParams(ep);
 }
 
 std::vector<ClusterInfo> DecisionMaker::getRadarClusters(const std::string& radar_name) const
@@ -618,6 +1233,64 @@ void DecisionMaker::clearRadarClusters(const std::string& radar_name)
 }
 
 // ==================== 碰撞检测开关控制接口 ====================
+
+void DecisionMaker::applyProfile(EnvironmentProfile profile)
+{
+    // 重置各方向恢复状态，避免切换后旧限速残留
+    auto reset_state = [](DirectionalState& s, double max_v) {
+        s.is_recovering = false;
+        s.current_speed_limit = max_v;
+        s.target_speed_limit  = max_v;
+    };
+
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
+    switch (profile) {
+    case EnvironmentProfile::INDOOR:
+        decision_params_.warning_zone              = 2.0;
+        decision_params_.deceleration_zone         = 1.0;
+        decision_params_.emergency_brake_distance  = 0.15;  // 前向刹停后障碍物距车前 ~15cm
+        decision_params_.fixed_stopping_distance_forward = 0.13; // 必须 < emergency_brake_distance
+        decision_params_.max_speed_limit           = 2.22;  // 8 km/h（室内可达 8 km/h，配合 TTC 自适应）
+        decision_params_.state_hold_time           = 0.8;   // 0.5→0.8s 减少障碍物闪烁导致的震荡
+        decision_params_.speed_recovery_time       = 2.0;
+        decision_params_.enable_lateral_collision  = true;
+        decision_params_.enable_backward_collision = true;
+        reset_state(forward_state_,  decision_params_.max_speed_limit);
+        reset_state(backward_state_, decision_params_.max_speed_limit);
+        reset_state(left_state_,     decision_params_.max_speed_limit);
+        reset_state(right_state_,    decision_params_.max_speed_limit);
+        RCLCPP_INFO(this->get_logger(),
+            "[DecisionMaker] 切换到【室内】配置 | "
+            "限速 %.2f m/s (%.1f km/h) | 预警区 %.1fm | 保持时间 %.1fs | 侧向/后向碰撞 已启用",
+            decision_params_.max_speed_limit,
+            decision_params_.max_speed_limit * 3.6,
+            decision_params_.warning_zone,
+            decision_params_.state_hold_time);
+        break;
+
+    case EnvironmentProfile::OUTDOOR:
+        decision_params_.warning_zone              = 3.0;   // 8 km/h 时 TTC=2s 对应 4.4m，预警区适当增大
+        decision_params_.deceleration_zone         = 2.2;   // 配合 8 km/h 制动距离
+        decision_params_.emergency_brake_distance  = 0.15;  // 前向刹停后障碍物距车前 ~15cm
+        decision_params_.fixed_stopping_distance_forward = 0.13; // 必须 < emergency_brake_distance
+        decision_params_.max_speed_limit           = 2.222; // 8 km/h
+        decision_params_.state_hold_time           = 0.3;
+        decision_params_.speed_recovery_time       = 1.5;
+        decision_params_.enable_lateral_collision  = false;
+        decision_params_.enable_backward_collision = false;
+        reset_state(forward_state_,  decision_params_.max_speed_limit);
+        reset_state(backward_state_, decision_params_.max_speed_limit);
+        reset_state(left_state_,     decision_params_.max_speed_limit);
+        reset_state(right_state_,    decision_params_.max_speed_limit);
+        RCLCPP_INFO(this->get_logger(),
+            "[DecisionMaker] 切换到【室外】配置 | "
+            "限速 %.2f m/s | 预警区 %.1fm | 侧向/后向碰撞 已禁用",
+            decision_params_.max_speed_limit,
+            decision_params_.warning_zone);
+        break;
+    }
+}
 
 void DecisionMaker::setForwardCollisionEnabled(bool enabled)
 {
@@ -682,12 +1355,30 @@ std::string DecisionMaker::getCollisionDetectionStatus() const
     return status;
 }
 
+void DecisionMaker::resetBrakeHoldState()
+{
+    forward_brake_hold_.store(false, std::memory_order_relaxed);
+    backward_brake_hold_.store(false, std::memory_order_relaxed);
+}
+
+void DecisionMaker::setCruiseModeActive(bool active)
+{
+    cruise_mode_active_.store(active, std::memory_order_release);
+    if (active) {
+        // 进入巡航时立刻清掉前向制动保持，确保本周期开始就按“无保持”逻辑运行
+        forward_brake_hold_.store(false, std::memory_order_relaxed);
+    }
+}
+
 // ==================== 参数配置接口 ====================
 
 void DecisionMaker::setDecisionParams(const DecisionParams& params)
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     decision_params_ = params;
+    syncRobotDimensionsFromParams();
+    syncObstaclePredictorParams();
+    syncEvasionDetectorParams();
     RCLCPP_DEBUG(this->get_logger(), "[L%d] 决策参数已更新", __LINE__);
 }
 
@@ -741,64 +1432,134 @@ double DecisionMaker::calculateNearestDistance(const std::vector<ClusterInfo>& c
     return min_distance;
 }
 
-SpeedLimit DecisionMaker::calculateSpeedLimit(double distance)
+SpeedLimit DecisionMaker::calculateSpeedLimit(double distance, double approach_velocity)
 {
     SpeedLimit limit;
     limit.distance_threshold = distance;
-    bool need_kalman_deceleration = false;
-    // 制动区：距离小于等于0.3m，紧急制动
-    // 前向避障只限制线速度，角速度使用原车角速度（不限制）
+
+    // 固定停车距离：小于此距离该方向速度=0，不判断TTC
+    if (distance <= decision_params_.fixed_stopping_distance_forward) {
+        limit.max_linear_speed = 0.0;
+        limit.max_angular_speed = 0.0;
+        std_msgs::msg::Empty narrow_end_msg;
+        narrow_end_publisher_->publish(narrow_end_msg);
+        RCLCPP_WARN(this->get_logger(), "[L%d][前向-固定停车] 距离 %.3f m <= %.3f m，强制停车", __LINE__, distance, decision_params_.fixed_stopping_distance_forward);
+        return limit;
+    }
+
+    const double v_eps = 0.01;
+    const bool use_ttc = (approach_velocity >= decision_params_.min_approach_velocity_for_ttc);
+    double ttc = (approach_velocity > v_eps) ? (distance / approach_velocity) : 999.0;
+
+    // 接近速度高于阈值（默认 7 km/h）时换用高速剖面的 deceleration / emergency 基准
+    const double hs_th = decision_params_.forward_ttc_high_speed_threshold_m_s;
+    const bool use_high_speed_ttc = (hs_th > 0.0 && approach_velocity > hs_th);
+    const double decel_ttc_sel = use_high_speed_ttc ? decision_params_.deceleration_ttc_high_speed : decision_params_.deceleration_ttc;
+    const double emergency_brake_base_sel = use_high_speed_ttc ? decision_params_.emergency_brake_ttc_high_speed : decision_params_.emergency_brake_ttc;
+
+    // 速度相关紧急制动 TTC：高速时需要更早制动（制动距离更长）
+    // effective_ttc = base + v/(2a) + margin，确保有足够时间刹停
+    double effective_emergency_ttc = emergency_brake_base_sel;
+    if (approach_velocity > v_eps && decision_params_.emergency_brake_ttc_decel > 1e-6) {
+        double speed_dependent_ttc = decision_params_.emergency_brake_ttc_base
+            + approach_velocity / (2.0 * decision_params_.emergency_brake_ttc_decel)
+            + decision_params_.emergency_brake_ttc_margin;
+        effective_emergency_ttc = std::max(emergency_brake_base_sel, speed_dependent_ttc);
+    }
+
+    // TTC 模式：基于碰撞时间，速度自适应，叠加距离兜底确保低速安全
+    if (use_ttc) {
+        // 优先检查距离兜底：即使 TTC 充裕，距离过近仍需制动/减速
+        if (distance <= decision_params_.emergency_brake_distance) {
+            limit.max_linear_speed = 0.0;
+            limit.max_angular_speed = 0.0;
+            RCLCPP_WARN(this->get_logger(), "[L%d][前向-距离兜底制动] 距离 %.3f m <= %.3f m，强制制动 (速度 %.1f km/h)",
+                __LINE__, distance, decision_params_.emergency_brake_distance, approach_velocity * 3.6);
+            return limit;
+        }
+        if (distance <= decision_params_.deceleration_zone) {
+            double dist_denom = decision_params_.deceleration_zone - decision_params_.emergency_brake_distance;
+            double dist_ratio = (dist_denom > 1e-6) ? std::clamp((distance - decision_params_.emergency_brake_distance) / dist_denom, 0.0, 1.0) : 0.0;
+            double dist_limit = decision_params_.min_speed_limit + std::sqrt(dist_ratio) * (decision_params_.max_speed_limit - decision_params_.min_speed_limit);
+            // TTC 也可能给出更严格的限制，取两者最小值
+            double ttc_limit = std::numeric_limits<double>::max();
+            if (ttc <= effective_emergency_ttc) {
+                ttc_limit = 0.0;
+            } else if (ttc <= decel_ttc_sel) {
+                double ttc_denom = decel_ttc_sel - effective_emergency_ttc;
+                double ttc_ratio = (ttc_denom > 1e-6) ? std::clamp((ttc - effective_emergency_ttc) / ttc_denom, 0.0, 1.0) : 0.0;
+                ttc_limit = decision_params_.min_speed_limit + std::sqrt(ttc_ratio) * (decision_params_.max_speed_limit - decision_params_.min_speed_limit);
+            }
+            limit.max_linear_speed = std::min(dist_limit, ttc_limit);
+            limit.max_angular_speed = std::numeric_limits<double>::max();
+            RCLCPP_INFO(this->get_logger(), "[L%d][前向-TTC+距离减速] TTC %.3f s, 距离 %.3f m, 限速: %.3f m/s (%.1f km/h)",
+                __LINE__, ttc, distance, limit.max_linear_speed, limit.max_linear_speed * 3.6);
+            return limit;
+        }
+        // 纯 TTC 判定（距离在减速区之外）
+        if (ttc <= effective_emergency_ttc) {
+            limit.max_linear_speed = 0.0;
+            limit.max_angular_speed = 0.0;
+            RCLCPP_WARN(this->get_logger(), "[L%d][前向-TTC制动区] 紧急制动！TTC: %.3f s <= %.3f s, 距离: %.3f m, 速度: %.1f km/h",
+                __LINE__, ttc, effective_emergency_ttc, distance, approach_velocity * 3.6);
+            return limit;
+        }
+        if (ttc <= decel_ttc_sel) {
+            double denominator = decel_ttc_sel - effective_emergency_ttc;
+            if (denominator <= 1e-6) {
+                limit.max_linear_speed = 0.0;
+                limit.max_angular_speed = std::numeric_limits<double>::max();
+                return limit;
+            }
+            double ratio = (ttc - effective_emergency_ttc) / denominator;
+            ratio = std::max(0.0, std::min(1.0, ratio));
+            double smooth_ratio = std::sqrt(ratio);
+            limit.max_linear_speed = decision_params_.min_speed_limit + smooth_ratio * (decision_params_.max_speed_limit - decision_params_.min_speed_limit);
+            limit.max_angular_speed = std::numeric_limits<double>::max();
+            RCLCPP_INFO(this->get_logger(), "[L%d][前向-TTC减速区] TTC %.3f s, 距离 %.3f m, 限速: %.3f m/s (%.1f km/h)",
+                __LINE__, ttc, distance, limit.max_linear_speed, limit.max_linear_speed * 3.6);
+            return limit;
+        }
+        if (ttc <= decision_params_.warning_ttc) {
+            limit.max_linear_speed = std::numeric_limits<double>::max();
+            limit.max_angular_speed = std::numeric_limits<double>::max();
+            RCLCPP_DEBUG(this->get_logger(), "[L%d][前向-TTC预警区] TTC %.3f s, 不限速", __LINE__, ttc);
+            return limit;
+        }
+        limit.max_linear_speed = std::numeric_limits<double>::max();
+        limit.max_angular_speed = std::numeric_limits<double>::max();
+        RCLCPP_DEBUG(this->get_logger(), "[L%d][前向-TTC正常区] TTC %.3f s > %.3f s，不限速", __LINE__, ttc, decision_params_.warning_ttc);
+        return limit;
+    }
+
+    // 距离模式（低速回退）：approach_velocity 低于阈值时使用
     if (distance <= decision_params_.emergency_brake_distance) {
         limit.max_linear_speed = 0.0;
         limit.max_angular_speed = 0.0;
-        RCLCPP_WARN(this->get_logger(), "[L%d][制动区] 紧急制动！距离: %.3f m <= %.3f m", __LINE__, distance, decision_params_.emergency_brake_distance);
+        RCLCPP_WARN(this->get_logger(), "[L%d][前向-制动区] 紧急制动！距离: %.3f m <= %.3f m", __LINE__, distance, decision_params_.emergency_brake_distance);
         return limit;
     }
-    // 减速区：0.3m到0.8m之间进行平滑减速
     if (distance <= decision_params_.deceleration_zone) {
-        // 计算归一化比例 [0, 1]
-        // 0.3m -> 0, 0.8m -> 1
         double denominator = decision_params_.deceleration_zone - decision_params_.emergency_brake_distance;
-
-        // 防止除零或分母过小导致的数值溢出
         if (denominator <= 1e-6) {
-            RCLCPP_WARN(this->get_logger(), "[L%d][前向-减速区] 参数配置错误：deceleration_zone (%.3f) 与 emergency_brake_distance (%.3f) 差值过小，使用制动区逻辑",
-                __LINE__, decision_params_.deceleration_zone, decision_params_.emergency_brake_distance);
             limit.max_linear_speed = 0.0;
-            limit.max_angular_speed = std::numeric_limits<double>::max(); // 不限制角速度，使用原车角速度
+            limit.max_angular_speed = std::numeric_limits<double>::max();
             return limit;
         }
-
         double ratio = (distance - decision_params_.emergency_brake_distance) / denominator;
-
-        // 确保ratio在[0,1]范围内
         ratio = std::max(0.0, std::min(1.0, ratio));
-        // 使用平方根函数进行平滑插值，使得低速区域变化更缓慢
         double smooth_ratio = std::sqrt(ratio);
-        // 使用立方根函数
-        // double smooth_ratio = std::cbrt(ratio);
-        // 线性插值：从最小速度到最大速度
-        // 0.3m处最大速度为0.056m/s (0.2km/h)
-        // 0.8m处最大速度为1.67m/s (6km/h)
         limit.max_linear_speed = decision_params_.min_speed_limit + smooth_ratio * (decision_params_.max_speed_limit - decision_params_.min_speed_limit);
         limit.max_angular_speed = std::numeric_limits<double>::max();
-        RCLCPP_DEBUG(this->get_logger(), "[L%d][减速区] 距离 %.3f m, 比例 %.3f, 平滑比例 %.3f, 限速: %.3f m/s (%.1f km/h), 角速度不限制（使用原车角速度）", __LINE__, distance, ratio,
-            smooth_ratio, limit.max_linear_speed, limit.max_linear_speed * 3.6);
-    }
-    // 预警区：0.8m到1.5m之间不限制速度，但进入状态保持
-    else if (distance <= decision_params_.warning_zone) {
-        // 预警区内不限制速度，但记录状态以便状态保持
+        RCLCPP_INFO(this->get_logger(), "[L%d][前向-减速区] 距离 %.3f m, 限速: %.3f m/s (%.1f km/h)", __LINE__, distance, limit.max_linear_speed, limit.max_linear_speed * 3.6);
+    } else if (distance <= decision_params_.warning_zone) {
         limit.max_linear_speed = std::numeric_limits<double>::max();
         limit.max_angular_speed = std::numeric_limits<double>::max();
-
-        RCLCPP_DEBUG(this->get_logger(), "[L%d][预警区] 距离 %.3f m, 不限速", __LINE__, distance);
-    }
-    // 正常区：距离大于1.5m，完全不限制
-    else {
+        RCLCPP_DEBUG(this->get_logger(), "[L%d][前向-预警区] 距离 %.3f m, 不限速", __LINE__, distance);
+    } else {
         limit.max_linear_speed = std::numeric_limits<double>::max();
         limit.max_angular_speed = std::numeric_limits<double>::max();
-
-        RCLCPP_DEBUG(this->get_logger(), "[L%d][正常区] 距离 %.3f m > %.3f m，不限速", __LINE__, distance, decision_params_.warning_zone);
+        RCLCPP_DEBUG(this->get_logger(), "[L%d][前向-正常区] 距离 %.3f m > %.3f m，不限速", __LINE__, distance, decision_params_.warning_zone);
     }
     return limit;
 }
@@ -807,6 +1568,7 @@ geometry_msgs::msg::Twist DecisionMaker::applySpeedLimit(const geometry_msgs::ms
 {
     geometry_msgs::msg::Twist limited_control = original_control;
     bool need_kalman_deceleration = false;
+    const bool forward_brake_active = (limit.max_linear_speed <= 0.01) && (original_control.linear.x > 0.0);
     // ==================== 线速度限制 ====================
     // 只限制前进方向的速度（x轴正方向），后退不受前向碰撞限制
     if (original_control.linear.x > 0.0) {
@@ -814,8 +1576,8 @@ geometry_msgs::msg::Twist DecisionMaker::applySpeedLimit(const geometry_msgs::ms
         if (original_control.linear.x > limit.max_linear_speed) {
             need_kalman_deceleration = true;
             limited_control.linear.x = limit.max_linear_speed;
-            judgeForwardWarningScene(limit);
-            RCLCPP_DEBUG(this->get_logger(), "[L%d] 前进速度限制: %.3f m/s -> %.3f m/s", __LINE__, original_control.linear.x, limited_control.linear.x);
+            //judgeForwardWarningScene(limit);
+            RCLCPP_INFO(this->get_logger(), "[L%d] 前进速度限制: %.3f m/s -> %.3f m/s", __LINE__, original_control.linear.x, limited_control.linear.x);
         }
     } else {
         // 后退方向保持不变（前向碰撞不影响后退）
@@ -838,174 +1600,273 @@ geometry_msgs::msg::Twist DecisionMaker::applySpeedLimit(const geometry_msgs::ms
             limited_control.linear.x = 0.0;
         }
     }
+
+    // 前向制动后短时间内，将低速残余线速度归零，避免刹停末端仍有微小爬行
+    if (forward_brake_active) {
+        last_forward_brake_time_ = this->now();
+    }
+    if (decision_params_.forward_brake_zero_speed_window_ms > 0.0 && decision_params_.forward_brake_zero_speed_threshold_kmh > 0.0) {
+        const double zero_speed_threshold_m_s = decision_params_.forward_brake_zero_speed_threshold_kmh / 3.6;
+        const double elapsed_ms = (this->now() - last_forward_brake_time_).seconds() * 1000.0;
+        if (elapsed_ms <= decision_params_.forward_brake_zero_speed_window_ms
+            && std::abs(limited_control.linear.x) < zero_speed_threshold_m_s) {
+            limited_control.linear.x = 0.0;
+        }
+    }
+
+    // 前向制动且摇杆 Y 在死区内：禁止转向（与 /sensor/joystick 的 rocker_y 一致）
+    // 轮速反馈线速度须 < forward_brake_chassis_speed_threshold（见 decision_maker_params.yaml）
+    const double dz = decision_params_.forward_brake_joystick_y_deadzone;
+    const double chassis_spd_th = decision_params_.forward_brake_chassis_speed_threshold;
+    if (decision_params_.enable_forward_brake_joystick_y_deadzone && dz > 0.0 && limit.max_linear_speed <= 0.01
+        && original_control.linear.x > 0.0) {
+        int16_t rocker_y = 0;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            rocker_y = joystick_msg_.rocker_y;
+        }
+        if (tracking_ && static_cast<double>(std::abs(static_cast<int>(rocker_y))) < dz
+            && tracking_->getWheelSpeedLinearVelocity() < chassis_spd_th) {
+            limited_control.angular.z = 0.0;
+        }
+    }
+
     return limited_control;
 }
 
 // ==================== 侧向速度限制计算和应用 ====================
 
-SpeedLimit DecisionMaker::calculateSpeedLimitForBackward(double distance)
+SpeedLimit DecisionMaker::calculateSpeedLimitForBackward(double distance, double approach_velocity)
 {
     SpeedLimit limit;
     limit.distance_threshold = distance;
     is_backward_distance_nearest_ = false;
-    // 根据距离发布安全报警
+
+    // 固定停车距离：小于此距离该方向速度=0，不判断TTC
+    if (distance <= decision_params_.fixed_stopping_distance_backward) {
+        limit.max_linear_speed = 0.0;
+        limit.max_angular_speed = 0.0;
+        is_backward_distance_nearest_ = true;
+        RCLCPP_WARN(this->get_logger(), "[L%d][后向-固定停车] 距离 %.3f m <= %.3f m，强制停车", __LINE__, distance, decision_params_.fixed_stopping_distance_backward);
+        return limit;
+    }
+
     if (distance >= decision_params_.emergency_brake_distance_backward
         && distance <= decision_params_.warning_distance_backward) {
         publishSafetyAlarmForBackward("后向", 2);
     }
-    // 制动区：距离小于等于后向制动距离，紧急制动
+
+    const double v_eps = 0.01;
+    const bool use_ttc = (approach_velocity >= decision_params_.min_approach_velocity_for_ttc);
+    double ttc = (approach_velocity > v_eps) ? (distance / approach_velocity) : 999.0;
+
+    if (use_ttc) {
+        if (ttc <= decision_params_.emergency_brake_ttc_backward) {
+            limit.max_linear_speed = 0.0;
+            limit.max_angular_speed = 0.0;
+            is_backward_distance_nearest_ = true;
+            return limit;
+        }
+        if (ttc <= decision_params_.deceleration_ttc_backward) {
+            double denominator = decision_params_.deceleration_ttc_backward - decision_params_.emergency_brake_ttc_backward;
+            if (denominator <= 1e-6) {
+                limit.max_linear_speed = 0.0;
+                limit.max_angular_speed = 0.0;
+                return limit;
+            }
+            double ratio = (ttc - decision_params_.emergency_brake_ttc_backward) / denominator;
+            ratio = std::max(0.0, std::min(1.0, ratio));
+            double t = ratio;
+            double smooth_ratio = (1.0 - t) * (1.0 - t) * (1.0 - t) * 0.0 + 3.0 * (1.0 - t) * (1.0 - t) * t * 0.2 + 3.0 * (1.0 - t) * t * t * 0.8 + t * t * t * 1.0;
+            limit.max_linear_speed = decision_params_.min_speed_limit + smooth_ratio * (decision_params_.max_speed_limit_backward - decision_params_.min_speed_limit);
+            double angular_ratio = std::sqrt(smooth_ratio);
+            limit.max_angular_speed = limit.max_linear_speed * (0.2 + 0.3 * angular_ratio);
+            limit.max_angular_speed = std::max(limit.max_angular_speed, 0.05);
+            RCLCPP_DEBUG(this->get_logger(), "[L%d][后向-TTC减速区] TTC %.3f s, 限速: %.3f m/s", __LINE__, ttc, limit.max_linear_speed);
+            return limit;
+        }
+        if (ttc <= decision_params_.warning_ttc_backward) {
+            limit.max_linear_speed = std::numeric_limits<double>::max();
+            limit.max_angular_speed = std::numeric_limits<double>::max();
+            return limit;
+        }
+        limit.max_linear_speed = std::numeric_limits<double>::max();
+        limit.max_angular_speed = std::numeric_limits<double>::max();
+        return limit;
+    }
+
     if (distance <= decision_params_.emergency_brake_distance_backward) {
         limit.max_linear_speed = 0.0;
         limit.max_angular_speed = 0.0;
         is_backward_distance_nearest_ = true;
-        RCLCPP_WARN(this->get_logger(), "[L%d][后向-制动区] 紧急制动！距离: %.3f m <= %.3f m", __LINE__, distance, decision_params_.emergency_brake_distance_backward);
         return limit;
     }
-
-    // 减速区：在后向减速区之间进行平滑减速
     if (distance <= decision_params_.deceleration_zone_backward) {
-        // 计算归一化比例 [0, 1]
         double denominator = decision_params_.deceleration_zone_backward - decision_params_.emergency_brake_distance_backward;
-
-        // 防止除零或分母过小导致的数值溢出
         if (denominator <= 1e-6) {
-            RCLCPP_WARN(this->get_logger(), "[L%d][后向-减速区] 参数配置错误：deceleration_zone_backward (%.3f) 与 emergency_brake_distance_backward (%.3f) 差值过小，使用制动区逻辑",
-                __LINE__, decision_params_.deceleration_zone_backward, decision_params_.emergency_brake_distance_backward);
             limit.max_linear_speed = 0.0;
             limit.max_angular_speed = 0.0;
             return limit;
         }
-
         double ratio = (distance - decision_params_.emergency_brake_distance_backward) / denominator;
-
-        // 确保ratio在[0,1]范围内
         ratio = std::max(0.0, std::min(1.0, ratio));
         double t = ratio;
         double smooth_ratio = (1.0 - t) * (1.0 - t) * (1.0 - t) * 0.0 + 3.0 * (1.0 - t) * (1.0 - t) * t * 0.2 + 3.0 * (1.0 - t) * t * t * 0.8 + t * t * t * 1.0;
-        // 使用平方根函数进行平滑插值
-        // double smooth_ratio = std::sqrt(ratio);
-        // 使用立方根函数进行平滑插值
-        // double smooth_ratio = std::cbrt(ratio);
-        // 5次 Smoothstep
-        // double smooth_ratio =  ratio * ratio * (ratio * (ratio * 6.0 - 15.0) + 10.0);
-        // 线性插值：从最小速度到最大速度
-        limit.max_linear_speed = decision_params_.min_speed_limit + smooth_ratio * (decision_params_.max_speed_limit - decision_params_.min_speed_limit);
-
-        // 角速度限制：基于线速度限制计算
-        // 使用平方根函数进行平滑插值
+        limit.max_linear_speed = decision_params_.min_speed_limit + smooth_ratio * (decision_params_.max_speed_limit_backward - decision_params_.min_speed_limit);
         double angular_ratio = std::sqrt(smooth_ratio);
         limit.max_angular_speed = limit.max_linear_speed * (0.2 + 0.3 * angular_ratio);
-
-        // 确保最小角速度限制
-        const double MIN_ANGULAR_SPEED = 0.05; // rad/s
-        limit.max_angular_speed = std::max(limit.max_angular_speed, MIN_ANGULAR_SPEED);
-
-        RCLCPP_DEBUG(this->get_logger(), "[L%d][后向-减速区] 距离 %.3f m, 比例 %.3f, 平滑比例 %.3f, 限速: %.3f m/s (%.1f km/h), 角速度: %.3f rad/s",
-            __LINE__, distance, ratio, smooth_ratio, limit.max_linear_speed, limit.max_linear_speed * 3.6, limit.max_angular_speed);
-    }
-    // 预警区：不限制速度，但进入状态保持
-    else if (distance <= decision_params_.warning_zone_backward) {
+        limit.max_angular_speed = std::max(limit.max_angular_speed, 0.05);
+        RCLCPP_DEBUG(this->get_logger(), "[L%d][后向-减速区] 距离 %.3f m, 限速: %.3f m/s", __LINE__, distance, limit.max_linear_speed);
+    } else if (distance <= decision_params_.warning_zone_backward) {
         limit.max_linear_speed = std::numeric_limits<double>::max();
         limit.max_angular_speed = std::numeric_limits<double>::max();
-
-        RCLCPP_DEBUG(this->get_logger(), "[L%d][后向-预警区] 距离 %.3f m, 不限速", __LINE__, distance);
-    }
-    // 正常区：距离大于预警区，完全不限制
-    else {
+    } else {
         limit.max_linear_speed = std::numeric_limits<double>::max();
         limit.max_angular_speed = std::numeric_limits<double>::max();
-
-        RCLCPP_DEBUG(this->get_logger(), "[L%d][后向-正常区] 距离 %.3f m > %.3f m，不限速", __LINE__, distance, decision_params_.warning_zone_backward);
     }
-
     return limit;
 }
 
-SpeedLimit DecisionMaker::calculateSpeedLimitForLateral(double distance)
+SpeedLimit DecisionMaker::calculateSpeedLimitForLateral(double distance, double approach_velocity)
 {
     SpeedLimit limit;
     limit.distance_threshold = distance;
 
-    // 制动区：距离小于等于侧向制动距离，紧急制动
-    if (distance <= decision_params_.emergency_brake_distance_lateral) {
-        // limit.max_linear_speed = std::numeric_limits<double>::max(); // 侧向碰撞不影响线速度
+    // 固定停车距离：小于此距离该方向速度=0，不判断TTC
+    if (distance <= decision_params_.fixed_stopping_distance_lateral) {
         limit.max_linear_speed = 0.0;
-        limit.max_angular_speed = 0.0; // 但限制角速度
-        RCLCPP_WARN(this->get_logger(), "[L%d][侧向-制动区] 紧急制动！距离: %.3f m <= %.3f m", __LINE__, distance, decision_params_.emergency_brake_distance_lateral);
+        limit.max_angular_speed = 0.0;
+        RCLCPP_WARN(this->get_logger(), "[L%d][侧向-固定停车] 距离 %.3f m <= %.3f m，强制停车", __LINE__, distance, decision_params_.fixed_stopping_distance_lateral);
         return limit;
     }
 
-    // 减速区：在侧向减速区之间进行平滑减速
-    if (distance <= decision_params_.deceleration_zone_lateral) {
-        // 计算归一化比例 [0, 1]
-        double denominator = decision_params_.deceleration_zone_lateral - decision_params_.emergency_brake_distance_lateral;
+    const double v_eps = 0.01;
+    const bool use_ttc = (approach_velocity >= decision_params_.min_approach_velocity_for_ttc);
+    double ttc = (approach_velocity > v_eps) ? (distance / approach_velocity) : 999.0;
 
-        // 防止除零或分母过小导致的数值溢出
-        if (denominator <= 1e-6) {
-            RCLCPP_WARN(this->get_logger(), "[L%d][侧向-减速区] 参数配置错误：deceleration_zone_lateral (%.3f) 与 emergency_brake_distance_lateral (%.3f) 差值过小，使用制动区逻辑",
-                __LINE__, decision_params_.deceleration_zone_lateral, decision_params_.emergency_brake_distance_lateral);
-            limit.max_linear_speed = std::numeric_limits<double>::max();
+    if (use_ttc) {
+        if (ttc <= decision_params_.emergency_brake_ttc_lateral) {
+            limit.max_linear_speed = 0.0;
             limit.max_angular_speed = 0.0;
+            RCLCPP_WARN(this->get_logger(), "[L%d][侧向-TTC制动区] 紧急制动！TTC: %.3f s, 距离: %.3f m", __LINE__, ttc, distance);
             return limit;
         }
+        if (ttc <= decision_params_.deceleration_ttc_lateral) {
+            double denominator = decision_params_.deceleration_ttc_lateral - decision_params_.emergency_brake_ttc_lateral;
+            if (denominator <= 1e-6) {
+                // Bug7 修复：配置异常时保留最低角速度而非直接急停
+                limit.max_linear_speed = std::numeric_limits<double>::max();
+                limit.max_angular_speed = 0.05;
+                RCLCPP_WARN(this->get_logger(), "[L%d][侧向-TTC] deceleration_ttc_lateral ≈ emergency_brake_ttc_lateral，配置异常，使用最低角速度", __LINE__);
+                return limit;
+            }
+            double ratio = (ttc - decision_params_.emergency_brake_ttc_lateral) / denominator;
+            ratio = std::max(0.0, std::min(1.0, ratio));
+            double smooth_ratio = std::sqrt(ratio);
+            limit.max_linear_speed = std::numeric_limits<double>::max();
+            limit.max_angular_speed = std::max(decision_params_.absolute_max_angular_speed * smooth_ratio, 0.05);
+            RCLCPP_DEBUG(this->get_logger(), "[L%d][侧向-TTC减速区] TTC %.3f s, 角速度限速: %.3f rad/s", __LINE__, ttc, limit.max_angular_speed);
+            return limit;
+        }
+        if (ttc <= decision_params_.warning_ttc_lateral) {
+            limit.max_linear_speed = std::numeric_limits<double>::max();
+            limit.max_angular_speed = std::numeric_limits<double>::max();
+            return limit;
+        }
+        limit.max_linear_speed = std::numeric_limits<double>::max();
+        limit.max_angular_speed = std::numeric_limits<double>::max();
+        return limit;
+    }
 
+    if (distance <= decision_params_.emergency_brake_distance_lateral) {
+        limit.max_linear_speed = 0.0;
+        limit.max_angular_speed = 0.0;
+        RCLCPP_WARN(this->get_logger(), "[L%d][侧向-制动区] 紧急制动！距离: %.3f m", __LINE__, distance);
+        return limit;
+    }
+    if (distance <= decision_params_.deceleration_zone_lateral) {
+        double denominator = decision_params_.deceleration_zone_lateral - decision_params_.emergency_brake_distance_lateral;
+        if (denominator <= 1e-6) {
+            // Bug7 修复：配置异常时保留最低角速度而非直接急停
+            limit.max_linear_speed = std::numeric_limits<double>::max();
+            limit.max_angular_speed = 0.05;
+            RCLCPP_WARN(this->get_logger(), "[L%d][侧向-距离] deceleration_zone ≈ emergency_brake_distance，配置异常，使用最低角速度", __LINE__);
+            return limit;
+        }
         double ratio = (distance - decision_params_.emergency_brake_distance_lateral) / denominator;
-
-        // 确保ratio在[0,1]范围内
         ratio = std::max(0.0, std::min(1.0, ratio));
-
-        // 使用平方根函数进行平滑插值
         double smooth_ratio = std::sqrt(ratio);
-
-        // 侧向碰撞主要限制角速度，线速度不受影响
         limit.max_linear_speed = std::numeric_limits<double>::max();
-
-        // 角速度限制：基于最大角速度限制计算
-        double max_angular = decision_params_.absolute_max_angular_speed;
-        limit.max_angular_speed = max_angular * smooth_ratio;
-
-        // 确保最小角速度限制
-        const double MIN_ANGULAR_SPEED = 0.05; // rad/s
-        limit.max_angular_speed = std::max(limit.max_angular_speed, MIN_ANGULAR_SPEED);
-        limit.max_angular_speed = std::max(limit.max_angular_speed, MIN_ANGULAR_SPEED);
-
-        RCLCPP_DEBUG(this->get_logger(), "[L%d][侧向-减速区] 距离 %.3f m, 比例 %.3f, 平滑比例 %.3f, 角速度限速: %.3f rad/s",
-            __LINE__, distance, ratio, smooth_ratio, limit.max_angular_speed);
-    }
-    // 预警区：不限制速度，但进入状态保持
-    else if (distance <= decision_params_.warning_zone_lateral) {
+        limit.max_angular_speed = std::max(decision_params_.absolute_max_angular_speed * smooth_ratio, 0.05);
+        RCLCPP_DEBUG(this->get_logger(), "[L%d][侧向-减速区] 距离 %.3f m, 角速度限速: %.3f rad/s", __LINE__, distance, limit.max_angular_speed);
+    } else if (distance <= decision_params_.warning_zone_lateral) {
         limit.max_linear_speed = std::numeric_limits<double>::max();
         limit.max_angular_speed = std::numeric_limits<double>::max();
-
-        RCLCPP_DEBUG(this->get_logger(), "[L%d][侧向-预警区] 距离 %.3f m, 不限速", __LINE__, distance);
-    }
-    // 正常区：距离大于预警区，完全不限制
-    else {
+    } else {
         limit.max_linear_speed = std::numeric_limits<double>::max();
         limit.max_angular_speed = std::numeric_limits<double>::max();
-
-        RCLCPP_DEBUG(this->get_logger(), "[L%d][侧向-正常区] 距离 %.3f m > %.3f m，不限速", __LINE__, distance, decision_params_.warning_zone_lateral);
     }
-
     return limit;
 }
 
 geometry_msgs::msg::Twist DecisionMaker::applySpeedLimitForBackward(const geometry_msgs::msg::Twist& original_control, const SpeedLimit& limit)
 {
     geometry_msgs::msg::Twist limited_control = original_control;
+    const auto now_time = this->now();
+    double dt = (now_time - last_backward_limit_time_).seconds();
+    if (dt <= 1e-4 || dt > 0.2) {
+        dt = 0.02; // 回调周期兜底，避免大时间跳变导致限速突变
+    }
+    last_backward_limit_time_ = now_time;
 
     // ==================== 线速度限制 ====================
     // 只限制后退方向的速度（x轴负方向），前进不受后向碰撞限制
     if (original_control.linear.x < 0.0) {
-        // 后退方向需要限制
-        if (std::abs(original_control.linear.x) > limit.max_linear_speed) {
-            limited_control.linear.x = -limit.max_linear_speed; // 保持负方向
-            judgeBackwardWarningScene(limit);
-            RCLCPP_DEBUG(this->get_logger(), "[L%d] 后退速度限制: %.3f m/s -> %.3f m/s", __LINE__, original_control.linear.x, limited_control.linear.x);
+        // 目标后退速度：先按后向全局上限，再按本次避障限速
+        double desired_backward_speed = std::min(std::abs(original_control.linear.x), decision_params_.max_speed_limit_backward);
+        if (limit.max_linear_speed < std::numeric_limits<double>::max()) {
+            desired_backward_speed = std::min(desired_backward_speed, std::max(0.0, limit.max_linear_speed));
+        }
+
+        // 急停两段式：先降到爬行速度，确认窗口后再锁停
+        const bool emergency_requested = (limit.max_linear_speed <= 1e-6);
+        if (emergency_requested) {
+            if (!backward_emergency_active_) {
+                backward_emergency_active_ = true;
+                backward_emergency_start_time_ = now_time;
+            }
+            const double emergency_elapsed_ms = (now_time - backward_emergency_start_time_).seconds() * 1000.0;
+            if (emergency_elapsed_ms < decision_params_.backward_emergency_hold_ms) {
+                desired_backward_speed = std::min(desired_backward_speed, decision_params_.backward_emergency_creep_speed);
+            } else {
+                desired_backward_speed = 0.0;
+            }
+        } else {
+            backward_emergency_active_ = false;
+        }
+
+        // 倒车斜率限制：减速与恢复分别按不同加速度上限，避免“台阶式”变化
+        const double last_speed = (last_backward_limited_linear_x_ < 0.0) ? std::abs(last_backward_limited_linear_x_) : 0.0;
+        double next_speed = desired_backward_speed;
+        if (desired_backward_speed < last_speed) {
+            const double max_down_step = decision_params_.backward_brake_decel_max_m_s2 * dt;
+            next_speed = std::max(desired_backward_speed, last_speed - max_down_step);
+        } else {
+            const double max_up_step = decision_params_.backward_recover_accel_max_m_s2 * dt;
+            next_speed = std::min(desired_backward_speed, last_speed + max_up_step);
+        }
+
+        limited_control.linear.x = -next_speed;
+        last_backward_limited_linear_x_ = limited_control.linear.x;
+
+        if (std::abs(original_control.linear.x - limited_control.linear.x) > 1e-6) {
+            RCLCPP_DEBUG(this->get_logger(), "[L%d] 后退速度限制(平顺): %.3f m/s -> %.3f m/s", __LINE__, original_control.linear.x, limited_control.linear.x);
         }
     } else {
         // 前进方向保持不变（后向碰撞不影响前进）
         limited_control.linear.x = original_control.linear.x;
+        last_backward_limited_linear_x_ = limited_control.linear.x;
+        backward_emergency_active_ = false;
     }
 
     // ==================== 角速度限制 ====================
@@ -1040,8 +1901,13 @@ geometry_msgs::msg::Twist DecisionMaker::applySpeedLimitForLeft(const geometry_m
     geometry_msgs::msg::Twist limited_control = original_control;
 
     // ==================== 线速度限制 ====================
-    // 侧向碰撞不影响线速度
-    limited_control.linear.x = original_control.linear.x;
+    // Bug8 修复：固定停车距离内（max_linear_speed=0）限制线速度，防止极近距离刮蹭
+    // if (limit.max_linear_speed < std::numeric_limits<double>::max()) {
+    //     if (std::abs(original_control.linear.x) > limit.max_linear_speed) {
+    //         limited_control.linear.x = std::copysign(limit.max_linear_speed, original_control.linear.x);
+    //         RCLCPP_DEBUG(this->get_logger(), "[L%d] 左侧-线速度限制: %.3f -> %.3f m/s", __LINE__, original_control.linear.x, limited_control.linear.x);
+    //     }
+    // }
 
     // ==================== 角速度限制 ====================
     // 左侧碰撞主要限制左转（正角速度）
@@ -1049,7 +1915,6 @@ geometry_msgs::msg::Twist DecisionMaker::applySpeedLimitForLeft(const geometry_m
         // 左转方向需要限制
         if (original_control.angular.z > limit.max_angular_speed) {
             limited_control.angular.z = limit.max_angular_speed;
-            judgeLateralWarningScene(limit);
             RCLCPP_DEBUG(this->get_logger(), "[L%d] 左侧-左转角速度限制: %.3f rad/s -> %.3f rad/s", __LINE__, original_control.angular.z, limited_control.angular.z);
         }
     } else {
@@ -1078,8 +1943,13 @@ geometry_msgs::msg::Twist DecisionMaker::applySpeedLimitForRight(const geometry_
     geometry_msgs::msg::Twist limited_control = original_control;
 
     // ==================== 线速度限制 ====================
-    // 侧向碰撞不影响线速度
-    limited_control.linear.x = original_control.linear.x;
+    // Bug8 修复：固定停车距离内（max_linear_speed=0）限制线速度，防止极近距离刮蹭
+    // if (limit.max_linear_speed < std::numeric_limits<double>::max()) {
+    //     if (std::abs(original_control.linear.x) > limit.max_linear_speed) {
+    //         limited_control.linear.x = std::copysign(limit.max_linear_speed, original_control.linear.x);
+    //         RCLCPP_DEBUG(this->get_logger(), "[L%d] 右侧-线速度限制: %.3f -> %.3f m/s", __LINE__, original_control.linear.x, limited_control.linear.x);
+    //     }
+    // }
 
     // ==================== 角速度限制 ====================
     // 右侧碰撞主要限制右转（负角速度）
@@ -1087,7 +1957,6 @@ geometry_msgs::msg::Twist DecisionMaker::applySpeedLimitForRight(const geometry_
         // 右转方向需要限制
         if (std::abs(original_control.angular.z) > limit.max_angular_speed) {
             limited_control.angular.z = -limit.max_angular_speed; // 保持负方向
-            judgeLateralWarningScene(limit);
             RCLCPP_DEBUG(this->get_logger(), "[L%d] 右侧-右转角速度限制: %.3f rad/s -> %.3f rad/s", __LINE__, original_control.angular.z, limited_control.angular.z);
         }
     } else {
@@ -1264,10 +2133,30 @@ std::vector<ClusterInfo> DecisionMaker::predictTargetsBasedOnWheelSpeed(const st
 }
 
 // ==================== 机器人尺寸/区域配置接口 ====================
+void DecisionMaker::syncRobotDimensionsFromParams()
+{
+    robot_dimensions_.length = decision_params_.robot_length;
+    robot_dimensions_.width = decision_params_.robot_width;
+    robot_dimensions_.height = decision_params_.robot_height;
+    robot_dimensions_.safety_margin_front = decision_params_.robot_safety_margin_front;
+    robot_dimensions_.safety_margin_back = decision_params_.robot_safety_margin_back;
+    robot_dimensions_.safety_margin_side = decision_params_.robot_safety_margin_side;
+    RCLCPP_DEBUG(this->get_logger(),
+        "[L%d] 车体几何: 长=%.3f 宽=%.3f 高=%.3f 裕量前/后/侧=%.3f/%.3f/%.3f",
+        __LINE__, robot_dimensions_.length, robot_dimensions_.width, robot_dimensions_.height,
+        robot_dimensions_.safety_margin_front, robot_dimensions_.safety_margin_back, robot_dimensions_.safety_margin_side);
+}
+
 void DecisionMaker::setRobotDimensions(const RobotDimensions::BaseDimensions& dimensions)
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     robot_dimensions_ = dimensions;
+    decision_params_.robot_length = dimensions.length;
+    decision_params_.robot_width = dimensions.width;
+    decision_params_.robot_height = dimensions.height;
+    decision_params_.robot_safety_margin_front = dimensions.safety_margin_front;
+    decision_params_.robot_safety_margin_back = dimensions.safety_margin_back;
+    decision_params_.robot_safety_margin_side = dimensions.safety_margin_side;
     RCLCPP_DEBUG(this->get_logger(), "[L%d] 设置机器人尺寸: 长=%.3f, 宽=%.3f, 高=%.3f", __LINE__, dimensions.length, dimensions.width, dimensions.height);
 }
 
@@ -1292,12 +2181,15 @@ RobotDimensions::CollisionZones DecisionMaker::getCollisionZones() const
 void DecisionMaker::calculateMinDirectionalDistance(const std::vector<ClusterInfo>& clusters,
     const std::map<size_t, std::string>& cluster_radar_map)
 {
-    MinDirectionalDistance distances { decision_params_.warning_zone,
-        decision_params_.warning_zone_backward,
-        decision_params_.warning_zone_lateral,
-        decision_params_.warning_zone_lateral };
+    // 使用“远大于预警区”的哨兵值作为无障碍物默认；若用 warning_zone 作为初值，
+    // 当没有任何聚类落入前向走廊时会被 TTC 误判为减速（高速下 TTC = warning_zone / v < warning_ttc）。
+    const double kNoObstacleDistance = 1e6;
+    MinDirectionalDistance distances { kNoObstacleDistance,
+        kNoObstacleDistance,
+        kNoObstacleDistance,
+        kNoObstacleDistance };
 
-    double half_wid = robot_dimensions_.width * 0.5; // 0.32
+    double half_wid = robot_dimensions_.width * 0.5; // 0.35
     double safety_side = robot_dimensions_.safety_margin_side;
 
     // 初始化前向最小距离的雷达来源和最近点Z值
@@ -1318,7 +2210,10 @@ void DecisionMaker::calculateMinDirectionalDistance(const std::vector<ClusterInf
         double forward_distance = std::numeric_limits<double>::max();
         double left_distance = std::numeric_limits<double>::max();
         double right_distance = std::numeric_limits<double>::max();
-        if (std::abs(cluster.center_y) <= (half_wid + safety_side)) {
+        const bool contributes_forward_main =
+            (cluster.source_name != "left_tilt" && cluster.source_name != "right_tilt"
+             && cluster.source_name != "back");
+        if (contributes_forward_main && std::abs(cluster.center_y) <= (half_wid + safety_side)) {
             if (cluster.center_x >= robot_dimensions_.length) {
                 // 距离前缘的前向投影距离，>0 表示前方剩余距离
                 forward_distance = (cluster.center_x - robot_dimensions_.length);
@@ -1326,12 +2221,48 @@ void DecisionMaker::calculateMinDirectionalDistance(const std::vector<ClusterInf
                 forward_distance = 0.0;
             }
         }
-        if (cluster.center_x > 0.0 && cluster.center_x < robot_dimensions_.length + decision_params_.foot_distance_to_radar) {
-            if (cluster.center_y > half_wid) {
-                left_distance = std::abs(cluster.center_y) - half_wid;
+        // 侧向检测范围：覆盖车身全长（含后半侧面），x ∈ (-safety_margin_back, length + foot_distance)
+        if (cluster.center_x > -safety_side && cluster.center_x < robot_dimensions_.length + decision_params_.foot_distance_to_radar) {
+            // 用 center_y 和边界框综合判断侧向距离
+            // center_y 是 |y| 最小的点（最靠近车体），但可能 <= half_wid
+            // 此时用边界框 max_y/min_y 判断聚类是否在车侧伸出
+            double y_abs = std::abs(cluster.center_y);
+            double y_protrude = 0.0;
+            bool has_lateral_threat = false;
+            int lateral_side = 0; // 1=left, -1=right
+
+            if (y_abs > half_wid) {
+                // 正常情况：center 点在车体外
+                y_protrude = y_abs - half_wid;
+                has_lateral_threat = true;
+                lateral_side = (cluster.center_y > 0.0) ? 1 : -1;
+            } else {
+                // center 在车体投影内，但边界框伸出车侧：用车缘到框边的真实伸出量（米），
+                // 勿写死 0 —— 否则静止时噪声/微伸出也会被当成 0 m，误触固定停车。
+                if (cluster.max_y > half_wid) {
+                    y_protrude = std::max(0.0, cluster.max_y - half_wid);
+                    has_lateral_threat = true;
+                    lateral_side = 1;
+                } else if (cluster.min_y < -half_wid) {
+                    y_protrude = std::max(0.0, -half_wid - cluster.min_y);
+                    has_lateral_threat = true;
+                    lateral_side = -1;
+                }
             }
-            if (cluster.center_y < -half_wid) {
-                right_distance = std::abs(cluster.center_y) - half_wid;
+
+            if (has_lateral_threat) {
+                // 侧向主导判定：
+                // - 在车身范围内（center_x < length）的障碍物直接视为侧向威胁
+                // - 超出车身前缘附近的聚类须满足 lateral_dominance_ratio 以区分前向斜向障碍
+                bool is_beside_body = (cluster.center_x < robot_dimensions_.length);
+                bool lateral_dominant = (y_protrude >= decision_params_.lateral_dominance_ratio * std::max(cluster.center_x, 0.01));
+                if (is_beside_body || lateral_dominant) {
+                    if (lateral_side > 0) {
+                        left_distance = y_protrude;
+                    } else {
+                        right_distance = y_protrude;
+                    }
+                }
             }
         }
         // 后向距离
@@ -1379,6 +2310,7 @@ void DecisionMaker::calculateMinDirectionalDistance(const std::vector<ClusterInf
         // 如果这个聚类提供了更小的左侧距离，记录雷达来源和最近点的Z值
         if (left_distance < distances.min_lateral_left_distance) {
             distances.min_lateral_left_distance = std::max(0.0, left_distance);
+            distances.min_lateral_left_distance = round_distance_keep_subcentimeter(distances.min_lateral_left_distance);
 
             // 查找该聚类对应的雷达名称
             auto radar_it = cluster_radar_map.find(i);
@@ -1400,6 +2332,7 @@ void DecisionMaker::calculateMinDirectionalDistance(const std::vector<ClusterInf
         // 如果这个聚类提供了更小的右侧距离，记录雷达来源和最近点的Z值
         if (right_distance < distances.min_lateral_right_distance) {
             distances.min_lateral_right_distance = std::max(0.0, right_distance);
+            distances.min_lateral_right_distance = round_distance_keep_subcentimeter(distances.min_lateral_right_distance);
 
             // 查找该聚类对应的雷达名称
             auto radar_it = cluster_radar_map.find(i);
@@ -1421,12 +2354,12 @@ void DecisionMaker::calculateMinDirectionalDistance(const std::vector<ClusterInf
     }
 
     // 如果前向的最小距离
-    RCLCPP_INFO(this->get_logger(), "[L%d] min_directional_distance: 前向=%.3f(来源:%s,Z:%.3f), 后向=%.3f, 左侧=%.3f(来源:%s,Z:%.3f), 右侧=%.3f(来源:%s,Z:%.3f)",
-        __LINE__,
-        distances.min_forward_distance, forward_min_distance_radar_source_.c_str(), forward_min_distance_nearest_z_,
-        distances.min_backward_distance,
-        distances.min_lateral_left_distance, left_min_distance_radar_source_.c_str(), left_min_distance_nearest_z_,
-        distances.min_lateral_right_distance, right_min_distance_radar_source_.c_str(), right_min_distance_nearest_z_);
+    // RCLCPP_INFO(this->get_logger(), "[L%d] min_directional_distance: 前向=%.3f(来源:%s,Z:%.3f), 后向=%.3f, 左侧=%.3f(来源:%s,Z:%.3f), 右侧=%.3f(来源:%s,Z:%.3f)",
+    //     __LINE__,
+    //     distances.min_forward_distance, forward_min_distance_radar_source_.c_str(), forward_min_distance_nearest_z_,
+    //     distances.min_backward_distance,
+    //     distances.min_lateral_left_distance, left_min_distance_radar_source_.c_str(), left_min_distance_nearest_z_,
+    //     distances.min_lateral_right_distance, right_min_distance_radar_source_.c_str(), right_min_distance_nearest_z_);
     min_directional_distance_ = distances;
 }
 
@@ -1437,6 +2370,113 @@ void DecisionMaker::publishSafetyAlarm(const std::string& direction_name, Warnin
     alarm_msg.header.frame_id = "base_link";
     alarm_msg.alarm_level = static_cast<int32_t>(warning_type);
     auxiliary_alarm_publisher_->publish(alarm_msg);
+}
+void DecisionMaker::publishCollisionWarning(interface::msg::CollisionWarning& warning_msg)
+{
+    warning_msg.header.stamp = this->now();
+    warning_msg.header.frame_id = "base_link";
+    collision_warning_publisher_->publish(warning_msg);
+}
+
+bool DecisionMaker::shouldPublishPhysicalIntervention(const std::string& direction_name, WarningLevel level) const
+{
+    constexpr double kStoppedMps = 0.06;
+    constexpr double kMinSpeedForDecel = 0.05;
+    constexpr double kSpeedDropMps = 0.03;
+
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (!speed_feedback_ready_) {
+        return false;
+    }
+
+    const double v = tracking_ ? tracking_->getWheelSpeedLinearVelocity() : current_vehicle_state_.linear_velocity;
+    const double w = tracking_ ? tracking_->getWheelSpeedAngularVelocity() : current_vehicle_state_.angular_velocity;
+    const double v_prev = fb_linear_prev_;
+    const double w_prev = fb_angular_prev_;
+    const double half_w = robot_dimensions_.width * 0.5;
+
+    const bool is_forward = (direction_name == "前向" || direction_name == "前侧");
+    const bool is_backward = (direction_name == "后向" || direction_name == "后侧");
+    const bool is_left = (direction_name == "左侧");
+    const bool is_right = (direction_name == "右侧");
+
+    auto physical_slowdown = [&](double now, double prev) -> bool {
+        if (level == WarningLevel::BRAKE) {
+            return (now <= kStoppedMps) || (prev > kMinSpeedForDecel && now < prev - kSpeedDropMps);
+        }
+        if (now <= kMinSpeedForDecel) {
+            return false;
+        }
+        return prev > kMinSpeedForDecel && now < prev - kSpeedDropMps;
+    };
+
+    if (is_forward) {
+        if (v <= 0.0) {
+            return false;
+        }
+        return physical_slowdown(v, v_prev);
+    }
+    if (is_backward) {
+        const double av = std::abs(v);
+        const double av_prev = std::abs(v_prev);
+        if (v >= -0.01) {
+            return false;
+        }
+        return physical_slowdown(av, av_prev);
+    }
+    if (is_left || is_right) {
+        const double eq = std::abs(w) * half_w;
+        const double eq_prev = std::abs(w_prev) * half_w;
+        if (eq <= 1e-6) {
+            return false;
+        }
+        return physical_slowdown(eq, eq_prev);
+    }
+    return false;
+}
+
+void DecisionMaker::publishInterventionState(const std::string& direction_name, WarningLevel level, double effective_distance)
+{
+    // 同一方向同一级别 1 秒最多发送一次
+    const double kMinPublishIntervalSec = 1.0;
+    std::string key = direction_name + "_" + std::to_string(static_cast<int>(level));
+    rclcpp::Time now = this->now();
+    auto it = last_intervention_publish_time_.find(key);
+    if (it != last_intervention_publish_time_.end()) {
+        double elapsed = (now - it->second).seconds();
+        if (elapsed < kMinPublishIntervalSec) {
+            return;
+        }
+    }
+    last_intervention_publish_time_[key] = now;
+
+    // 方向名称 -> warning_type: 1 地上前向 2 地上左向 3 地上右向 4 地上后向
+    int16_t warning_type = 0;
+    if (direction_name == "前向" || direction_name == "前侧") {
+        warning_type = static_cast<int16_t>(WarningType::FORWARD);
+    } else if (direction_name == "后向" || direction_name == "后侧") {
+        warning_type = static_cast<int16_t>(WarningType::BACKWARD);
+    } else if (direction_name == "左侧") {
+        warning_type = static_cast<int16_t>(WarningType::LEFT);
+    } else if (direction_name == "右侧") {
+        warning_type = static_cast<int16_t>(WarningType::RIGHT);
+    } else {
+        RCLCPP_DEBUG(this->get_logger(), "[L%d] publishInterventionState 未知方向: %s", __LINE__, direction_name.c_str());
+        return;
+    }
+    if(direction_name == "前向") {
+        std_msgs::msg::Empty narrow_end_msg;
+        narrow_end_publisher_->publish(narrow_end_msg);
+    }
+
+    interface::msg::CollisionWarning msg;
+    msg.header.stamp = now;
+    msg.header.frame_id = "base_link";
+    msg.warning_type = warning_type;
+    msg.warning_level = static_cast<int16_t>(level);
+    collision_warning_publisher_->publish(msg);
+    RCLCPP_DEBUG(this->get_logger(), "[L%d] 发布干预状态: 方向=%s, 等级=%d, 距离=%.3f m",
+        __LINE__, direction_name.c_str(), static_cast<int>(level), effective_distance);
 }
 
 void DecisionMaker::publishSafetyAlarmForBackward(const std::string& direction_name, int alarm_level)
@@ -1450,23 +2490,53 @@ void DecisionMaker::publishSafetyAlarmForBackward(const std::string& direction_n
 
 void DecisionMaker::carInfoCallback(const interface::msg::CarInfo::SharedPtr msg)
 {
-    switch (msg->gear) {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
+    // 档位上限：按 CarInfo.gear + mode_type（1 舒适 2 运动）与 scene_node 巡航限速表一致。
+    // 运动 4 档未在产品需求中写明时取 8 km/h，与 absolute_max_linear_speed 对齐。
+    // 注意：不再用 base_speed * ratio，避免与舒适/运动分档 km/h 不一致。
+    auto kmh_to_ms = [](double kmh) { return kmh / 3.6; };
+    const int gear = static_cast<int>(msg->gear);
+    const bool sport = (msg->mode_type == 2);
+    double gear_max_speed = kmh_to_ms(1.5);
+    switch (gear) {
     case 1:
-        decision_params_.max_speed_limit = 1.67 * 0.4;
-        decision_params_.max_speed_limit_backward = 1.67 * 0.5 * 0.4;
-        decision_params_.emergency_brake_distance = 0.1;
+        gear_max_speed = sport ? kmh_to_ms(2.0) : kmh_to_ms(1.5);
         break;
     case 2:
-        decision_params_.max_speed_limit = 1.67 * 0.7;
-        decision_params_.max_speed_limit_backward = 1.67 * 0.5 * 0.7;
-        decision_params_.emergency_brake_distance = 0.15;
+        gear_max_speed = kmh_to_ms(3.0);
         break;
     case 3:
-        decision_params_.max_speed_limit = 1.67;
-        decision_params_.max_speed_limit_backward = 1.67 * 0.5;
-        decision_params_.emergency_brake_distance = 0.2;
+        gear_max_speed = sport ? kmh_to_ms(6.0) : kmh_to_ms(4.5);
+        break;
+    case 4:
+        gear_max_speed = sport ? kmh_to_ms(8.0) : kmh_to_ms(6.0);
+        break;
+    default:
+        gear_max_speed = sport ? kmh_to_ms(2.0) : kmh_to_ms(1.5);
         break;
     }
+
+    decision_params_.max_speed_limit = std::min(gear_max_speed, decision_params_.absolute_max_linear_speed);
+    decision_params_.max_speed_limit_backward = gear_max_speed * 0.5;
+
+    // 同步重置各方向恢复状态，避免旧限速残留
+    // 关键：target_speed_limit 必须无条件跟随新的 max_speed_limit，
+    // 否则升档后若处于恢复态或有残留检测，target 仍停留在旧档位上限（如 1.67 m/s = 6 km/h），
+    // 造成 4 档最高速被前一次 3 档限速卡住、并持续报减速。
+    auto reset = [&](DirectionalState& s) {
+        s.target_speed_limit = decision_params_.max_speed_limit;
+        if (!s.has_last_detection && !s.is_recovering) {
+            s.current_speed_limit = decision_params_.max_speed_limit;
+        } else {
+            // 若旧档位上限大于新档位，clamp 当前限速，避免瞬时超限
+            s.current_speed_limit = std::min(s.current_speed_limit, decision_params_.max_speed_limit);
+        }
+    };
+    reset(forward_state_);
+    reset(backward_state_);
+    reset(left_state_);
+    reset(right_state_);
 }
 
 void DecisionMaker::updateRadarNearestPoint(const std::vector<ClusterInfo>& clusters, const std::string& radar_name)
@@ -1476,12 +2546,14 @@ void DecisionMaker::updateRadarNearestPoint(const std::vector<ClusterInfo>& clus
     double forward_distance_min = std::numeric_limits<double>::max();
     double left_distance_min = std::numeric_limits<double>::max();
     double right_distance_min = std::numeric_limits<double>::max();
+    const bool contributes_forward_main =
+        (radar_name != "left_tilt" && radar_name != "right_tilt" && radar_name != "back");
     for (size_t i = 0; i < clusters.size(); ++i) {
         const auto& cluster = clusters[i];
         double forward_distance = std::numeric_limits<double>::max();
         double left_distance = std::numeric_limits<double>::max();
         double right_distance = std::numeric_limits<double>::max();
-        if (std::abs(cluster.center_y) <= (half_wid + safety_side)) {
+        if (contributes_forward_main && std::abs(cluster.center_y) <= (half_wid + safety_side)) {
             if (cluster.center_x >= robot_dimensions_.length) {
                 // 距离前缘的前向投影距离，>0 表示前方剩余距离
                 forward_distance = (cluster.center_x - robot_dimensions_.length);
@@ -1490,31 +2562,29 @@ void DecisionMaker::updateRadarNearestPoint(const std::vector<ClusterInfo>& clus
             }
         }
         if (cluster.center_x > 0.0 && cluster.center_x < robot_dimensions_.length + decision_params_.foot_distance_to_radar) {
-            if (cluster.center_y > half_wid) {
-                left_distance = std::abs(cluster.center_y) - half_wid;
-            }
-            if (cluster.center_y < -half_wid) {
-                right_distance = std::abs(cluster.center_y) - half_wid;
+            double y_abs = std::abs(cluster.center_y);
+            if (y_abs > half_wid) {
+                double y_protrude = y_abs - half_wid;
+                if (y_protrude >= decision_params_.lateral_dominance_ratio * cluster.center_x) {
+                    if (cluster.center_y > 0.0) {
+                        left_distance = y_protrude;
+                    } else {
+                        right_distance = y_protrude;
+                    }
+                }
             }
         }
         forward_distance_min = std::min(forward_distance_min, forward_distance);
         left_distance_min = std::min(left_distance_min, left_distance);
         right_distance_min = std::min(right_distance_min, right_distance);
     }
-    // 判断是否存在该雷达的元素
-    if (radar_nearest_point_map_.find(radar_name) == radar_nearest_point_map_.end()) {
-        RadarNearestPoint nearest_point;
-        nearest_point.radar_name = radar_name;
-        nearest_point.forward_distance = forward_distance_min;
-        nearest_point.left_distance = left_distance_min;
-        nearest_point.right_distance = right_distance_min;
-        radar_nearest_point_map_[radar_name] = nearest_point;
-    } else {
-        RadarNearestPoint& nearest_point = radar_nearest_point_map_[radar_name];
-        nearest_point.forward_distance = std::min(nearest_point.forward_distance, forward_distance_min);
-        nearest_point.left_distance = std::min(nearest_point.left_distance, left_distance_min);
-        nearest_point.right_distance = std::min(nearest_point.right_distance, right_distance_min);
-    }
+    // 每帧完全替换该雷达的最近点信息，避免旧值累积
+    RadarNearestPoint nearest_point;
+    nearest_point.radar_name = radar_name;
+    nearest_point.forward_distance = forward_distance_min;
+    nearest_point.left_distance = left_distance_min;
+    nearest_point.right_distance = right_distance_min;
+    radar_nearest_point_map_[radar_name] = nearest_point;
     RCLCPP_DEBUG(this->get_logger(), "[L%d] radar_nearest_point: %s, forward_distance: %.3f",
         __LINE__, radar_name.c_str(), forward_distance_min);
     // RCLCPP_WARN(this->get_logger(), "[L%d] radar_nearest_point: %s, left_distance: %.3f",
@@ -1525,11 +2595,38 @@ void DecisionMaker::updateRadarNearestPoint(const std::vector<ClusterInfo>& clus
 
 void DecisionMaker::joystickCallback(const interface::msg::Joystick::SharedPtr msg)
 {
+    std::lock_guard<std::mutex> lock(state_mutex_);
     joystick_msg_ = *msg;
+}
+
+void DecisionMaker::tftCarModeCallback(const std_msgs::msg::Int32::SharedPtr msg)
+{
+    if (!msg) {
+        return;
+    }
+    const int32_t v = msg->data;
+    tft_car_mode_.store(v == 2 ? 2 : 1, std::memory_order_relaxed);
+}
+
+void DecisionMaker::updateSmoothFilterCommandLimits()
+{
+    SmoothCommandLimits lim;
+    const int32_t mode = tft_car_mode_.load(std::memory_order_relaxed);
+    if (mode == 2) {
+        lim.max_linear_delta = decision_params_.smooth_sport_max_linear_delta;
+        lim.max_angular_delta = decision_params_.smooth_sport_max_angular_delta;
+        lim.max_linear_accel_m_s2 = decision_params_.smooth_sport_max_linear_accel_m_s2;
+    } else {
+        lim.max_linear_delta = decision_params_.smooth_comfort_max_linear_delta;
+        lim.max_angular_delta = decision_params_.smooth_comfort_max_angular_delta;
+        lim.max_linear_accel_m_s2 = decision_params_.smooth_comfort_max_linear_accel_m_s2;
+    }
+    smooth_filter_->setCommandLimits(lim);
 }
 
 interface::msg::Joystick DecisionMaker::getCurrentJoystickMsg() const
 {
+    std::lock_guard<std::mutex> lock(state_mutex_);
     return joystick_msg_;
 }
 
@@ -1547,17 +2644,25 @@ void DecisionMaker::judgeForwardWarningScene(const SpeedLimit& limit)
     }
     if(limit.max_linear_speed < 0.01){
         if (is_negative_plane) {
-            publishSafetyAlarm("前向负平面刹停区", WarningType::FORWARD_NEGATIVE_PLANE_BRAKE_WARNING);
+            int16_t old_level = negative_plane_forward_warning_msg_.warning_level;
+            negative_plane_forward_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::BRAKE);
+            updateWarningStatus(negative_plane_forward_warning_msg_, old_level);
         } else {
-            publishSafetyAlarm("前向地面以上刹停区", WarningType::FORWARD_BRAKE_WARNING);
+            int16_t old_level = forward_warning_msg_.warning_level;
+            forward_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::BRAKE);
+            updateWarningStatus(forward_warning_msg_, old_level);
         }
         is_emergency_brake_zone_speed_suppressed_ = true;
         is_deceleration_zone_speed_suppressed_ = false;
     }else{
         if (is_negative_plane) {
-            publishSafetyAlarm("前向负平面减速区", WarningType::FORWARD_NEGATIVE_PLANE_WARNING);
+            int16_t old_level = negative_plane_forward_warning_msg_.warning_level;
+            negative_plane_forward_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::DECELERATION);
+            updateWarningStatus(negative_plane_forward_warning_msg_, old_level);
         } else {
-            publishSafetyAlarm("前向地面以上减速区", WarningType::FORWARD_WARNING);
+            int16_t old_level = forward_warning_msg_.warning_level;
+            forward_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::DECELERATION);
+            updateWarningStatus(forward_warning_msg_, old_level);
         }
         is_deceleration_zone_speed_suppressed_ = true;
         is_emergency_brake_zone_speed_suppressed_ = false;
@@ -1567,37 +2672,95 @@ void DecisionMaker::judgeForwardWarningScene(const SpeedLimit& limit)
 void DecisionMaker::judgeBackwardWarningScene(const SpeedLimit& limit)
 {
     if (limit.max_linear_speed < 0.01) {
-        publishSafetyAlarm("后向刹停区", WarningType::BACKWARD_BRAKE_WARNING);
+        int16_t old_level = backward_warning_msg_.warning_level;
+        backward_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::BRAKE);
+        updateWarningStatus(backward_warning_msg_, old_level);
         is_emergency_brake_zone_speed_suppressed_ = true;
         is_deceleration_zone_speed_suppressed_ = false;
     } else {
-        publishSafetyAlarm("后向减速区", WarningType::BACKWARD_WARNING);
+        int16_t old_level = backward_warning_msg_.warning_level;
+        backward_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::DECELERATION);
+        updateWarningStatus(backward_warning_msg_, old_level);
         is_deceleration_zone_speed_suppressed_ = true;
         is_emergency_brake_zone_speed_suppressed_ = false;
     }
 }
 
-void DecisionMaker::judgeLateralWarningScene(const SpeedLimit& limit)
+void DecisionMaker::judgeLeftLateralWarningScene(const SpeedLimit& limit)
 {
     if (limit.max_angular_speed < 0.01) {
-        if(left_min_distance_radar_source_ == "left" && left_min_distance_nearest_z_ <= 0.01){
-            publishSafetyAlarm("左侧侧向刹停区", WarningType::LATERAL_NEGATIVE_PLANE_BRAKE_WARNING);
-        }else if(right_min_distance_radar_source_ == "right" && right_min_distance_nearest_z_ <= 0.01){
-            publishSafetyAlarm("右侧侧向刹停区", WarningType::LATERAL_NEGATIVE_PLANE_BRAKE_WARNING);
+        if(is_lateral_obstacle_negative_plane_ && left_min_distance_nearest_z_ <= 0.01){
+            int16_t old_level = negative_plane_left_warning_msg_.warning_level;
+            negative_plane_left_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::BRAKE);
+            updateWarningStatus(negative_plane_left_warning_msg_, old_level);
         }else{
-            publishSafetyAlarm("侧向减速区", WarningType::LATERAL_BRAKE_WARNING);
+            int16_t old_level = left_warning_msg_.warning_level;
+            left_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::BRAKE);
+            updateWarningStatus(left_warning_msg_, old_level);
         }
         is_emergency_brake_zone_speed_suppressed_ = true;
         is_deceleration_zone_speed_suppressed_ = false;
-    } else {
-        if(left_min_distance_radar_source_ == "left" && left_min_distance_nearest_z_ <= 0.01){
-            publishSafetyAlarm("左侧侧向减速区", WarningType::LATERAL_NEGATIVE_PLANE_WARNING);
-        }else if(right_min_distance_radar_source_ == "right" && right_min_distance_nearest_z_ <= 0.01){
-            publishSafetyAlarm("右侧侧向减速区", WarningType::LATERAL_NEGATIVE_PLANE_WARNING);
+    }else {
+        if(is_lateral_obstacle_negative_plane_ && left_min_distance_nearest_z_ <= 0.01){
+            int16_t old_level = negative_plane_left_warning_msg_.warning_level;
+            negative_plane_left_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::DECELERATION);
+            updateWarningStatus(negative_plane_left_warning_msg_, old_level);
         }else{
-            publishSafetyAlarm("侧向减速区", WarningType::LATERAL_WARNING);
+            int16_t old_level = left_warning_msg_.warning_level;
+            left_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::DECELERATION);
+            updateWarningStatus(left_warning_msg_, old_level);
         }
         is_deceleration_zone_speed_suppressed_ = true;
         is_emergency_brake_zone_speed_suppressed_ = false;
     }
+}
+
+void DecisionMaker::judgeRightLateralWarningScene(const SpeedLimit& limit)
+{
+    if (limit.max_angular_speed < 0.01) {
+        if(is_lateral_obstacle_negative_plane_ && right_min_distance_nearest_z_ <= 0.01){
+            int16_t old_level = negative_plane_right_warning_msg_.warning_level;
+            negative_plane_right_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::BRAKE);
+            updateWarningStatus(negative_plane_right_warning_msg_, old_level);
+        }else{
+            int16_t old_level = right_warning_msg_.warning_level;
+            right_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::BRAKE);
+            updateWarningStatus(right_warning_msg_, old_level);
+        }
+        is_emergency_brake_zone_speed_suppressed_ = true;
+        is_deceleration_zone_speed_suppressed_ = false;
+    }else {
+        if(is_lateral_obstacle_negative_plane_ && right_min_distance_nearest_z_ <= 0.01){
+            int16_t old_level = negative_plane_right_warning_msg_.warning_level;
+            negative_plane_right_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::DECELERATION);
+            updateWarningStatus(negative_plane_right_warning_msg_, old_level);
+        }else{
+            int16_t old_level = right_warning_msg_.warning_level;
+            right_warning_msg_.warning_level = static_cast<int16_t>(WarningLevel::DECELERATION);
+            updateWarningStatus(right_warning_msg_, old_level);
+        }
+        is_deceleration_zone_speed_suppressed_ = true;
+        is_emergency_brake_zone_speed_suppressed_ = false;
+    }
+}
+
+void DecisionMaker::updateWarningStatus(interface::msg::CollisionWarning& warning_msg, int16_t previous_level)
+{
+    // warning_msg.warning_level 已由调用方设置为新等级
+    int16_t new_level = warning_msg.warning_level;
+
+    // 如果之前有预警（减速或刹停），且等级发生变化，发布驶离预警
+    if (previous_level != new_level) {
+        if (previous_level == static_cast<int16_t>(WarningLevel::DECELERATION)) {
+            warning_msg.warning_level = static_cast<int16_t>(WarningLevel::LEAVE_DECELERATION_ZONE);
+            publishCollisionWarning(warning_msg);
+        } else if (previous_level == static_cast<int16_t>(WarningLevel::BRAKE)) {
+            warning_msg.warning_level = static_cast<int16_t>(WarningLevel::LEAVE_BRAKE_ZONE);
+            publishCollisionWarning(warning_msg);
+        }
+    }
+
+    // 发布当前预警等级
+    warning_msg.warning_level = new_level;
+    publishCollisionWarning(warning_msg);
 }

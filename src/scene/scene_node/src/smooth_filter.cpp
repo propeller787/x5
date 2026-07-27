@@ -9,16 +9,19 @@
  */
 
 #include "smooth_filter.h"
-#include <iostream>
+#include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <iostream>
 
-SmoothFilter::SmoothFilter() 
+SmoothFilter::SmoothFilter()
     : filter_type_(FilterType::EXPONENTIAL)
     , window_size_(5)
     , alpha_(0.3)
     , has_last_filtered_(false)
     , last_kalman_time_(std::chrono::steady_clock::now())
-    , has_last_kalman_time_(false) {
+    , has_last_kalman_time_(false)
+    , last_rate_limit_time_(std::chrono::steady_clock::now()) {
     std::cout << "初始化平滑滤波器" << std::endl;
     
     // 初始化上一状态
@@ -59,6 +62,11 @@ void SmoothFilter::setAlpha(double alpha) {
     std::lock_guard<std::mutex> lock(data_mutex_);
     alpha_ = std::max(0.0, std::min(1.0, alpha));
     std::cout << "设置指数平滑系数: " << alpha_ << std::endl;
+}
+
+void SmoothFilter::setCommandLimits(const SmoothCommandLimits& limits) {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    command_limits_ = limits;
 }
 
 geometry_msgs::msg::Twist SmoothFilter::filter(const geometry_msgs::msg::Twist& input) {
@@ -231,6 +239,7 @@ void SmoothFilter::reset() {
     angular_buffer_.clear();
     has_last_filtered_ = false;
     has_last_kalman_time_ = false;
+    has_rate_limit_time_ = false;
     speed_kf_.reset(0.0);
     
     // 重置上一状态
@@ -256,7 +265,6 @@ size_t SmoothFilter::getCurrentSize() const {
 
 geometry_msgs::msg::Twist SmoothFilter::rateLimitedFilter(const geometry_msgs::msg::Twist& input) {
     geometry_msgs::msg::Twist output = input;
-    
     // 限制前向速度（linear.x）的增量
     if (has_last_filtered_) {
         double last_linear_x = last_filtered_.linear.x;
@@ -265,8 +273,20 @@ geometry_msgs::msg::Twist SmoothFilter::rateLimitedFilter(const geometry_msgs::m
         
         // 如果速度增加，限制每次最多增加0.01
         if (current_linear_x > 0 && velocity_diff > 0.01) {
-            output.linear.x = last_linear_x + 0.01;
+            output.linear.x = last_linear_x + std::min(velocity_diff, command_limits_.max_linear_delta);
         }
+        
+        // double last_angular_z = last_filtered_.angular.z;
+        // double current_angular_z = input.angular.z;
+        // double angular_diff = current_angular_z - last_angular_z;
+        // if (current_angular_z > 0 && angular_diff > 0.01) {
+        //     output.angular.z = last_angular_z + std::min(angular_diff, command_limits_.max_angular_delta);
+        // }
+
+        // if(current_angular_z < 0 && angular_diff < -0.01) {
+        //     output.angular.z = last_angular_z - std::min(std::fabs(angular_diff), command_limits_.max_angular_delta);
+        // }
+
         // 如果速度减少，且当前或上一次速度为负（倒车），限制每次最多减少0.01
         if (last_linear_x <= 0 && current_linear_x < 0 && velocity_diff < -0.01) {
             output.linear.x = last_linear_x - 0.01;
@@ -296,10 +316,14 @@ geometry_msgs::msg::Twist SmoothFilter::kalmanDecelerationFilter(const geometry_
     last_kalman_time_ = now;
     has_last_kalman_time_ = true;
 
-    // 仅对前向/后向速度进行卡尔曼减速滤波
+    // 仅对前向/后向速度进行卡尔曼减速滤波；输出只保留 linear.x 与 angular.z
     output.linear.x = speed_kf_.filter(input.linear.x, dt);
+    output.linear.y = 0.0;
+    output.linear.z = 0.0;
+    output.angular.x = 0.0;
+    output.angular.y = 0.0;
+    output.angular.z = input.angular.z;
 
-    // 更新上一状态，供其它模式复用
     last_filtered_ = output;
     has_last_filtered_ = true;
     return output;

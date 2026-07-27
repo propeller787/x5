@@ -86,4 +86,6 @@ private:
         int min_cluster_size = 2;          // 最小聚类点数
         int max_cluster_size = 1000;       // 最大聚类点数
     } cluster_params_;
+
+    bool debug_publish_{false};
 };

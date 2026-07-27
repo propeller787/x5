@@ -72,7 +72,19 @@ public:
 
         if (!config_.private_key.empty()) {
             std::vector<unsigned char> sk;
+            bool parsed = false;
+            
+            // 首先尝试十六进制解析
             if (hex_to_bytes(config_.private_key, sk)) {
+                parsed = true;
+            } else {
+                // 十六进制解析失败，尝试 Base64 解析
+                if (b64_to_bytes(config_.private_key, sk)) {
+                    parsed = true;
+                }
+            }
+            
+            if (parsed) {
                 if (sk.size() == crypto_sign_SECRETKEYBYTES) {
                     secret_key_ = sk;
                     if (config_.public_key.empty()) {
@@ -89,7 +101,7 @@ public:
                     use_sodium_ = false;
                 }
             } else {
-                RCLCPP_WARN(logger_, "private key hex parse failed, fallback to mock");
+                RCLCPP_WARN(logger_, "private key parse failed, fallback to mock");
             }
         } else if (!config_.public_key.empty()) {
             if (hex_to_bytes(config_.public_key, public_key_)) {

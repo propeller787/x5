@@ -37,10 +37,8 @@ def generate_launch_description():
         {'lidar1_device_model': 'MS2001'},  # LiDAR 1 设备型号
         {'lidar1_frame_id': 'laser_frame_right'},  # LiDAR 1 帧 ID
         {'lidar1_scan_topic': 'scan/right'},  # LiDAR 1 扫描主题
-        {'lidar1_port_name': '/dev/ttyCH9344USB1'},  # LiDAR 1 端口名称
+        {'lidar1_port_name': '/dev/ttyS2'},  # LiDAR 1 端口名称
         {'lidar1_baudrate': 230400},  # LiDAR 1 波特率
-        # {'lidar1_angle_min': 0.0},  # LiDAR 1 最小角度
-        # {'lidar1_angle_max': 360.0},  # LiDAR 1 最大角度
         {'lidar1_angle_ranges': [0.0, 160.0]},
         {'lidar1_range_min': 0.05},  # LiDAR 1 最小距离
         {'lidar1_range_max': 10.0},  # LiDAR 1 最大距离

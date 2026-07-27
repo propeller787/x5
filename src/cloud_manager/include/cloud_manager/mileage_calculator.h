@@ -25,7 +25,7 @@ public:
         history_total_mileage_(0.0f),
         current_mileage_(0.0f),
         total_mileage_(0.0f) {
-        
+        log_enabled_ = false;
         load_history_total_from_config();
         // 初始化总里程为历史里程，避免在未更新轮数时写回 0 覆盖历史
         total_mileage_ = history_total_mileage_;

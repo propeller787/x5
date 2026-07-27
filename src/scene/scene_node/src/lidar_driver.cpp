@@ -23,7 +23,10 @@ LidarDriver::LidarDriver() : rclcpp::Node("lidar_driver") {
     // 声明并获取Z方向过滤阈值参数（默认0.3米）
     this->declare_parameter<double>("tilt_z_filter_threshold", 0.27);
     tilt_z_filter_threshold_ = this->get_parameter("tilt_z_filter_threshold").as_double();
-    RCLCPP_INFO(this->get_logger(), "倾斜雷达Z方向过滤阈值: %.3f 米", tilt_z_filter_threshold_);
+    this->declare_parameter<bool>("debug_publish", false);
+    debug_publish_ = this->get_parameter("debug_publish").as_bool();
+    RCLCPP_INFO(this->get_logger(), "倾斜雷达Z方向过滤阈值: %.3f 米, debug_publish=%s",
+                tilt_z_filter_threshold_, debug_publish_ ? "true" : "false");
     
     // 初始化TF2
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -470,7 +473,7 @@ PointCloud::Ptr LidarDriver::applyROIFilter(const PointCloud::Ptr& input_cloud, 
 
 
 void LidarDriver::publishBaseLinkPointCloud(const PointCloud::Ptr& transformed_cloud, const std::string& source_name) {
-    if (!transformed_cloud || transformed_cloud->points.empty()) {
+    if (!debug_publish_ || !transformed_cloud || transformed_cloud->points.empty()) {
         return;
     }
     
@@ -502,7 +505,7 @@ void LidarDriver::publishBaseLinkPointCloud(const PointCloud::Ptr& transformed_c
 void LidarDriver::initializeROIRegions() {
     // 前向区域: [2.0,-0.42],[2.2,0.42],[0.95,-0.42],[0.95,0.42]
     roi_regions_[ROIRegionType::FORWARD] = {
-        .min_x = 0.85, .max_x = 3.0,
+        .min_x = 0.85, .max_x = 5.0,
         .min_y = -0.42, .max_y = 0.42,
         .min_z = -1.0, .max_z = 1.0
     };

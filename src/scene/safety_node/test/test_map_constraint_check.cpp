@@ -289,3 +289,174 @@ TEST(MapConstraintCheckTest, EscapeCannotEnterNewLethalCell)
       0.35,
       out));
 }
+
+// ── L2 单调退离逃逸放宽（tilt_on_7）──
+
+// 回归护栏：逃逸窗过紧（前障要到 t≥0.1 才退出），默认（开关关）行为判否，与现状一致。
+TEST(MapConstraintCheckTest, RetreatEscapeDisabledRejectsSlowClearOutsideWindow)
+{
+  MapConstraintConfig cfg;    // retreat_escape_enabled 默认 false
+  MapConstraintCheck checker(productionFootprint(), cfg);
+  RollingLocalMapGrid map = makeMap();
+  setLethal(map, 0.975, -0.15);
+
+  MapConstraintResult out;
+  EXPECT_FALSE(
+    checker.trajectoryEscapesInitialLethal(
+      map,
+      straightPoses({{0.0, 0.0}, {-0.02, 0.1}, {-0.04, 0.2}, {-0.06, 0.3}}),
+      0.65,
+      true,
+      0.05,    // 窗 < 首个倒退位姿 t=0.1 → 慢清空落窗外
+      out));
+}
+
+// 同场景 + 开关开启：单调退离（含慢清空）被接受 —— tilt_on_7 修复本体。
+TEST(MapConstraintCheckTest, RetreatEscapeEnabledAcceptsSlowMonotonicRetreat)
+{
+  MapConstraintConfig cfg;
+  cfg.retreat_escape_enabled = true;
+  MapConstraintCheck checker(productionFootprint(), cfg);
+  RollingLocalMapGrid map = makeMap();
+  setLethal(map, 0.975, -0.15);
+
+  MapConstraintResult out;
+  EXPECT_TRUE(
+    checker.trajectoryEscapesInitialLethal(
+      map,
+      straightPoses({{0.0, 0.0}, {-0.02, 0.1}, {-0.04, 0.2}, {-0.06, 0.3}}),
+      0.65,
+      true,
+      0.05,
+      out));
+}
+
+// 安全护栏①：开关开启也绝不放行「进入新 lethal」（后向新障）。
+TEST(MapConstraintCheckTest, RetreatEscapeStillRejectsEnteringNewLethal)
+{
+  MapConstraintConfig cfg;
+  cfg.retreat_escape_enabled = true;
+  MapConstraintCheck checker(productionFootprint(), cfg);
+  RollingLocalMapGrid map = makeMap();
+  setLethal(map, 0.975, -0.15);
+  setLethal(map, -0.375, 0.0);
+
+  MapConstraintResult out;
+  EXPECT_FALSE(
+    checker.trajectoryEscapesInitialLethal(
+      map,
+      straightPoses({{0.0, 0.0}, {-0.02, 0.1}, {-0.04, 0.2}, {-0.06, 0.3}}),
+      0.65,
+      true,
+      0.35,
+      out));
+}
+
+// 安全护栏②：开关开启但车不动（无退离进展）仍判否 —— 只放行真正在退离的运动。
+TEST(MapConstraintCheckTest, RetreatEscapeRejectsNoProgress)
+{
+  MapConstraintConfig cfg;
+  cfg.retreat_escape_enabled = true;
+  MapConstraintCheck checker(productionFootprint(), cfg);
+  RollingLocalMapGrid map = makeMap();
+  setLethal(map, 0.975, -0.15);
+
+  MapConstraintResult out;
+  EXPECT_FALSE(
+    checker.trajectoryEscapesInitialLethal(
+      map,
+      straightPoses({{0.0, 0.0}, {0.0, 0.1}, {0.0, 0.2}, {0.0, 0.3}}),
+      0.65,
+      true,
+      0.35,
+      out));
+}
+
+// ── 原地转向豁免的 LocalMap 判据 trajectoryNoNewLethal（tilt_on_10）──
+
+// 生成纯原地旋转位姿序列（x=y=0，theta 递增），供转向豁免复验。
+static std::vector<PredictedPose> rotationPoses(std::initializer_list<double> thetas)
+{
+  std::vector<PredictedPose> poses;
+  double t = 0.0;
+  for (const double th : thetas) {
+    PredictedPose pose;
+    pose.theta = th;
+    pose.t = t;
+    t += 0.1;
+    poses.push_back(pose);
+  }
+  return poses;
+}
+
+// 核心差异：与 RetreatEscapeRejectsNoProgress 同场景（起始 lethal、车不动/维持覆盖），
+// trajectoryEscapesInitialLethal 因「无退离进展」判否，而 trajectoryNoNewLethal 判是——
+// 这正是「接触/被 veto 态也允许只转向脱离」的判据基础（不要求净空改善，只要求不恶化）。
+TEST(MapConstraintCheckTest, NoNewLethalAcceptsMaintainingInitialCoverage)
+{
+  MapConstraintCheck checker(productionFootprint(), MapConstraintConfig{});
+  RollingLocalMapGrid map = makeMap();
+  setLethal(map, 0.975, -0.15);
+
+  MapConstraintResult out;
+  EXPECT_TRUE(
+    checker.trajectoryNoNewLethal(
+      map,
+      straightPoses({{0.0, 0.0}, {0.0, 0.1}, {0.0, 0.2}, {0.0, 0.3}}),
+      0.65,
+      true,
+      out));
+}
+
+// 安全护栏：转向/运动踏入「起始姿势未占用」的新 lethal 栅格必被否决。
+// 复用 EscapeCannotEnterNewLethalCell 场景：起始仅前障 lethal，倒退把后障（新 lethal）纳入覆盖。
+TEST(MapConstraintCheckTest, NoNewLethalRejectsEnteringNewCell)
+{
+  MapConstraintCheck checker(productionFootprint(), MapConstraintConfig{});
+  RollingLocalMapGrid map = makeMap();
+  setLethal(map, 0.975, -0.15);
+  setLethal(map, -0.375, 0.0);
+
+  MapConstraintResult out;
+  EXPECT_FALSE(
+    checker.trajectoryNoNewLethal(
+      map,
+      straightPoses({{0.0, 0.0}, {-0.02, 0.1}, {-0.04, 0.2}, {-0.06, 0.3}}),
+      0.65,
+      true,
+      out));
+  EXPECT_TRUE(out.lethal);
+}
+
+// 起始不 lethal（空豁免集）时退化为「全程不得触任何 lethal」：纯净地图任意转向均安全。
+TEST(MapConstraintCheckTest, NoNewLethalCleanMapRotationIsSafe)
+{
+  MapConstraintCheck checker(productionFootprint(), MapConstraintConfig{});
+  RollingLocalMapGrid map = makeMap();
+
+  MapConstraintResult out;
+  EXPECT_TRUE(
+    checker.trajectoryNoNewLethal(
+      map,
+      rotationPoses({0.0, 0.15, 0.30}),
+      0.65,
+      true,
+      out));
+}
+
+// 单个 lethal 栅格落在旋转轴附近、被 footprint 全程覆盖：原地旋转不引入新 lethal → 放行。
+TEST(MapConstraintCheckTest, NoNewLethalRotationKeepingSingleInteriorCellIsSafe)
+{
+  MapConstraintCheck checker(productionFootprint(), MapConstraintConfig{});
+  RollingLocalMapGrid map = makeMap();
+  setLethal(map, 0.0, 0.0);    // 车体内部、近旋转轴，旋转全程覆盖同一格
+
+  MapConstraintResult out;
+  EXPECT_TRUE(
+    checker.trajectoryNoNewLethal(
+      map,
+      rotationPoses({0.0, 0.15, 0.30}),
+      0.65,
+      true,
+      out));
+}

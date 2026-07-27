@@ -122,15 +122,32 @@ bool MapConstraintCheck::trajectoryLethal(
   const std::vector<PredictedPose> & poses,
   double lethal_threshold,
   bool check_corners,
-  MapConstraintResult & out) const
+  MapConstraintResult & out,
+  const std::vector<MapExemptCircle> * exemptions) const
 {
   out = MapConstraintResult{};
   const FootprintPolygon local_polygon = footprint_.inflatedPolygon();
+  const auto exempted = [exemptions](double x, double y) {
+      if (exemptions == nullptr) {
+        return false;
+      }
+      for (const auto & circle : *exemptions) {
+        const double dx = x - circle.x;
+        const double dy = y - circle.y;
+        if (dx * dx + dy * dy <= circle.radius * circle.radius) {
+          return true;
+        }
+      }
+      return false;
+    };
 
   for (const auto & pose : poses) {
     for (const auto & pt :
       footprintSamples(local_polygon, pose, map.resolution_m, check_corners))
     {
+      if (exempted(pt.first, pt.second)) {
+        continue;
+      }
       const float cost = gridCostAt(map, pt.first, pt.second);
       out.p_max_on_path = std::max(out.p_max_on_path, static_cast<double>(cost));
       if (cost >= static_cast<float>(lethal_threshold)) {
@@ -147,6 +164,70 @@ bool MapConstraintCheck::trajectoryLethal(
     }
   }
   return false;
+}
+
+bool MapConstraintCheck::trajectoryNoNewLethal(
+  const RollingLocalMapGrid & map,
+  const std::vector<PredictedPose> & poses,
+  double lethal_threshold,
+  bool check_corners,
+  MapConstraintResult & out) const
+{
+  out = MapConstraintResult{};
+  if (poses.empty()) {
+    return true;    // 无运动 → 安全
+  }
+
+  const FootprintPolygon local_polygon = footprint_.inflatedPolygon();
+  auto lethalCellsAtPose =
+    [&](const PredictedPose & pose,
+      std::unordered_set<size_t> & cells,
+      double & max_cost) -> bool
+    {
+      cells.clear();
+      max_cost = 0.0;
+      for (const auto & pt :
+        footprintSamples(local_polygon, pose, map.resolution_m, check_corners))
+      {
+        int col = -1;
+        int row = -1;
+        size_t idx = 0;
+        float cost = 0.0f;
+        if (!gridCellAt(map, pt.first, pt.second, col, row, idx, cost)) {
+          return false;    // 越出地图 → 保守视为不安全
+        }
+        max_cost = std::max(max_cost, static_cast<double>(cost));
+        if (cost >= static_cast<float>(lethal_threshold)) {
+          cells.insert(idx);
+        }
+      }
+      return true;
+    };
+
+  // 起始姿势的 lethal 集即豁免集（起始不 lethal 时为空 → 全程不得触任何 lethal）。
+  std::unordered_set<size_t> initial_cells;
+  double initial_max_cost = 0.0;
+  if (!lethalCellsAtPose(poses.front(), initial_cells, initial_max_cost)) {
+    return false;
+  }
+  out.p_max_on_path = initial_max_cost;
+
+  for (size_t i = 1; i < poses.size(); ++i) {
+    std::unordered_set<size_t> current_cells;
+    double max_cost = 0.0;
+    if (!lethalCellsAtPose(poses[i], current_cells, max_cost)) {
+      return false;
+    }
+    out.p_max_on_path = std::max(out.p_max_on_path, max_cost);
+    for (const size_t idx : current_cells) {
+      if (initial_cells.count(idx) == 0U) {
+        out.lethal = true;    // 踏入起始未占用的新 lethal → 恶化
+        out.first_lethal_t = poses[i].t;
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 bool MapConstraintCheck::trajectoryEscapesInitialLethal(
@@ -204,6 +285,11 @@ bool MapConstraintCheck::trajectoryEscapesInitialLethal(
   out.first_lethal_t = poses.front().t;
   out.p_max_on_path = initial_max_cost;
   bool cleared = false;
+  // L2 单调退离（默认关）：跟踪 footprint 对初始 lethal 集的覆盖格数是否逐位姿非增，
+  // 及末位姿的残余覆盖数。全程不进新 lethal 由下方的子集检查保证。
+  bool retreat_monotonic = true;
+  size_t prev_count = initial_cells.size();
+  size_t last_count = initial_cells.size();
   for (size_t i = 1; i < poses.size(); ++i) {
     std::unordered_set<size_t> current_cells;
     double max_cost = 0.0;
@@ -214,20 +300,40 @@ bool MapConstraintCheck::trajectoryEscapesInitialLethal(
 
     for (const size_t idx : current_cells) {
       if (initial_cells.count(idx) == 0U) {
-        return false;
+        return false;    // 进入新 lethal：任何模式下都否
       }
     }
+    const size_t cur_count = current_cells.size();
+    if (cur_count > prev_count) {
+      retreat_monotonic = false;
+    }
+    prev_count = cur_count;
+    last_count = cur_count;
+
     if (cleared && !current_cells.empty()) {
       return false;
     }
     if (current_cells.empty() && !cleared) {
-      if (poses[i].t > max_escape_time_s + 1e-9) {
+      if (poses[i].t <= max_escape_time_s + 1e-9) {
+        cleared = true;    // 窗内清空：原行为
+      } else if (config_.retreat_escape_enabled && retreat_monotonic) {
+        cleared = true;    // 慢清空但单调退离：放宽接受
+      } else {
         return false;
       }
-      cleared = true;
     }
   }
-  return cleared;
+  if (cleared) {
+    return true;
+  }
+  // 未完全清空，但单调退离且有足够进展 → 接受（仅在开关开启时）。
+  if (config_.retreat_escape_enabled && retreat_monotonic &&
+    static_cast<double>(initial_cells.size()) - static_cast<double>(last_count) >=
+    std::max(1.0, config_.retreat_min_progress_cells))
+  {
+    return true;
+  }
+  return false;
 }
 
 MapConstraintResult MapConstraintCheck::queryTrajectory(

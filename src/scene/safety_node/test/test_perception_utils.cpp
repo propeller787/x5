@@ -29,11 +29,13 @@ TEST(PerceptionUtilsTest, InvalidRangesAreRejected)
 
 TEST(PerceptionUtilsTest, RoiBoundariesAreInclusive)
 {
-  EXPECT_TRUE(PerceptionUtils::inRoi(-2.5, -1.2));
-  EXPECT_TRUE(PerceptionUtils::inRoi(5.0, 1.2));
-  EXPECT_FALSE(PerceptionUtils::inRoi(-2.5001, 0.0));
-  EXPECT_FALSE(PerceptionUtils::inRoi(5.0001, 0.0));
-  EXPECT_FALSE(PerceptionUtils::inRoi(0.0, 1.2001));
+  // 默认 ROI: [-2.5, 6.5] × [-1.8, 1.8]
+  const double x_min = -2.5, x_max = 6.5, y_min = -1.8, y_max = 1.8;
+  EXPECT_TRUE(PerceptionUtils::inRoi(-2.5, -1.8, x_min, x_max, y_min, y_max));
+  EXPECT_TRUE(PerceptionUtils::inRoi(6.5, 1.8, x_min, x_max, y_min, y_max));
+  EXPECT_FALSE(PerceptionUtils::inRoi(-2.5001, 0.0, x_min, x_max, y_min, y_max));
+  EXPECT_FALSE(PerceptionUtils::inRoi(6.5001, 0.0, x_min, x_max, y_min, y_max));
+  EXPECT_FALSE(PerceptionUtils::inRoi(0.0, 1.8001, x_min, x_max, y_min, y_max));
 }
 
 TEST(PerceptionUtilsTest, TiltHeightBoundaryIsInclusive)

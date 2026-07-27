@@ -5,15 +5,16 @@
 #pragma once
 
 struct RobotDimensions {
+    /** 默认构造值；决策节点运行时由 decision_maker 的 ROS 参数（robot_*）覆盖并同步 */
     struct BaseDimensions {
-        double length = 0.90; // 前后方向尺寸，对应URDF base_link 碰撞几何体长度
-        double width = 0.54;  // 左右方向尺寸，对应URDF base_link 碰撞几何体宽度
+        double length = 0.85; // 前后方向尺寸，对应URDF base_link 碰撞几何体长度
+        double width = 0.70;  // 左右方向尺寸，对应URDF base_link 碰撞几何体宽度
         double height = 0.8;  // 上下方向尺寸
 
         // 安全边距（可根据实车调参）
         double safety_margin_front = 0.10;
         double safety_margin_back = 0.20;
-        double safety_margin_side = 0.08;
+        double safety_margin_side = 0.03;
     };
 
     struct CollisionZones {

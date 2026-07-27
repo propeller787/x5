@@ -29,6 +29,10 @@ VehicleIo::VehicleIo(
   wheel_sub_ = node_->create_subscription<geometry_msgs::msg::TwistStamped>(
     carWheelSpeedStaTopic, 10,
     std::bind(&VehicleIo::onWheel, this, std::placeholders::_1), sub_options);
+
+  car_info_sub_ = node_->create_subscription<interface::msg::CarInfo>(
+    carInfoTopic, 10,
+    std::bind(&VehicleIo::onCarInfo, this, std::placeholders::_1), sub_options);
 }
 
 bool VehicleIo::isFresh(
@@ -54,7 +58,8 @@ ControlCommand VehicleIo::desiredControl(
   const rclcpp::Time & now,
   double timeout_s,
   double joystick_timeout_s,
-  int joystick_deadzone) const
+  int joystick_deadzone,
+  int joystick_reverse_threshold) const
 {
   std::lock_guard<std::mutex> lock(mutex_);
   ControlCommand out = control_;
@@ -66,10 +71,15 @@ ControlCommand VehicleIo::desiredControl(
   const bool joystick_fresh = isFresh(
     joystick_received_, joystick_timestamp_, now, joystick_timeout_s);
   const int deadzone = std::max(0, joystick_deadzone);
+  const int reverse_threshold = std::max(0, joystick_reverse_threshold);
   out.driver_neutral =
     joystick_fresh &&
     std::abs(static_cast<int>(joystick_.rocker_x)) <= deadzone &&
     std::abs(static_cast<int>(joystick_.rocker_y)) <= deadzone;
+  out.driver_reverse_request =
+    joystick_fresh &&
+    !out.driver_neutral &&
+    static_cast<int>(joystick_.rocker_x) <= -reverse_threshold;
   if (out.driver_neutral) {
     out.twist = geometry_msgs::msg::Twist{};
   }
@@ -85,6 +95,32 @@ WheelFeedback VehicleIo::wheelFeedback(const rclcpp::Time & now, double timeout_
     out.linear_velocity = 0.0;
     out.angular_velocity = 0.0;
   }
+  return out;
+}
+
+JoystickSnapshot VehicleIo::latestJoystick(
+  const rclcpp::Time & now,
+  double timeout_s) const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  JoystickSnapshot out;
+  out.msg = joystick_;
+  out.timestamp = joystick_timestamp_;
+  out.received = joystick_received_;
+  out.fresh = isFresh(joystick_received_, joystick_timestamp_, now, timeout_s);
+  return out;
+}
+
+CarInfoState VehicleIo::carInfo(const rclcpp::Time & now, double timeout_s) const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  CarInfoState out;
+  out.received = car_info_received_;
+  out.fresh = isFresh(car_info_received_, car_info_timestamp_, now, timeout_s);
+  out.gear = static_cast<int>(car_info_.gear);
+  out.mode_type = static_cast<int>(car_info_.mode_type);
+  out.brake_engaged =
+    car_info_.left_brakests == 1 || car_info_.right_brakests == 1;
   return out;
 }
 
@@ -128,4 +164,15 @@ void VehicleIo::onWheel(const geometry_msgs::msg::TwistStamped::SharedPtr msg)
   wheels_.angular_velocity = msg->twist.angular.z;
   wheels_.timestamp = timestamp;
   wheels_.received = true;
+}
+
+void VehicleIo::onCarInfo(const interface::msg::CarInfo::SharedPtr msg)
+{
+  if (!msg) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  car_info_ = *msg;
+  car_info_timestamp_ = node_->now();
+  car_info_received_ = true;
 }

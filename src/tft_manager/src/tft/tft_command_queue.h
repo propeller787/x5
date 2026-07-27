@@ -1,11 +1,13 @@
 #pragma once
 
 #include <condition_variable>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
 #include <vector>
+#include <string>
 
 namespace tft_service {
 
@@ -18,6 +20,7 @@ struct TftCommand {
         ADDRESS_DATA, // 发送地址数据
         TEXT_DATA,    // 发送文本数据
         ELECTRIC_INDEX, // 发送电量索引
+        READ_REGISTER, // 读取寄存器
         RAW_DATA      // 原始数据
     };
 
@@ -28,6 +31,8 @@ struct TftCommand {
     int16_t param3 = 0;        // 参数3（y坐标等）
     std::string text;           // 文本数据
 
+    // 默认构造用于队列线程占位
+    TftCommand() : type(Type::RAW_DATA) {}
     TftCommand(Type t) : type(t) {}
 };
 

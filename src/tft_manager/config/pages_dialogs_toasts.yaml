@@ -1,0 +1,428 @@
+# 页面、弹窗、Toast 配置（数量与绑定关系可扩展）
+# 新增页面/弹窗/toast 只需在此配置，无需改代码
+
+pages:
+  - id: 2  #app下载页面
+    name: app_download
+    touch_events:
+      - register: 0x101B #已下载，下一步按钮
+        next_page: 3 #已下载，下一步  -> app绑定页面
+      - register: 0x1017 #暂不下载
+        next_page: 0 #暂不下载 -> 首页
+  - id: 3 #app绑定页面
+    name: vehicle_binding
+    touch_events:
+      - register: 0x1018 #暂不绑定
+        next_page: 0 #暂不绑定 -> 首页
+      - register: 0x101C #返回上一页按键
+        next_page: 2 #返回上一页按键 -> app下载页面
+  - id: 4 #绑定成功页面
+    name: binding_success
+  - id: 7 #设置页面
+    name: setting
+    touch_events:
+      - register: 0x1022 #隐私声明按钮
+        next_page: 5 #隐私声明按钮 -> 隐私声明页面
+      - register: 0x1023 #二维码绑定按钮
+        next_page: 8 #二维码绑定按钮 -> 设置界面中绑定二维码页面
+      - register: 0x1020 #设置界面中返回上一页按键
+        next_page: 0 #返回上一页按键 -> 首页
+  - id: 5 #隐私声明页面
+    name: privacy_declaration
+    touch_events:
+      - register: 0x1021 #返回上一页按键
+        next_page: 7 #返回上一页按键 -> 设置页面
+  - id: 0 #首页
+    name: main
+    touch_events:
+      - register: 0x101A #设置图标
+        next_page: 7 #设置图标 -> 设置页面
+  - id: 6 #倒车页面
+    name: backward
+  - id: 9 #线充
+    name: line_charge
+  - id: 10 #基站充
+    name: base_station_charge
+  - id: 8 #设置界面中绑定二维码页面
+    name: setting_binding_qr_code
+    touch_events:
+      - register: 0x1024 #返回上一页按键
+        next_page: 7 #返回上一页按键 -> 设置界面
+  - id: 11 #已是最新版本
+    name: latest_version
+    touch_events:
+      - register: 0x1025 #返回上一页按键
+        next_page: 7 #返回上一页按键 -> 设置页面
+  - id: 12 #检查更新页面
+    name: check_update
+    touch_events:
+      - register: 0x1026 #返回上一页按键
+        next_page: 7 #返回上一页按键 -> 设置页面
+  - id: 13 #更新失败界面
+    name: update_failure
+    touch_events:
+      - register: 0x1027 #返回上一页按键
+        next_page: 7 #返回上一页按键 -> 设置页面
+  - id: 14 #下载界面
+    name: ota_download
+    touch_events:
+      - register: 0x1028 #返回上一页按键
+        next_page: 7 #返回上一页按键 -> 设置页面
+  - id: 15 #下载进度界面
+    name: ota_download_progress
+    touch_events:
+      - register: 0x101E #返回上一页按键
+        next_page: 7 #返回上一页按键 -> 设置页面
+  - id: 16 #安装界面
+    name: ota_install
+    touch_events:
+      - register: 0x101F #返回上一页按键
+        next_page: 7 #返回上一页按键 -> 设置页面
+  - id: 18 #安装完成界面
+    name: ota_install_success
+    touch_events:
+      - register: 0x1029 #返回上一页按键
+        next_page: 0 #返回上一页按键 -> 首页
+  - id: 31 #安装失败界面
+    name: ota_install_failure
+    touch_events:
+      - register: 0x1087 #升级失败-知晓键
+        next_page: 12 #返回上一页按键 -> 检查更新界面
+
+# 弹窗：需点击触屏才消失，支持不同触屏动作
+# title_addr/body_addr: 标题与正文各一个 TFT 地址；body_texts: 不同场景触发不同正文（showDialog(id, body_index) 指定）
+dialogs:
+  - id: obstacle_avoidance_block  # 智能避障-开启条件不满足
+    tft_popup_id: 3  #弹窗编号
+    pages: [0]
+    title_addr: 0x1580
+    title: "开启条件不满足"
+    title_en: "Activation Condition Not Met"
+    body_addr: 0x1600
+    body_texts:  # body_index 0: 摇杆模式；1: 手动抱闸
+      - "请先闭合手动抱闸开关"
+      - "请先切换至驾驶模式"
+    body_texts_en:
+      - "Please close the manual brake switch first"
+      - "Please switch to driving mode first"
+    touch_actions:
+      - register: 0x1082
+        action: close
+      - register: 0x1083
+        action: retry #重新激活
+  - id: obstacle_avoidance_failure  # 智能避障-功能故障
+    tft_popup_id: 0
+    pages: [0]
+    title_addr: 0x2000
+    title: "系统故障"
+    title_en: "System Malfunction"
+    body_addr: 0x2001
+    body_texts:
+      - "功能故障，车辆暂不可用。"
+    body_texts_en:
+      - "Vehicle temporarily unavailable.Please contact official support."
+    touch_actions:
+      - register: 0x6100
+        action: close
+  - id: reverse_image_block  #倒车影像-不满足开启条件
+    tft_popup_id: 0
+    pages: [0]
+    title_addr: 0x2000
+    title: "倒车影像-不满足开启条件"
+    title_en: "Reverse Camera - Condition Not Met"
+    body_addr: 0x2001
+    body_texts:  # body_index 0: 摇杆模式；1: 手动抱闸；2: 拔出电源；3: 解除驻车；4: 驶离基站
+      - "请先拔出电源"
+      - "请先解除驻车"
+      - "请先将车辆驶离基站"
+      - "请先切换至倒车模式"
+      - "请先闭合手动抱闸开关"
+    body_texts_en:
+      - "Please unplug the power first"
+      - "Please release parking first"
+      - "Please drive the vehicle away from the base station first"
+      - "Please switch to reverse mode first"
+      - "Please close the manual brake switch first"
+    touch_actions:
+      - register: 0x6100
+        action: close
+  - id: reverse_image_failure  #倒车影像-功能故障
+    tft_popup_id: 0
+    pages: [0]
+    title_addr: 0x2000
+    title: "功能故障"
+    title_en: "Function Failure"
+    body_addr: 0x2001
+    body_texts:
+      - "倒车影像故障，请联系官方售后 400-2000-1000 进行问题确认"
+    body_texts_en:
+      - "Reverse image failure, please contact official support."
+    touch_actions:
+      - register: 0x6100
+        action: close
+  - id: cruise_block  # 定速巡航-开启条件不满足
+    tft_popup_id: 6
+    pages: [0]
+    title_addr: 0x1580
+    title: "开启条件不满足"
+    title_en: "Activation Condition Not Met"
+    body_addr: 0x1600
+    body_texts:
+      - "请先拔出电源"
+      - "请先解除驻车"
+      - "请向前行拨动摇杆"
+      - "请先切换至驾驶模式"
+      - "请先闭合手动抱闸开关"
+    body_texts_en:
+      - "Please unplug the power first"
+      - "Please release parking brake first"
+      - "Please push the joystick forward"
+      - "Please switch to driving mode first"
+      - "Please close the manual brake switch first"
+    touch_actions:
+      - register: 0x1082
+        action: close #关闭弹窗
+      - register: 0x1084
+        action: retry #重新激活
+  - id: cruise_failure  # 定速巡航-功能故障
+    tft_popup_id: 0
+    pages: [0]
+    title_addr: 0x2000
+    title: "功能故障"
+    title_en: "Function Failure"
+    body_addr: 0x2001
+    body_texts:
+      - "智能巡航故障，请联系官方售后 400-2000-1000 进行问题确认"
+    body_texts_en:
+      - "Smart Cruise failure, please contact official support"
+    touch_actions:
+      - register: 0x6100
+        action: close
+  - id: cruise_exit #定速巡航已退出
+    tft_popup_id: 2
+    pages: [0]
+    title_addr: 0x1580
+    title: "智能巡航已退出"
+    title_en: "Cruise Control Exited"
+    body_addr: 0x1600
+    body_texts:
+      - "请及时向前拨动摇杆"
+      - "请保持道路通畅"
+    body_texts_en:
+      - "Please push the joystick forward in time"
+      - "Please ensure the road is clear"
+    touch_actions:
+      - register: 0x1081
+        action: close
+  - id: recharge_block #自主回充-开启条件不满足
+    tft_popup_id: 7
+    pages: [0]
+    title_addr: 0x1580
+    title: "开启条件不满足"
+    title_en: "Activation Condition Not Met"
+    body_addr: 0x1600
+    body_texts:
+      - "请先拔出电源"
+      - "车辆充电中"
+      - "请先解除驻车"
+      - "请先切换至驾驶模式"
+      - "请先闭合手动抱闸开关"
+      - "请先检查基站状态，同时保证车辆在基站附近"
+      - "请先移动车辆至基站附近"
+    body_texts_en:
+      - "Please unplug the power first"
+      - "Vehicle is currently charging"
+      - "Please release the parking brake first"
+      - "Please switch to driving mode first"
+      - "Please close the manual brake switch first"
+      - "Please check base station and ensure the vehicle is nearby"
+      - "Please move the vehicle near the base station first"
+    touch_actions:
+      - register: 0x1082
+        action: close #关闭弹窗
+      - register: 0x1085
+        action: retry #重新激活
+  - id: recharge_failure #自主回充-功能故障
+    tft_popup_id: 0
+    pages: [0]
+    title_addr: 0x2000
+    title: "功能故障"
+    title_en: "Function Failure"
+    body_addr: 0x2001
+    body_texts:
+      - "自主回充故障，请联系官方售后 400-2000-1000 进行问题确认"
+    body_texts_en:
+      - "Auto-recharge failure, please contact official support"
+    touch_actions:
+      - register: 0x6100
+        action: close
+  - id: recharge_exit #自主回充已退出
+    tft_popup_id: 2
+    pages: [0,19,17,10]
+    title_addr: 0x1580
+    title: "自主回充已退出"
+    title_en: "Auto-recharge Exited"
+    body_addr: 0x1600
+    body_texts:
+      - "请检查基站状态"
+      - "请移除障碍物"
+    body_texts_en:
+      - "Please check base station status"
+      - "Please remove obstacles"
+    touch_actions:
+      - register: 0x1081
+        action: close
+  - id: recharge_pause #自主回充已暂停
+    tft_popup_id: 0
+    pages: [0,19,17,10]
+    title_addr: 0x2000
+    title: "自主回充已暂停"
+    title_en: "Auto-recharge Paused"
+    body_addr: 0x2001
+    body_texts:
+      - "请及时移除障碍物，30s后将自动退出"
+    body_texts_en:
+      - "Please remove the obstacle. Exiting automatically in 30 s"
+    touch_actions:
+      - register: 0x6100
+        action: close
+      - register: 0x6101
+        action: retry #重新激活
+  - id: system_failure #系统故障
+    tft_popup_id: 0
+    pages: [6]
+    title_addr: 0x2000
+    title: "系统故障"
+    title_en: "System Failure"
+    body_addr: 0x2001
+    body_texts:
+      - "系统故障，车辆暂不可用。请联系官方售后进行问题确认"
+    body_texts_en:
+      - "System failure, vehicle is temporarily unavailable. Please contact official after-sales service"
+    touch_actions:
+      - register: 0x6100
+        action: close
+  - id: electric_brake_failure #电子抱闸-功能故障
+    tft_popup_id: 0
+    pages: [6]
+    title_addr: 0x2000
+    title: "功能故障"
+    title_en: "Function Failure"
+    body_addr: 0x2001
+    body_texts:
+      - "抱闸故障，请联系官方售后 400-2000-1000 进行问题确认"
+    body_texts_en:
+      - "Brake failure, please contact official support"
+    touch_actions:
+      - register: 0x6100
+        action: close
+  - id: charge_failure #充电失败
+    tft_popup_id: 0
+    pages: [6]
+    title_addr: 0x2000
+    title: "充电失败"
+    title_en: "Charging Failed"
+    body_addr: 0x2001
+    body_texts:
+      - "请先闭合手动抱闸开关"
+    body_texts_en:
+      - "Please close the manual brake switch first"
+    touch_actions:
+      - register: 0x6100
+        action: close
+  - id: parked_failure #驻车失败-条件不满足
+    tft_popup_id: 2
+    pages: [0]
+    title_addr: 0x1580
+    title: "开启条件不满足"
+    title_en: "Activation Condition Not Met"
+    body_addr: 0x1600
+    body_texts:
+      - "请先闭合手动抱闸开关"
+      - "请先切换至驾驶模式"
+      - "请先拔出电源"
+    body_texts_en:
+      - "Please close the manual brake switch first"
+      - "Please switch to driving mode first"
+      - "Please unplug the power first"
+    touch_actions:
+      - register: 0x1081
+        action: close
+  - id: remote_control_failure #当前摇杆不可用
+    tft_popup_id: 2
+    pages: [0]
+    title_addr: 0x1580
+    title: "当前摇杆不可用"
+    title_en: "Joystick Unavailable"
+    body_addr: 0x1600
+    body_texts:
+      - "请先闭合手动抱闸开关"
+      - "请先切换至驾驶模式"
+      - "请先拔出电源"
+      - "请先解除驻车"
+      - "请先将车辆驶离基站"
+    body_texts_en:
+      - "Please close the manual brake switch first"
+      - "Please switch to driving mode first"
+      - "Please unplug the power first"
+      - "Please release the parking brake first"
+      - "Please drive the vehicle away from the base station first"
+    touch_actions:
+      - register: 0x1081
+        action: close #关闭弹窗
+  - id: ota_upgrade_failure # ota升级失败
+    tft_popup_id: 11
+    pages: [0,15,16]
+    title_addr: 0x1580
+    title: "设备升级失败"
+    title_en: "Device Update Failed"
+    body_addr: 0x1600
+    body_texts:
+      - "文件校验不通过，请重新下载"
+      - "请保证设备电量高于80%且处于静止状态"
+    body_texts_en:
+      - "File verification failed, please re-download"
+      - "Require >80% battery and stationary for installation"
+    touch_actions:
+      - register: 0x1087
+        action: close
+  - id: ota_download_failure #ota下载失败
+    tft_popup_id: 10
+    pages: [0,14,15]
+    title_addr: 0x1580
+    title: "设备升级失败"
+    title_en: "Device Update Failed"
+    body_addr: 0x1600
+    body_texts:
+      - "网络异常，请稍后重试"
+    body_texts_en:
+      - "Network exception, please try again later"
+    touch_actions:
+      - register: 0x1086
+        action: close
+
+# Toast：定时自动消失
+toasts:
+  - id: parked #已驻车
+    tft_popup_id: 1
+    pages: [6]
+    duration_ms: 2000
+  - id: released_parking #驻车已解除
+    tft_popup_id: 2
+    pages: [1, 2, 6]
+    duration_ms: 2000
+  - id: helpcar_mode #当前为推行模式
+    tft_popup_id: 4
+    pages: [6]
+    duration_ms: 2000
+
+# 组件：不同页面中固定组件地址，用于更新数字或字符串
+components:
+  - id: speed_value
+    address: 0x1100
+    type: number
+    pages: [6]
+  - id: battery_value  #电量
+    address: 0x1001
+    type: number
+    pages: [6]

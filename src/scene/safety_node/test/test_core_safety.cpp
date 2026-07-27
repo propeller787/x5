@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "safety_node/core/emergency_brake.h"
+#include "safety_node/core/sudden_obstacle_detector.h"
 #include "safety_node/core/motion_rollout.h"
 #include "safety_node/core/swept_footprint_checker.h"
 #include "safety_node/core/vehicle_footprint.h"
@@ -86,6 +87,130 @@ TEST(VehicleFootprintTest, DualTrapezoidPhysicalVerticesMatchConfiguredGeometry)
   EXPECT_FALSE(VehicleFootprint::circleIntersectsPolygon(0.94, 0.18, 0.0, physical));
   EXPECT_TRUE(VehicleFootprint::circleContainedInPolygon(0.94, 0.16, 0.0, physical));
   EXPECT_TRUE(VehicleFootprint::circleContainedInPolygon(-0.23, 0.34, 0.0, physical));
+}
+
+TEST(VehicleFootprintTest, HalfWidthTapersAlongFrontSlant)
+{
+  AvoidanceParams params;
+  params.footprint_use_dual_trapezoid = true;
+  params.robot_rear_offset = 0.23;
+  params.footprint_rear_segment.length_m = 0.92;
+  params.footprint_rear_segment.width_front_m = 0.62;
+  params.footprint_rear_segment.width_rear_m = 0.68;
+  params.footprint_front_segment.length_m = 0.25;
+  params.footprint_front_segment.width_front_m = 0.34;
+  params.footprint_front_segment.width_rear_m = 0.62;
+  VehicleFootprint footprint(params);
+
+  // 车体 x：后缘 -0.23，分节 0.69，车头 0.94。
+  // 后缘/分节/车头半宽分别为 0.34 / 0.31 / 0.17。
+  EXPECT_NEAR(footprint.physicalHalfWidthAtX(-0.23), 0.34, 1e-9);
+  EXPECT_NEAR(footprint.physicalHalfWidthAtX(0.69), 0.31, 1e-9);
+  EXPECT_NEAR(footprint.physicalHalfWidthAtX(0.94), 0.17, 1e-9);
+  // 前段斜边中点 x=0.815：半宽在 0.31→0.17 之间线性插值 = 0.24。
+  EXPECT_NEAR(footprint.physicalHalfWidthAtX(0.815), 0.24, 1e-9);
+  // 车体前后端之外按最近端半宽平推。
+  EXPECT_NEAR(footprint.physicalHalfWidthAtX(-1.0), 0.34, 1e-9);
+  EXPECT_NEAR(footprint.physicalHalfWidthAtX(1.5), 0.17, 1e-9);
+
+  // 前段斜边使 x=0.94 处的自车过滤半宽（+2cm 余量）收到 0.19，
+  // 因此 y=0.30 的障碍不再被误当自车（旧常数盒半宽 0.36 会把它滤掉）。
+  EXPECT_LT(footprint.physicalHalfWidthAtX(0.94) + 0.02, 0.30);
+}
+
+namespace
+{
+SuddenObstacleParams suddenParams()
+{
+  SuddenObstacleParams p;
+  p.enabled = true;
+  p.emergency_decel_m_s2 = 2.0;
+  p.comfort_decel_m_s2 = 0.6;
+  p.t_react_s = 0.30;
+  p.emergency_distance_m = 2.0;
+  p.min_forward_speed_m_s = 0.15;
+  p.confirm_frames = 2;
+  p.a_req_filter_alpha = 1.0;    // 关掉低通，便于确定性断言
+  p.d_eff_floor_m = 0.03;
+  p.corridor_margin_m = 0.05;
+  p.release_distance_m = 0.30;
+  p.clear_hold_s = 0.20;
+  return p;
+}
+constexpr double kDsafe = 0.05;
+constexpr double kDt = 0.02;
+}  // namespace
+
+TEST(SuddenObstacleDetectorTest, TriggersWhenReqDecelExceedsComfort)
+{
+  // v=1.0, 净空 0.75 → d_eff=0.75-0.30-0.05=0.40 → a_req=1/0.8=1.25 ∈(0.6,2.0]
+  SuddenObstacleDetector det(suddenParams());
+  const auto r1 = det.update(0.75, 1.0, kDsafe, kDt);
+  EXPECT_FALSE(r1.trigger);    // confirm_frames=2，首帧不触发
+  const auto r2 = det.update(0.75, 1.0, kDsafe, kDt);
+  EXPECT_TRUE(r2.trigger);
+  EXPECT_FALSE(r2.saturated);  // a_req 1.25 未超底盘 2.0
+  EXPECT_NEAR(r2.a_req, 1.25, 1e-6);
+}
+
+TEST(SuddenObstacleDetectorTest, DoesNotTriggerOnGradualApproach)
+{
+  // v=1.0, 净空 1.8 → d_eff=1.45 → a_req=0.345 < comfort 0.6 → 不触发
+  SuddenObstacleDetector det(suddenParams());
+  for (int i = 0; i < 10; ++i) {
+    const auto r = det.update(1.8, 1.0, kDsafe, kDt);
+    EXPECT_FALSE(r.trigger);
+  }
+}
+
+TEST(SuddenObstacleDetectorTest, SingleFrameGlitchBlockedByConfirm)
+{
+  SuddenObstacleDetector det(suddenParams());
+  const auto glitch = det.update(0.75, 1.0, kDsafe, kDt);   // 1 帧触发条件
+  EXPECT_FALSE(glitch.trigger);
+  const auto recover = det.update(3.0, 1.0, kDsafe, kDt);   // 障碍消失（超窗口）
+  EXPECT_FALSE(recover.trigger);
+  EXPECT_FALSE(det.latched());
+}
+
+TEST(SuddenObstacleDetectorTest, FlagsBrakeSaturatedBeyondCapability)
+{
+  // v=2.0, 净空 0.3 → d_eff 触底 0.03 → a_req≈66.7 ≫ 2.0 → saturated
+  SuddenObstacleDetector det(suddenParams());
+  det.update(0.3, 2.0, kDsafe, kDt);
+  const auto r = det.update(0.3, 2.0, kDsafe, kDt);
+  EXPECT_TRUE(r.trigger);
+  EXPECT_TRUE(r.saturated);
+}
+
+TEST(SuddenObstacleDetectorTest, ReleasesAfterClearHold)
+{
+  SuddenObstacleDetector det(suddenParams());
+  det.update(0.75, 1.0, kDsafe, kDt);
+  det.update(0.75, 1.0, kDsafe, kDt);
+  ASSERT_TRUE(det.latched());
+  // 车已停稳、障碍清空：净空 +inf、速度 0，持续 clear_hold_s(0.20) 后释放
+  bool released = false;
+  for (int i = 0; i < 12; ++i) {
+    const auto r = det.update(std::numeric_limits<double>::infinity(), 0.0, kDsafe, kDt);
+    if (!r.trigger) {
+      released = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(released);
+  EXPECT_FALSE(det.latched());
+}
+
+TEST(SuddenObstacleDetectorTest, DisabledNeverTriggers)
+{
+  SuddenObstacleParams p = suddenParams();
+  p.enabled = false;
+  SuddenObstacleDetector det(p);
+  for (int i = 0; i < 5; ++i) {
+    const auto r = det.update(0.3, 2.0, kDsafe, kDt);
+    EXPECT_FALSE(r.trigger);
+  }
 }
 
 TEST(VehicleFootprintTest, TrapezoidFrontIsNarrowerThanRear)
@@ -321,6 +446,23 @@ TEST(AvoidanceUtilsTest, DirectionsLateralDistancesAndInterventionLevels)
     fillInterventionLevels(decel, params);
     EXPECT_EQ(decel.levels.primary, item.second);
   }
+}
+
+TEST(EmergencyBrakeTest, MinDistanceBrakingSuppressesForwardDistanceLatch)
+{
+  AvoidanceParams params;
+  params.hard_stop_distance_m = 0.12;
+  params.min_distance_braking_enabled = true;
+  params.braking_suppress_distance_emergency = true;
+  EmergencyBrake brake(params);
+
+  CollisionRisk risk;
+  risk.braking_limited = true;
+  risk.min_clearance = 0.08;
+  EmergencyBrakeContext context;
+  context.forward_approach = true;
+
+  EXPECT_FALSE(brake.shouldEmergencyBrake(risk, &context));
 }
 
 TEST(EmergencyBrakeTest, DirectionAwareClearanceAllowsReleaseWhenStopped)

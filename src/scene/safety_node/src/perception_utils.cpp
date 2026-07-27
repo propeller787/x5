@@ -12,9 +12,12 @@ std::pair<double, double> PerceptionUtils::polarToCartesian(double range, double
   return {range * std::cos(angle), range * std::sin(angle)};
 }
 
-bool PerceptionUtils::inRoi(double x, double y)
+bool PerceptionUtils::inRoi(
+  double x, double y,
+  double x_min, double x_max,
+  double y_min, double y_max)
 {
-  return x >= -2.5 && x <= 5.0 && y >= -1.8 && y <= 1.8;
+  return x >= x_min && x <= x_max && y >= y_min && y <= y_max;
 }
 
 bool PerceptionUtils::validTiltZ(double z, double threshold)

@@ -1,0 +1,38 @@
+intent_avoidance_node:
+  ros__parameters:
+    # 感知
+    safe_distance_threshold: 1.2           # 障碍判定距离阈值(m)
+    min_free_sector_width: 0.349          # 最小可通行扇区宽度(rad, ≈20°)
+
+    # 左雷达安装参数 (URDF: base_link → laser_frame_left)
+    left_radar_x: 0.690                   # 前向偏移(m)
+    left_radar_y: 0.255                   # 左侧偏移(m)
+    left_radar_yaw: 0.0                   # 偏航角(rad)
+
+    # 右雷达安装参数 (URDF: base_link → laser_frame_right)
+    right_radar_x: 0.690                  # 前向偏移(m)
+    right_radar_y: -0.255                 # 右侧偏移(m)
+    right_radar_yaw: -0.03                # 偏航角(rad)
+
+    # 意图
+    joystick_deadzone: 15                 # 摇杆死区阈值
+
+    # 决策
+    enable_intent_avoidance: true         # 避障总开关
+    direction_lock_frames: 8              # 防抖锁定帧数
+    direction_unlock_threshold: 0.524     # 意图变化解锁阈值(rad, ≈30°)
+    speed_reduction_factor: 0.6           # 避障时速度衰减因子
+    emergency_brake_ttc: 0.5              # 紧急制动TTC(s)
+    emergency_brake_distance: 0.3         # 紧急制动距离(m)
+
+    # 控制
+    max_angular_guidance: 0.5             # 引导最大角速度(rad/s)
+    max_linear_accel: 0.8                 # 最大线加速度(m/s²)
+    output_smooth_alpha: 0.3              # 输出一阶低通系数 (0,1]
+    speed_recovery_time: 1.5              # 速度恢复时间(s)
+    control_frequency: 10.0               # 控制循环频率(Hz)
+
+    # 车辆参数
+    robot_width: 0.70                     # 车宽(m)
+    narrow_ratio_min: 1.2                 # 窄道最小通道/车宽比
+    narrow_ratio_max: 2.5                 # 窄道最大通道/车宽比

@@ -64,59 +64,6 @@ int main(int argc, char *argv[]) {
         exec.add_node(chassis);
     }
 
-    try {
-        gps = std::make_shared<sensor::gps::GpsComponent>(options);
-    } catch (...) {
-        RCLCPP_ERROR(logger, "Failed to create gps node");
-    }
-    if (gps) {
-        exec.add_node(gps);
-    }
-    
-    try {
-        camera = std::make_shared<sensor::camera::CameraComponent>(options);
-    } catch (...) {
-        RCLCPP_ERROR(logger, "Failed to create camera node");
-    }
-    if (camera) {
-        exec.add_node(camera);
-    }
-    try {
-        imu = std::make_shared<sensor::imu::ImuComponent>(options);
-    } catch (...) {
-        RCLCPP_ERROR(logger, "Failed to create imu node");
-    }
-    if (imu) {
-        exec.add_node(imu);
-    }
-
-    try {
-        recorder = std::make_shared<sensor::recorder::SensorDataRecorder>(options);
-    } catch (...) {
-        RCLCPP_ERROR(logger, "Failed to create recorder node");
-    }
-    if (recorder) {
-        exec.add_node(recorder);
-    }
-
-    // try {
-    //     bluetooth = std::make_shared<sensor::bluetooth::BluetoothComponent>(options);
-    // } catch (...) {
-    //     RCLCPP_ERROR(logger, "Failed to create bluetooth node");
-    // }
-    // if (bluetooth) {
-    //     exec.add_node(bluetooth);
-    // }
-
-    try {
-        bluetooth_ble = std::make_shared<sensor::bluetooth::_3568::BluetoothBleComponent>(options);
-    } catch (...) {
-        RCLCPP_ERROR(logger, "Failed to create bluetooth BLE node");
-    }
-    if (bluetooth_ble) {
-        exec.add_node(bluetooth_ble);
-    }
-
     exec.spin();
     rclcpp::shutdown();
     return 0;

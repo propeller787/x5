@@ -1,226 +1,278 @@
+# =============================================================================
 # 决策器配置参数文件
-# Decision Maker Configuration Parameters
+# -----------------------------------------------------------------------------
+# 与代码对应关系:
+#   - 结构体默认值: include/decision_params.h
+#   - ROS 声明/加载/热更新: src/decision_maker_params_io.cpp
+# 节点名: decision_maker（与 DecisionMaker 构造函数一致）
+# 使用方式:
+#   - 冷启动: launch 中 --params-file 指向本文件，或 ros2 run ... --params-file ...
+#   - 热更新: ros2 param set /decision_maker <参数名> <值>（须通过校验）
 # 作者: likang@freego.com
-# 版本: 1.1.0
-# 日期: 2025-10-31
+# 版本: 1.2.0
+# =============================================================================
 
 decision_maker:
   ros__parameters:
-    # ==================== 系统频率配置 ====================
-
-    # 雷达数据采集频率 (Hz)
-    # 说明: 雷达数据的更新频率，决定了障碍物检测的时间分辨率
-    # 推荐值: 10-20 Hz (过高会增加计算负担，过低会降低响应速度)
+    # -------------------------------------------------------------------------
+    # 系统频率（与预测/历史相关逻辑配合，单位 Hz、s）
+    # -------------------------------------------------------------------------
+    # 阶段 A：避障决策定时器频率（与摇杆回调解耦）
+    decision_rate_hz: 20.0
+    # 雷达标称采集频率，用于文档与部分时序估算；实际干预以 radar_timeout 为准
     radar_frequency: 10.0
-
-    # 目标位置预测时间间隔 (秒)
-    # 说明: 预测目标未来位置的时间步长
-    # 推荐值: 1/radar_frequency = 0.1s
+    # 目标位置预测用的时间步长，通常取约 1/radar_frequency
     prediction_time: 0.1
 
-    # ==================== 距离阈值配置 ====================
+    # -------------------------------------------------------------------------
+    # 车体几何（base_link，与 URDF 碰撞盒一致；决策里用于前/侧向距离与走廊，单位 m）
+    # 热更新: ros2 param set /decision_maker robot_width 0.72
+    # -------------------------------------------------------------------------
+    robot_length: 0.88
+    robot_width: 0.70
+    robot_height: 0.8
+    robot_safety_margin_front: 0.10
+    robot_safety_margin_back: 0.20
+    robot_safety_margin_side: 0.03
 
-    # 预警区距离 (米)
-    # 说明: 超过此距离不进行速度限制，但会记录状态
-    # 推荐值: 1.0-3.0 m
-    # - 较大值(2.0-3.0): 更保守，适合高速或拥挤环境
-    # - 较小值(1.0-1.5): 更激进，适合低速或开阔环境
+    # -------------------------------------------------------------------------
+    # 前向：距离阈值（单位 m）
+    # 约束: emergency_brake_distance < deceleration_zone < warning_zone
+    # 说明: 由外到内分为「预警 / 减速 / 制动」；低速时主要按距离分区，高速与 TTC 组合使用
+    # -------------------------------------------------------------------------
+    # 大于此距离视为「前向无障碍」侧（仍可能受状态保持影响），并参与状态保持判断
     warning_zone: 1.5
-
-    # 减速区距离 (米)
-    # 说明: 在此距离内开始平滑减速
-    # 推荐值: 0.5-1.5 m
-    # - 较大值(1.0-1.5): 更早减速，更平滑
-    # - 较小值(0.5-0.8): 更晚减速，更高效
+    # 进入此距离内开始与 TTC 联合的平滑减速（见 calculateSpeedLimit 距离分支）
     deceleration_zone: 0.8
-
-    # 紧急制动距离 (米)
-    # 说明: 在此距离内立即制动 (速度限制为0)
-    # 推荐值: 0.2-0.5 m
-    # - 应考虑车辆制动距离和反应时间
-    # - 不应小于车辆物理尺寸的一半
+    # 小于等于此距离：强制线速度为 0（距离兜底，不依赖 TTC 是否仍「充裕」）
     emergency_brake_distance: 0.3
+    # 小于等于此距离：该方向强制停车，且不再走 TTC 分层；须 < emergency_brake_distance
+    fixed_stopping_distance_forward: 0.25
 
-    # ==================== 速度限制配置 ====================
+      # -------------------------------------------------------------------------
+    # 前向：TTC（Time-To-Collision，单位 s）与几何辅助量
+    # 当接近速度 >= min_approach_velocity_for_ttc 时进入 TTC 模式；TTC ≈ 距离/接近速度
+    # -------------------------------------------------------------------------
+    # 前向干预门控：effective_ttc < warning_ttc 时进入干预流程（与距离制动条件并列）
+    warning_ttc: 2.0
+    # TTC 减速区上界：小于此 TTC 开始平滑限速（大于动态紧急制动 TTC 阈值）
+    deceleration_ttc: 0.90
+    # 紧急制动 TTC 的基准下限；高速时与 base/margin/decel 共同放大为 effective_emergency_ttc
+    emergency_brake_ttc: 0.30
+    # 接近速度 (m/s) 大于本阈值时，前向 TTC 改用下方 high_speed 两参数（见 calculateSpeedLimit）
+    # 7 km/h = 7/3.6 ≈ 1.944 m/s；设为 0 表示不启用高速剖面（始终用 deceleration_ttc / emergency_brake_ttc）
+    forward_ttc_high_speed_threshold_m_s: 1.944
+    # 高速剖面：与低速一致须满足 deceleration_ttc_high_speed > emergency_brake_ttc_high_speed
+    deceleration_ttc_high_speed: 0.10
+    emergency_brake_ttc_high_speed: 0.38
+    # 用于按速度计算更保守的紧急 TTC：项 v/(2*decel) 中的假定减速度 a（m/s²）
+    emergency_brake_ttc_decel: 2.1
+    # 固定延迟项：扫描+反应+执行等，加在速度相关紧急 TTC 上（s）
+    emergency_brake_ttc_base: 0.09
+    # 紧急 TTC 额外安全裕度（s）
+    emergency_brake_ttc_margin: 0.02
+    # 低于该接近速度（m/s）则前向不按 TTC，而主要按距离阈值（warning_zone 等）
+    min_approach_velocity_for_ttc: 0.05
+    # 聚类中心在车头附近「贴脸」区域时映射前向距离的几何参数（m），见 calculateMinDirectionalDistance
+    foot_distance_to_radar: 0.32
+    # 后向雷达点计算后向距离时，雷达到车辆后缘的修正（m）
+    radar_distance_to_vehicle_rear: 0.22
+    # 是否启用「前向制动 + 摇杆 Y 死区」时角速度置 0（关闭则忽略下方 deadzone）
+    enable_forward_brake_joystick_y_deadzone: true
+    # 前向制动（限速 max_linear_speed≈0）且前进指令>0 时：若 |rocker_y| 小于本阈值则角速度置 0
+    # 量纲与 interface/Joystick.msg 的 rocker_y（int16）一致；话题见 common/utils/topic.h joystickTopic
+    # 设为 0 则即使开关为 true 也不按死区锁角速
+    forward_brake_joystick_y_deadzone: 30.0
+    # 前向制动 + 摇杆 Y 死区锁角速时：轮速反馈线速度须低于该值 (m/s)，见 applySpeedLimit 与 Tracking 轮速
+    forward_brake_chassis_speed_threshold: 0.05
+    # 前向制动触发后，在该时间窗内（ms）若输出线速度小于下方阈值则置 0，避免制动末端微小爬行
+    forward_brake_zero_speed_window_ms: 100.0
+    # 前向制动后低速清零阈值 (km/h)
+    forward_brake_zero_speed_threshold_kmh: 0.5
 
-    # 最小速度限制 (m/s)
-    # 换算: 0.056 m/s ≈ 0.2 km/h
-    # 说明: 在减速区近端允许的最低速度
-    # 推荐值: 0.05-0.2 m/s
+    # -------------------------------------------------------------------------
+    # 避让意图检测（轮速反馈 ω/v，与 Tracking 同源）衰减前向制动干预
+    # 场景：前方有障碍物触发 TTC 制动，但车体已明显转向避让时放松前向限速。
+    # 安全底线：固定停车距离内（fixed_stopping_distance_forward）不衰减。
+    # -------------------------------------------------------------------------
+    enable_evasion_detection: false
+    # 开始认为"正在避让"的轮速反馈角速度阈值 |omega_fb| (rad/s)
+    evasion_angular_threshold: 0.15
+    # 满避让时 |omega_fb| 取此值时衰减因子最小（须 > evasion_angular_threshold）(rad/s)
+    evasion_angular_full: 0.5
+    # 满避让时衰减因子下限 [0,1]；越小前向限速越接近 max_speed_limit（validate 要求须在 [0,1]）
+    evasion_min_factor: 0.2
+
+    # -------------------------------------------------------------------------
+    # Swept-footprint avoidance refactor.
+    # avoidance_engine:
+    #   legacy          - keep current distance/TTC intervention path
+    #   shadow          - run swept-footprint in parallel and log comparison
+    #   swept_footprint - use swept-footprint result as /nav/control source
+    # -------------------------------------------------------------------------
+    avoidance_engine: "legacy"
+    avoidance_shadow_log: true
+    rollout_horizon_s: 1.2
+    rollout_dt_s: 0.1
+    rollout_speed_samples: 6
+    rollout_angular_samples: 5
+    swept_radar_timeout_s: 0.15
+    swept_max_obstacles: 128
+    footprint_back_extent_m: 0.25
+    footprint_front_margin: 0.10
+    footprint_back_margin: 0.12
+    footprint_side_margin: 0.05
+    footprint_obstacle_radius_default: 0.08
+    comfort_clearance: 0.30
+    swept_warning_ttc_s: 1.5
+    swept_limiting_ttc_s: 1.0
+    swept_emergency_ttc_s: 0.45
+    swept_hard_stop_distance_m: 0.12
+    safety_filter_angular_weight: 0.30
+
+    # -------------------------------------------------------------------------
+    # 轮速驱动的障碍物位置预测（运动补偿）
+    # 开启后，每次轮速回调都会对已缓存的雷达聚类做车体运动补偿，
+    # 弥补雷达帧率(~10Hz)低于轮速帧率(~50Hz)导致的位置滞后。
+    # -------------------------------------------------------------------------
+    enable_obstacle_prediction: false
+    # 单帧雷达数据累计补偿时间上限(s)，超过则丢弃该雷达缓存
+    obstacle_prediction_max_age: 0.1
+    # 补偿后距离/原始距离偏差超过 ratio*原距离+1m 则认为异常丢弃
+    obstacle_prediction_drift_ratio: 0.1
+    # 补偿后 center_x 低于此值(m)视为目标移至车后方，丢弃
+    obstacle_prediction_min_valid_x: -1.0
+
+    # -------------------------------------------------------------------------
+    # /nav/control 前 RATE_LIMITED 平滑：由 TFT /vlago/tft/car/mode 切换（1 舒适 2 运动）
+    # 每周期 |Δvx|、|Δωz| 上限；线加速度与 delta 同时生效时取 min(Δ, a·dt)。加速度设很大则主要由 delta 限制。
+    # -------------------------------------------------------------------------
+    smooth_comfort_max_linear_delta: 0.1
+    smooth_comfort_max_angular_delta: 0.1
+    smooth_comfort_max_linear_accel_m_s2: 0.1
+    smooth_sport_max_linear_delta: 0.1
+    smooth_sport_max_angular_delta: 0.1
+    smooth_sport_max_linear_accel_m_s2: 0.1
+
+    # -------------------------------------------------------------------------
+    # 侧向：距离 / TTC / 斜向主导（单位 m、s；lateral_dominance_ratio 无量纲）
+    # 作用域：左转/右转时由左侧或右侧雷达算出的侧向威胁距离，对 angular.z 做分级限速（非线速度 x）
+    # 约束: emergency_brake_distance_lateral < deceleration_zone_lateral < warning_zone_lateral
+    #       deceleration_ttc_lateral > emergency_brake_ttc_lateral
+    #       fixed_stopping_distance_lateral < emergency_brake_distance_lateral
+    # 总开关：enable_lateral_collision；关闭则本段参数不参与决策
+    # -------------------------------------------------------------------------
+    # 斜向几何门控：若侧向突出量（相对前向距离的横向分量）/ 前向距离 >= 本值，则按「侧向威胁」处理，
+    # 避免前方斜向墙角、窄道侧壁被单一前向距离误判成「正前方贴脸」导致过度前向制动。
+    lateral_dominance_ratio: 0.35
+    # 侧向预警区外缘 (m)：大于此侧向距离视为该侧「无障碍」侧，一般不触发侧向干预（仍受状态保持等影响）
+    warning_zone_lateral: 1.5
+    # 侧向减速区内缘 (m)：进入此距离内开始按距离 + TTC 对角速度做平滑限速（见 calculateSpeedLimitForLeft/Right）
+    deceleration_zone_lateral: 0.3
+    # 侧向制动区 (m)：小于等于此距离时侧向可强制角速度为 0（距离兜底，与 TTC 分支并列）
+    emergency_brake_distance_lateral: 0.15
+    # 侧向固定停车距离 (m)：小于等于此距离该转向方向强制「停车」逻辑，且不再走 TTC 分层；须 < emergency_brake_distance_lateral
+    fixed_stopping_distance_lateral: 0.12
+    # 侧向 TTC 预警阈值 (s)：有效侧向 TTC 小于此值时进入侧向干预流程（与距离条件并列；接近速度由角速度×半车宽等折算）
+    warning_ttc_lateral: 1.5
+    # 侧向 TTC 减速区上界 (s)：小于此 TTC 进入减速区角速度限制，须 > emergency_brake_ttc_lateral
+    deceleration_ttc_lateral: 0.8
+    # 侧向 TTC 紧急制动基准 (s)：小于此 TTC 进入侧向紧急角速度限制/制动区逻辑
+    emergency_brake_ttc_lateral: 0.3
+
+    # -------------------------------------------------------------------------
+    # 后向：距离 / TTC / 报警（单位 m、s）
+    # 作用域：后退 (linear.x < 0) 且 enable_backward_collision 时，由后向雷达距离对倒车线速度分级限制
+    # 约束: emergency_brake_distance_backward < deceleration_zone_backward < warning_zone_backward
+    #       deceleration_ttc_backward > emergency_brake_ttc_backward
+    #       fixed_stopping_distance_backward < emergency_brake_distance_backward
+    # -------------------------------------------------------------------------
+    # 后向预警区外缘 (m)：大于此距离视为后向「远距」，一般不触发后向减速/制动（状态保持等仍可能生效）
+    warning_zone_backward: 2.2
+    # 后向减速区内缘 (m)：进入此距离内开始与后向 TTC 联合的倒车限速
+    deceleration_zone_backward: 1.2
+    # 后向制动区 (m)：小于等于此距离强制倒车线速度为 0（距离兜底）
+    emergency_brake_distance_backward: 0.25
+    # 后向固定停车距离 (m)：小于等于此距离该方向强制停车且不走 TTC 分层；须 < emergency_brake_distance_backward
+    fixed_stopping_distance_backward: 0.08
+    # 后向 TTC 预警阈值 (s)：有效后向 TTC 小于此值时进入后向干预（与距离分支并列）
+    warning_ttc_backward: 2.0
+    # 后向 TTC 减速区上界 (s)：须 > emergency_brake_ttc_backward
+    deceleration_ttc_backward: 1.4
+    # 后向 TTC 紧急制动基准 (s)：小于此 TTC 进入后向紧急制动区逻辑
+    emergency_brake_ttc_backward: 0.7
+    # 后向障碍物距离落在 [emergency_brake_distance_backward, warning_distance_backward] 区间内时，
+    # 触发后向安全告警发布（publishSafetyAlarmForBackward 等，与限速并行，见 decision_maker）
+    warning_distance_backward: 0.8
+    # 倒车减速斜率上限 (m/s²)：越小越平顺，越大响应越快
+    backward_brake_decel_max_m_s2: 0.8
+    # 倒车恢复斜率上限 (m/s²)：限制解除后的恢复速度变化率
+    backward_recover_accel_max_m_s2: 0.5
+    # 后向紧急制动确认窗口内保留的爬行速度 (m/s)，0 表示直接锁停
+    backward_emergency_creep_speed: 0.04
+    # 后向紧急制动确认窗口 (ms)：窗口内先爬行减速，超时再锁停到 0
+    backward_emergency_hold_ms: 120.0
+    # -------------------------------------------------------------------------
+    # 速度限制（单位 m/s、rad/s）
+    # 约束: min_speed_limit < max_speed_limit <= absolute_max_linear_speed
+    # -------------------------------------------------------------------------
+    # 减速区近端允许保留的最低目标线速度（爬行速度）
     min_speed_limit: 0.056
-
-    # 最大速度限制 (m/s)
-    # 换算: 1.67 m/s ≈ 6.0 km/h
-    # 说明: 正常行驶时的最大速度
-    # 推荐值: 1.0-3.0 m/s (3.6-10.8 km/h)
-    # - 室内环境: 1.0-1.5 m/s
-    # - 室外环境: 1.5-3.0 m/s
+    # 正常干预下的最大目标线速度（约 6 km/h 当取 1.67）
     max_speed_limit: 1.67
+    # 后退方向最大线速度上限（通常低于前进 max_speed_limit）
+    max_speed_limit_backward: 1.111
+    # 任意情况下线速度硬顶（摇杆/干预后仍会被夹在此值以下）
+    absolute_max_linear_speed: 2.22
+    # 角速度硬顶（rad/s）
+    absolute_max_angular_speed: 3.0
 
-    # 绝对最大线速度 (m/s)
-    # 说明: 硬限制，防止任何情况下超速（安全保护）
-    # 推荐值: max_speed_limit * 1.2
-    absolute_max_linear_speed: 2.0
-
-    # 绝对最大角速度 (rad/s)
-    # 说明: 硬限制，防止转向过快（安全保护）
-    # 推荐值: 0.5-2.0 rad/s
-    absolute_max_angular_speed: 1.0
-
-    # ==================== 状态保持与恢复 ====================
-
-    # 状态保持时间 (秒)
-    # 说明: 障碍物消失后保持干预状态的时间，避免振荡
-    # 推荐值: 0.1-1.0 s
-    # - 较小值(0.1-0.3): 响应更快，但可能振荡
-    # - 较大值(0.5-1.0): 更稳定，但恢复较慢
+    # -------------------------------------------------------------------------
+    # 状态保持与雷达数据（单位 s；max_history_size 为帧数）
+    # -------------------------------------------------------------------------
+    # 障碍物在感知上消失后，仍沿用上次有效距离的最长时间，减轻闪烁导致的加减速抖动
     state_hold_time: 0.3
-
-    # 速度恢复时间 (秒)
-    # 说明: 从限速状态恢复到正常速度的时间
-    # 推荐值: 0.5-3.0 s
-    # - 较小值(0.5-1.0): 快速恢复，适合动态环境
-    # - 较大值(1.5-3.0): 平滑恢复，适合稳定环境
+    # 从限速状态平滑爬升到 max_speed_limit 的时间常数尺度
     speed_recovery_time: 1.5
-
-    # ==================== 数据管理配置 ====================
-
-    # 雷达数据超时时间 (秒)
-    # 说明: 超过此时间未收到雷达数据视为超时，启用预测模式
-    # 推荐值: 1.5 * (1/radar_frequency) = 0.15s
-    # - 不应小于雷达更新周期
-    # - 不应大于3倍雷达更新周期
+    # 单路雷达超过该时间未更新视为超时；超时后可能走预测/stale 分支（见 processHandleControl）
     radar_timeout: 0.05
-
-    # 最大历史数据大小
-    # 说明: 保存的历史数据帧数，用于数据分析和预测
-    # 推荐值: 10-50 帧
-    # - 较小值(10-20): 节省内存
-    # - 较大值(30-50): 更好的预测和分析
+    # 聚类历史队列最大长度，用于预测与分析
     max_history_size: 10
 
-    # ==================== 碰撞检测开关配置 ====================
-
-    # 启用前向碰撞检测
-    # 说明: 检测机器人前方的障碍物
-    # 推荐: 始终启用
+    # -------------------------------------------------------------------------
+    # 碰撞检测总开关（true 启用该方向干预）
+    # -------------------------------------------------------------------------
     enable_forward_collision: true
+    enable_lateral_collision: true
+    enable_backward_collision: true
 
-    # 启用侧向碰撞检测
-    # 说明: 检测机器人左右两侧的障碍物
-    # 推荐: 在狭窄通道或自主导航时启用
-    enable_lateral_collision: false
-
-    # 启用后向碰撞检测
-    # 说明: 检测机器人后方的障碍物
-    # 推荐: 在倒车或后退时启用
-    enable_backward_collision: false
-# ==================== 场景预设配置 ====================
-# 以下是不同应用场景的推荐配置
-
-# 场景1: 室内仓储 (高安全性，低速)
+# =============================================================================
+# 场景预设示例（将 decision_maker/ros__parameters 整块替换或合并所需键）
+# =============================================================================
+# 场景1: 室内仓储（更保守、侧向/后向全开）
 # decision_maker:
 #   ros__parameters:
 #     warning_zone: 2.0
 #     deceleration_zone: 1.0
 #     emergency_brake_distance: 0.4
-#     max_speed_limit: 1.39  # 5 km/h
+#     max_speed_limit: 1.39
 #     state_hold_time: 0.5
 #     speed_recovery_time: 2.0
 #     enable_forward_collision: true
 #     enable_lateral_collision: true
 #     enable_backward_collision: true
 
-# 场景2: 室外巡检 (中等安全性，中速)
-# decision_maker:
-#   ros__parameters:
-#     warning_zone: 1.5
-#     deceleration_zone: 0.8
-#     emergency_brake_distance: 0.3
-#     max_speed_limit: 1.67  # 6 km/h
-#     state_hold_time: 0.3
-#     speed_recovery_time: 1.5
-#     enable_forward_collision: true
-#     enable_lateral_collision: false
-#     enable_backward_collision: false
-
-# 场景3: 开阔场地 (低安全要求，高速)
-# decision_maker:
-#   ros__parameters:
-#     warning_zone: 1.2
-#     deceleration_zone: 0.6
-#     emergency_brake_distance: 0.25
-#     max_speed_limit: 1.94  # 7 km/h
-#     state_hold_time: 0.2
-#     speed_recovery_time: 1.0
-#     enable_forward_collision: true
-#     enable_lateral_collision: false
-#     enable_backward_collision: false
-
-# 场景4: 人机协作 (极高安全性，极低速)
-# decision_maker:
-#   ros__parameters:
-#     warning_zone: 2.5
-#     deceleration_zone: 1.5
-#     emergency_brake_distance: 0.5
-#     max_speed_limit: 1.11  # 4 km/h
-#     state_hold_time: 0.5
-#     speed_recovery_time: 2.5
-#     enable_forward_collision: true
-#     enable_lateral_collision: true
-#     enable_backward_collision: true
-
-# ==================== 参数调优指南 ====================
+# =============================================================================
+# 调参自检清单（与 validate_decision_params 一致，违反则启动 WARN 或 param set 失败）
+# =============================================================================
+# - 前向: emergency_brake_distance < deceleration_zone < warning_zone
+# - 侧向: emergency_brake_distance_lateral < deceleration_zone_lateral < warning_zone_lateral
+# - 后向: emergency_brake_distance_backward < deceleration_zone_backward < warning_zone_backward
+# - fixed_stopping_distance_forward < emergency_brake_distance
+# - min_speed_limit < max_speed_limit <= absolute_max_linear_speed
+# - deceleration_ttc > emergency_brake_ttc（前/侧/后三组同理）
+# - state_hold_time > 0, speed_recovery_time > 0, radar_timeout > 0
+# - max_history_size >= 1
 #
-# 1. 安全性调优（提高安全性）
-#    - 增加 warning_zone (1.5 -> 2.0)
-#    - 增加 deceleration_zone (0.8 -> 1.0)
-#    - 增加 emergency_brake_distance (0.3 -> 0.4)
-#    - 降低 max_speed_limit (1.67 -> 1.39)
-#    - 增加 state_hold_time (0.3 -> 0.5)
-#    - 增加 speed_recovery_time (1.5 -> 2.0)
-#
-# 2. 效率调优（提高通行效率）
-#    - 减少 warning_zone (1.5 -> 1.2)
-#    - 减少 deceleration_zone (0.8 -> 0.6)
-#    - 减少 emergency_brake_distance (0.3 -> 0.25)
-#    - 提高 max_speed_limit (1.67 -> 1.94)
-#    - 减少 state_hold_time (0.3 -> 0.2)
-#    - 减少 speed_recovery_time (1.5 -> 1.0)
-#
-# 3. 平滑性调优（减少速度抖动）
-#    - 增加 state_hold_time (0.3 -> 0.5)
-#    - 增加 speed_recovery_time (1.5 -> 2.0)
-#    - 调整 smooth_filter alpha (在代码中)
-#
-# 4. 响应性调优（提高响应速度）
-#    - 减少 state_hold_time (0.3 -> 0.2)
-#    - 减少 speed_recovery_time (1.5 -> 1.0)
-#    - 减少 radar_timeout (0.05 -> 0.03)
-#
-# ==================== 注意事项 ====================
-#
-# 1. 参数约束关系：
-#    - warning_zone > deceleration_zone > emergency_brake_distance
-#    - max_speed_limit > min_speed_limit
-#    - absolute_max_linear_speed > max_speed_limit
-#
-# 2. 修改参数后务必进行测试：
-#    - 静态障碍物测试
-#    - 动态障碍物测试
-#    - 边界情况测试
-#    - 长时间稳定性测试
-#
-# 3. 建议的测试流程：
-#    a) 在仿真环境中测试
-#    b) 在受控环境中小范围测试
-#    c) 逐步扩大测试范围
-#    d) 最后在实际环境中部署
-#
-# 4. 监控指标：
-#    - 速度限制触发频率
-#    - 紧急制动次数
-#    - 平均行驶速度
-#    - 目标点到达时间
-#    - 碰撞次数（应为0）
-
+# 说明: applyProfile(室内/室外) 会在运行时覆盖部分字段，可能与参数服务器当前值不一致，
+#       以内存中 decision_params_ 为准；需要一致时可重启节点或再用 ros2 param set。

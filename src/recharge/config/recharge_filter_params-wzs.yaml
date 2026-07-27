@@ -1,0 +1,17 @@
+/**:
+  ros__parameters:
+    recharge_filter:
+      min_index: 66
+      max_index: 156
+      min_intensities: 20.0
+      max_intensities: 160.0
+      min_distance: 0.20
+      max_distance: 3.5
+      min_count: 4
+      dock_length: 0.42
+      baselink_back_index: 215
+      dy_diff: 0.09
+      fixed_index: 201
+      scan_angle_diff : 3.14
+
+# ros2 run recharge recharge_node --ros-args --params-file ~/your_workspace/config/scan_filter_params.yaml

@@ -4,7 +4,7 @@ ydlidar_ros2_driver_node:
   ros__parameters:
     # 串口设备路径，激光雷达连接的串口设备文件
     # 常见路径：/dev/ttyUSB0, /dev/ttyUSB1, /dev/ttyACM0 等
-    port: /dev/ttyS4
+    port: /dev/ttyS3
 
     # ROS 坐标系名称，激光雷达数据发布时使用的 frame_id
     # 用于在 tf 树中标识激光雷达的坐标系
@@ -111,4 +111,4 @@ ydlidar_ros2_driver_node:
     # 是否启用调试模式
     # false: 正常模式，输出较少日志信息
     # true: 调试模式，输出详细的调试信息，用于排查问题
-    debug: false
+    debug: true

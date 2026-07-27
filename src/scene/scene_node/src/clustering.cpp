@@ -17,7 +17,10 @@
 #include <pcl_conversions/pcl_conversions.h>
 
 Clustering::Clustering() : rclcpp::Node("clustering_node") {
-    RCLCPP_INFO(this->get_logger(), "初始化聚类模块");
+    this->declare_parameter<bool>("debug_publish", false);
+    debug_publish_ = this->get_parameter("debug_publish").as_bool();
+    RCLCPP_INFO(this->get_logger(), "初始化聚类模块 (debug_publish=%s)",
+                debug_publish_ ? "true" : "false");
 
     // 创建发布器 - 用于发布聚类后的点云数据
     RCLCPP_INFO(this->get_logger(), "创建左雷达聚类点云发布器，话题: %s", leftLaserClusterTopic);
@@ -38,7 +41,10 @@ void Clustering::setClusterCallback(std::function<void(const std::vector<Cluster
 
 void Clustering::clusterPointCloud(const PointCloud::Ptr &input_cloud, const std::string &source_name) {
     if (!input_cloud || input_cloud->points.empty()) {
-        RCLCPP_WARN(this->get_logger(), "输入点云为空，跳过聚类");
+        RCLCPP_DEBUG(this->get_logger(), "%s 输入点云为空，上报无障碍", source_name.c_str());
+        if (cluster_callback_) {
+            cluster_callback_({}, source_name);
+        }
         return;
     }
 
@@ -55,13 +61,13 @@ void Clustering::clusterPointCloud(const PointCloud::Ptr &input_cloud, const std
 
     RCLCPP_DEBUG(this->get_logger(), "聚类完成，检测到 %zu 个聚类", clusters.size());
 
-    // 发布聚类后的点云数据
-    if (!clusters.empty()) {
+    // 发布聚类后的点云数据（仅调试）
+    if (debug_publish_ && !clusters.empty()) {
         publishClusterPointCloud(clusters, source_name);
     }
 
-    // 触发回调函数
-    if (cluster_callback_ && !clusters.empty()) {
+    // 空聚类也回调，便于决策层及时清除该雷达障碍状态
+    if (cluster_callback_) {
         cluster_callback_(clusters, source_name);
     }
 }

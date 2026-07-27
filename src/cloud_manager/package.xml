@@ -23,6 +23,9 @@
   <depend>interface</depend>
   <depend>common</depend>
   <depend>ament_index_cpp</depend>
+  <depend>mqtt_module</depend>
+
+  
   
   <export>
     <build_type>ament_cmake</build_type>

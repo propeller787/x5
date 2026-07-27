@@ -85,7 +85,27 @@
   - `right_wheel_count`: 右轮编码器圈数
 - **发布频率**: 根据 CAN 数据接收频率
 
-#### 8. 倒车状态
+#### 8. 轮式里程计
+
+- **Topic 名称**: `/sensor/wheel_odom`
+- **消息类型**: `nav_msgs::msg::Odometry`
+- **QoS 策略**: 队列深度 30
+- **发布组件**: `sensor::chassis::HandleCanAdapter`
+- **使用场景**: 发布基于左右轮编码器积分的里程计数据，包括平面位姿（x、y、yaw）及线速度、角速度，用于车辆相对定位、导航与传感器融合
+- **消息字段**:
+  - `header.frame_id`: 里程计坐标系（默认 `odom`）
+  - `child_frame_id`: 车体坐标系（默认 `base_link`）
+  - `pose.pose`: 平面位置与姿态（四元数，仅绕 Z 轴）
+  - `twist.twist`: 线速度 `linear.x`、角速度 `angular.z`（EMA 滤波）
+  - `pose.covariance` / `twist.covariance`: 时变协方差
+- **配置参数**（节点 `handle`）:
+  - `wheel_odom_wheel_radius_m`: 轮半径（m），默认 0.126
+  - `wheel_odom_wheel_separation_m`: 轮距（m），默认 0.612
+  - `wheel_odom_counts_per_revolution`: 每圈编码器计数，默认 278511
+  - `wheel_odom_frame_id` / `wheel_odom_child_frame_id`: 坐标系名称
+- **发布频率**: 与 CAN 编码器帧（`0x21a`）接收频率一致
+
+#### 9. 倒车状态
 
 - **Topic 名称**: `/sensor/backup/car`
 - **消息类型**: `interface::msg::BackupCar`
@@ -96,7 +116,7 @@
   - `is_backup_car`: 是否倒车 (true=倒车, false=前进)
 - **发布频率**: 状态变化时发布
 
-#### 9. 车辆信息
+#### 10. 车辆信息
 
 - **Topic 名称**: `/vlago/car/info`
 - **消息类型**: `interface::msg::CarInfo`
@@ -122,7 +142,7 @@
   - `right_brakests`: 右刹车状态
 - **发布频率**: 1Hz（定时发布）
 
-#### 10. 健康计启动信号
+#### 11. 健康计启动信号
 
 - **Topic 名称**: `/sensor/handle/control`
 - **消息类型**: `interface::msg::HealthStart`
@@ -133,7 +153,7 @@
   - `status`: true=开始采集, false=停止采集
 - **发布频率**: 按键触发时发布
 
-#### 11. 减速带告警
+#### 12. 减速带告警
 
 - **Topic 名称**: `/speed_bump/status`
 - **消息类型**: `std_msgs::msg::Int32`
@@ -142,7 +162,7 @@
 - **使用场景**: 发布减速带检测告警，触发减速控制和安全提醒
 - **消息值**: 1=检测到减速带
 
-#### 12. 下坡告警
+#### 13. 下坡告警
 
 - **Topic 名称**: `/downhill/status`
 - **消息类型**: `std_msgs::msg::Int32`
@@ -151,7 +171,7 @@
 - **使用场景**: 发布下坡检测告警，触发速度限制和安全控制
 - **消息值**: 1=检测到下坡
 
-#### 13. 上坡告警
+#### 14. 上坡告警
 
 - **Topic 名称**: `/uphill/status`
 - **消息类型**: `std_msgs::msg::Int32`
@@ -160,7 +180,7 @@
 - **使用场景**: 发布上坡检测告警，触发动力调整和安全控制
 - **消息值**: 1=检测到上坡
 
-#### 14. 舞蹈秀启动
+#### 15. 舞蹈秀启动
 
 - **Topic 名称**: `/scene/dance/key`
 - **消息类型**: `std_msgs::msg::Int32`
@@ -169,7 +189,7 @@
 - **使用场景**: 发布舞蹈秀按键触发信号，启动舞蹈场景模式
 - **消息值**: 1=启动, 0=停止
 
-#### 15. 摇杆数据
+#### 16. 摇杆数据
 
 - **Topic 名称**: `/sensor/joystick`
 - **消息类型**: `interface::msg::Joystick`
@@ -182,7 +202,7 @@
   - `rocker_direction`: 摇杆方向 (0-360 度)
   - `rocker_angle`: 摇杆角度 (-180 到 180 度)
 
-#### 16. H264 视频流
+#### 17. H264 视频流
 
 - **Topic 名称**: `/sensor/backup/camera/h264`
 - **消息类型**: `ffmpeg_image_transport_msgs::msg::FFMPEGPacket`
@@ -192,7 +212,7 @@
 - **QoS 说明**: 使用 best_effort 模式适合视频流传输，允许丢帧保证实时性
 - **发布频率**: 视频帧率（通常 25-30fps）
 
-#### 17. CAN 数据帧
+#### 18. CAN 数据帧
 
 - **Topic 名称**: `/can/frames`
 - **消息类型**: `can_msgs::msg::Frame`
@@ -208,7 +228,7 @@
   - `is_rtr`: 是否为远程帧
   - `is_error`: 是否为错误帧
 
-#### 18. 错误事件
+#### 19. 错误事件
 
 - **Topic 名称**: `/error_events`
 - **消息类型**: `interface::msg::HexData`
@@ -417,7 +437,8 @@
 
 1. **GPS 定位**: GPS 模块 → `/sensor/gps/data`发布 → 定位和导航模块订阅
 2. **IMU 姿态**: IMU 模块 → `/sensor/imu/data`发布 → 定位和融合模块订阅
-3. **视频录制**: 摄像头 → H264 编码 → `/sensor/backup/camera/h264`发布 → 录制和显示模块订阅
+3. **轮式里程计**: CAN 编码器帧 → `/sensor/wheel_odom`发布 → 定位、导航与融合模块订阅
+4. **视频录制**: 摄像头 → H264 编码 → `/sensor/backup/camera/h264`发布 → 录制和显示模块订阅
 
 ### 场景 3: 安全控制
 

@@ -11,12 +11,6 @@
 
 namespace cloud_manager {
 
-// 内部：构造通用头（含签名，v2-小写g* + gkey-no）前置声明
-static cpr::Header build_headers_v2(const DeviceInfo& info,
-                                    const std::string& body_json,
-                                    bool use_session_key,
-                                    const std::string& token_header = "");
-
 // 对外统一接口：发送设备信息→获取可信JWT令牌
 TokenResult TokenManager::get_trusted_token(const DeviceInfo& info) {
     RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "===== 开始获取可信JWT令牌 =====");
@@ -68,88 +62,50 @@ TokenResult TokenManager::get_trusted_token(const DeviceInfo& info) {
     return res;
 }
 
-// 直接用已有 token 头获取 MQTT 连接令牌（HTTP GET）
-TokenResult TokenManager::get_mqtt_token_v1(const DeviceInfo& info, const std::string& base_token) {
-#if USE_MOCK_TOKEN
-    TokenResult res;
-    res.jwt_token = "MOCK_MQTT_TOKEN_FROM_V1";
-    res.exp = 3600000;
-    res.success = true;
-    return res;
-#else
-    TokenResult res;
-    try {
-        cpr::Header headers;
-        headers["Content-Type"] = "application/json; charset=UTF-8";
-        headers["token"] = base_token;
-        headers["gversion"] = info.version;
-        headers["gclient"] = info.client;
-        headers["gapp-version"] = info.app_version;
-
-        std::string url = info.api_base_url + "/api/auth/v1/getMqttToken";
-        auto http_res = cpr::Get(cpr::Url{url}, headers, cpr::Timeout{5000});
-        RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "getMqttToken HTTP返回码:%ld", http_res.status_code);
-        if (http_res.error) {
-            res.success = false;
-            res.err_msg = "HTTP错误:" + http_res.error.message;
-            RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "getMqttToken HTTP错误详情: %s", http_res.error.message.c_str());
-            return res;
-        }
-        if (http_res.status_code != 200) {
-            res.success = false;
-            res.err_msg = "HTTP状态:" + std::to_string(http_res.status_code);
-            RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "getMqttToken 错误响应正文: %s", http_res.text.c_str());
-            return res;
-        }
-
-        auto json_resp = nlohmann::json::parse(http_res.text, nullptr, false);
-        if (json_resp.is_discarded()) {
-            res.success = false;
-            res.err_msg = "响应JSON解析失败";
-            return res;
-        }
-        nlohmann::json data = json_resp.contains("data") ? json_resp["data"] : json_resp;
-        res.jwt_token = data.value("token", std::string(""));
-        res.exp = data.value("exp", static_cast<int64_t>(0));
-        res.success = !res.jwt_token.empty();
-        if (!res.success) {
-            res.err_msg = "token缺失";
-            } else {
-                RCLCPP_INFO(rclcpp::get_logger("TokenManager"),
-                            "✅ getMqttToken成功：前24=%s，exp=%ldms",
-                            res.jwt_token.substr(0, 24).c_str(), res.exp);
-        }
-    } catch (const std::exception& e) {
-        res.success = false;
-        res.err_msg = "获取MQTT令牌异常:" + std::string(e.what());
-    }
-    return res;
-#endif
-}
-
 // 获取会话密钥对（设备开机/重置时调用）
 SessionKeyResult TokenManager::get_session_key(const DeviceInfo& info) {
 #if USE_MOCK_TOKEN
     return mock_get_session_key(info);
 #else
-    RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "【真实模式】调用获取会话密钥接口");
-    SessionKeyResult res;
-    try {
-        nlohmann::json body;
-        body["sn"] = info.vin;
-        body["model"] = info.model;
-        std::string body_str = body.dump();
+    RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "【真实模式】调用获取会话密钥接口（设备：%s，型号：%s）", info.vin.c_str(), info.model.c_str());
+        SessionKeyResult res;
+        try {
+            nlohmann::json body;
+            body["sn"] = info.vin;
+            body["model"] = info.model;
+            std::string body_str = body.dump();
 
-        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "会话密钥请求体:%s", body_str.c_str());
-        auto headers = build_headers_v2(info, body_str, false);
-        RCLCPP_INFO(rclcpp::get_logger("TokenManager"),
-                "会话密钥请求头: gkey-no=%s gtime=%s gnonce=%s",
-                headers.count("gkey-no")? headers["gkey-no"].c_str():"(empty)",
-                headers["gtime"].c_str(), headers["gnonce"].c_str());
-        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "会话密钥gsign前20:%s", headers["gsign"].substr(0,20).c_str());
-        std::string url = info.api_base_url + "/api/adevice/v1/auth/getSessionKey";
+            // 打印请求参数
+            RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "📤 会话密钥请求 - sn:%s, model:%s", info.vin.c_str(), info.model.c_str());
+            RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "📤 会话密钥请求体:%s", body_str.c_str());
+            
+            auto headers = build_headers(info, body_str, false, "");
+            RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "📤 会话密钥请求头 - gkey-no:%s, gversion:%s, gclient:%s, gapp-version:%s, gtime:%s, gnonce:%s, gsign:%s", 
+                        headers["gkey-no"].substr(0, 20).c_str(),
+                        headers["gversion"].c_str(),
+                        headers["gclient"].c_str(),
+                        headers["gapp-version"].c_str(),
+                        headers["gtime"].c_str(),
+                        headers["gnonce"].substr(0, 16).c_str(),
+                        headers["gsign"].substr(0, 20).c_str());
+            RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "会话密钥GSign前20:%s", headers["gsign"].substr(0,20).c_str());
+            std::string url = info.api_base_url + "/api/adevice/v1/auth/getSessionKey";
+        RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "📡 会话密钥API URL: %s", url.c_str());
         auto http_res = cpr::Post(cpr::Url{url}, headers, cpr::Body{body_str}, cpr::Timeout{5000});
         RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "会话密钥HTTP返回码:%ld", http_res.status_code);
+        
+        // 打印完整的响应头
+        RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "📥 会话密钥响应头完整信息:");
+        for (const auto& header : http_res.header) {
+            RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "  %s: %s", header.first.c_str(), header.second.c_str());
+        }
+        
+        // 打印响应头
+        RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "📥 会话密钥响应头 - gtime:%s, gnonce:%s, gsign:%s", 
+                    http_res.header.count("gtime") ? http_res.header["gtime"] : "",
+                    http_res.header.count("gnonce") ? http_res.header["gnonce"] : "",
+                    http_res.header.count("gsign") ? http_res.header["gsign"] : "");
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "会话密钥响应:%s", http_res.text.c_str());
         if (http_res.error) {
             res.success = false;
             res.err_msg = "HTTP错误:" + http_res.error.message;
@@ -158,17 +114,36 @@ SessionKeyResult TokenManager::get_session_key(const DeviceInfo& info) {
         if (http_res.status_code != 200) {
             res.success = false;
             res.err_msg = "HTTP状态:" + std::to_string(http_res.status_code);
-            RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "会话密钥错误响应正文: %s", http_res.text.c_str());
             return res;
         }
 
         auto json_resp = nlohmann::json::parse(http_res.text, nullptr, false);
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "会话密钥响应:%s", http_res.text.c_str());
         if (json_resp.is_discarded()) {
             res.success = false;
             res.err_msg = "响应JSON解析失败";
             return res;
         }
+        
+        // 检查是否返回错误
+        if (json_resp.contains("code") && json_resp["code"].is_number()) {
+            int code = json_resp["code"];
+            if (code != 0) {
+                res.success = false;
+                res.err_msg = json_resp.value("msg", std::string("未知错误"));
+                RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "❌ 会话密钥API返回错误 - code:%d, msg:%s", code, res.err_msg.c_str());
+                return res;
+            }
+        }
+        
         nlohmann::json data = json_resp.contains("data") ? json_resp["data"] : json_resp;
+        if (data.is_null()) {
+            res.success = false;
+            res.err_msg = "响应数据为空";
+            RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "❌ 会话密钥响应数据为空");
+            return res;
+        }
+        
         res.public_key = data.value("publicKey", std::string(""));
         res.private_key = data.value("privateKey", std::string(""));
         res.key_no = data.value("keyNo", std::string(""));
@@ -176,10 +151,25 @@ SessionKeyResult TokenManager::get_session_key(const DeviceInfo& info) {
         if (!res.success) {
             res.err_msg = "publicKey/privateKey 缺失";
         }
-        if (res.success) {
-            RCLCPP_INFO(rclcpp::get_logger("TokenManager"),
-                        "✅ 会话密钥获取成功：keyNo=%s，pub前16=%s",
-                        res.key_no.c_str(), res.public_key.substr(0, 16).c_str());
+        
+        // 验签：gtime + gnonce + body
+        if (res.success && !info.root_public_key.empty()) {
+            std::string res_gtime = http_res.header.count("gtime") ? http_res.header["gtime"] : "";
+            std::string res_gnonce = http_res.header.count("gnonce") ? http_res.header["gnonce"] : "";
+            std::string res_gsign = http_res.header.count("gsign") ? http_res.header["gsign"] : "";
+            
+            if (!res_gtime.empty() && !res_gnonce.empty() && !res_gsign.empty()) {
+                std::string res_text = res_gtime + res_gnonce + http_res.text;
+                SignatureConfig cfg;
+                cfg.public_key = info.root_public_key;
+                SignatureManager sm(cfg, rclcpp::get_logger("TokenManager"));
+                bool verified = sm.verify_data_with_base64_key(res_text, res_gsign, info.root_public_key);
+                if (!verified) {
+                    RCLCPP_WARN(rclcpp::get_logger("TokenManager"), "⚠️ 会话密钥响应验签失败");
+                } else {
+                    RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "✅ 会话密钥响应验签通过");
+                }
+            }
         }
     } catch (const std::exception& e) {
         res.success = false;
@@ -189,26 +179,21 @@ SessionKeyResult TokenManager::get_session_key(const DeviceInfo& info) {
 #endif
 }
 
-// 内部：构造通用头（含签名，v2：小写g*，含gkey-no）
-static cpr::Header build_headers_v2(const DeviceInfo& info,
-                                    const std::string& body_json,
-                                    bool use_session_key,
-                                    const std::string& token_header) {
+// 内部：构造通用头（含签名）
+cpr::Header TokenManager::build_headers(const DeviceInfo& info, const std::string& body_json, bool use_session_key, const std::string& token) {
     cpr::Header headers;
-    headers["Content-Type"] = "application/json; charset=UTF-8";
-    headers["Accept-Language"] = info.language;
+    headers["content-type"] = "application/json; charset=UTF-8";
+    // 关键：添加gkey-no头，用于身份认证
+    std::string gkey_no = use_session_key && !info.session_key_no.empty() ? info.session_key_no : info.gkey_no;
+    headers["gkey-no"] = gkey_no;
     headers["gversion"] = info.version;
+    headers["glanguage"] = info.language;
     headers["gclient"] = info.client;
     headers["gapp-version"] = info.app_version;
-    if (!token_header.empty()) {
-        headers["token"] = token_header;
-    }
-    // 可选：语言不参与签名，若服务端无需可省略
     auto now_ms = std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count());
     headers["gtime"] = now_ms;
 
-    // 16字节hex随机数
     std::uniform_int_distribution<uint64_t> dis;
     static thread_local std::mt19937_64 gen(std::random_device{}());
     uint64_t a = dis(gen), b = dis(gen);
@@ -218,13 +203,7 @@ static cpr::Header build_headers_v2(const DeviceInfo& info,
     std::string nonce = ss.str();
     headers["gnonce"] = nonce;
 
-    // gkey-no：服务端分配的密钥编号（仅在非空时设置）
-    std::string key_no = info.key_no;
-    if (!key_no.empty()) {
-        headers["gkey-no"] = key_no;
-    }
-
-    // 选择签名私钥：业务流优先用会话密钥，获取会话密钥时用根密钥
+    // 选择签名密钥：使用会话密钥或根密钥
     const std::string& signing_key = (use_session_key && !info.session_private_key.empty())
                                          ? info.session_private_key
                                          : (!info.root_private_key.empty() ? info.root_private_key
@@ -232,15 +211,15 @@ static cpr::Header build_headers_v2(const DeviceInfo& info,
 
     SignatureConfig cfg;
     cfg.private_key = signing_key;
-    SignatureManager sm(cfg, rclcpp::get_logger("TokenManager"));
+    SignatureManager sm(cfg, rclcpp::get_logger("mqtt_module::TokenManager"));
 
-    // 按文档要求拼接签名原文：gkey-no + token(可选) + gversion + gclient + gapp-version + gtime + gnonce + body
-    std::string gkey_no_val = key_no; // 若未设置header则为空字符串
-    auto it_token = headers.find("token");
-    const std::string token_part = (it_token != headers.end()) ? it_token->second : std::string();
-    std::string sign_source = gkey_no_val + token_part + headers["gversion"] + headers["gclient"] +
+    // 构建签名源字符串：所有接口统一使用gkey-no+gversion+gclient+gapp-version+gtime+gnonce+body
+    std::string sign_source = headers["gkey-no"] + headers["gversion"] + headers["gclient"] +
                                headers["gapp-version"] + headers["gtime"] + headers["gnonce"] + body_json;
+    
     headers["gsign"] = sm.sign_data(sign_source);
+    RCLCPP_DEBUG(rclcpp::get_logger("mqtt_module::TokenManager"), "签名源: %s", sign_source.c_str());
+    RCLCPP_DEBUG(rclcpp::get_logger("mqtt_module::TokenManager"), "签名结果: %s", headers["gsign"].c_str());
     return headers;
 }
 
@@ -257,15 +236,28 @@ ChallengeResult TokenManager::get_challenge(const DeviceInfo& info) {
         body["model"] = info.model;
         std::string body_str = body.dump();
 
-        auto headers = build_headers_v2(info, body_str, true);
-        RCLCPP_INFO(rclcpp::get_logger("TokenManager"),
-                "Challenge请求头: gkey-no=%s gtime=%s gnonce=%s",
-                headers.count("gkey-no")? headers["gkey-no"].c_str():"(empty)",
-                headers["gtime"].c_str(), headers["gnonce"].c_str());
+        // 打印请求参数
+        RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "📤 Challenge请求参数 - sn:%s, model:%s", info.vin.c_str(), info.model.c_str());
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "📤 Challenge请求体:%s", body_str.c_str());
+
+        auto headers = build_headers(info, body_str, true, "");
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "📤 Challenge请求头 - gkey-no:%s, gversion:%s, gclient:%s, gapp-version:%s, gtime:%s, gnonce:%s, gsign:%s", 
+                    headers["gkey-no"].substr(0, 20).c_str(),
+                    headers["gversion"].c_str(),
+                    headers["gclient"].c_str(),
+                    headers["gapp-version"].c_str(),
+                    headers["gtime"].c_str(),
+                    headers["gnonce"].substr(0, 16).c_str(),
+                    headers["gsign"].substr(0, 20).c_str());
         RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "Challenge签名前20:%s", headers["gsign"].substr(0,20).c_str());
         std::string url = info.api_base_url + "/api/adevice/v1/auth/challenge";
         auto http_res = cpr::Post(cpr::Url{url}, headers, cpr::Body{body_str}, cpr::Timeout{5000});
         RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "Challenge HTTP返回码:%ld", http_res.status_code);
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "Challenge响应头 - gtime:%s, gnonce:%s, gsign:%s", 
+                    http_res.header.count("gtime") ? http_res.header["gtime"] : "",
+                    http_res.header.count("gnonce") ? http_res.header["gnonce"] : "",
+                    http_res.header.count("gsign") ? http_res.header["gsign"].substr(0, 20) : "");
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "Challenge响应体:%s", http_res.text.c_str());
         if (http_res.error) {
             res.success = false;
             res.err_msg = "HTTP错误:" + http_res.error.message;
@@ -274,51 +266,66 @@ ChallengeResult TokenManager::get_challenge(const DeviceInfo& info) {
         if (http_res.status_code != 200) {
             res.success = false;
             res.err_msg = "HTTP状态:" + std::to_string(http_res.status_code);
-            RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "Challenge错误响应正文: %s", http_res.text.c_str());
             return res;
         }
 
         auto json_resp = nlohmann::json::parse(http_res.text, nullptr, false);
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "Challenge响应:%s", http_res.text.c_str());
         if (json_resp.is_discarded()) {
             res.success = false;
             res.err_msg = "响应JSON解析失败";
             return res;
         }
-        // 兼容两种返回：直接包含字段或 data 包裹
-        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "Challenge原始响应前200: %s",
-                     http_res.text.substr(0, 200).c_str());
-        nlohmann::json data = json_resp.contains("data") ? json_resp["data"] : json_resp;
-        res.challenge = data.value("challenge", "");
-        res.exp = data.value("exp", static_cast<int64_t>(0));
-        // 有些服务端不返回 createTime，这里做兜底：
-        // - 优先读取 createTime/create_time/serverTime 字段
-        // - 若缺失或为0，使用当前本地时间作为生成时间起点，避免被误判为过期
-        {
-            int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            if (data.contains("createTime")) {
-                res.create_time = data.value("createTime", static_cast<int64_t>(0));
-            } else if (data.contains("create_time")) {
-                res.create_time = data.value("create_time", static_cast<int64_t>(0));
-            } else if (data.contains("serverTime")) {
-                res.create_time = data.value("serverTime", static_cast<int64_t>(0));
-            } else {
-                res.create_time = 0;
-            }
-            if (res.create_time <= 0) {
-                RCLCPP_WARN(rclcpp::get_logger("TokenManager"), "⚠️ Challenge缺少生成时间，使用本地时间兜底");
-                res.create_time = now;
-            }
-            // 兼容不同有效期字段命名
-            if (res.exp <= 0) {
-                if (data.contains("expire")) res.exp = data.value("expire", static_cast<int64_t>(0));
-                else if (data.contains("ttl")) res.exp = data.value("ttl", static_cast<int64_t>(0));
-                else if (data.contains("expireInMs")) res.exp = data.value("expireInMs", static_cast<int64_t>(0));
+        
+        // 检查是否返回错误
+        if (json_resp.contains("code") && json_resp["code"].is_number()) {
+            int code = json_resp["code"];
+            if (code != 0) {
+                res.success = false;
+                res.err_msg = json_resp.value("msg", std::string("未知错误"));
+                RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "❌ Challenge API返回错误 - code:%d, msg:%s", code, res.err_msg.c_str());
+                return res;
             }
         }
+        
+        // 兼容两种返回：直接包含字段或 data 包裹
+        nlohmann::json data = json_resp.contains("data") ? json_resp["data"] : json_resp;
+        
+        // 检查 data 是否为 null
+        if (data.is_null()) {
+            res.success = false;
+            res.err_msg = "响应数据为空";
+            RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "❌ Challenge响应数据为空");
+            return res;
+        }
+        
+        res.challenge = data.value("challenge", "");
+        res.exp = data.value("exp", static_cast<int64_t>(0));
+        res.create_time = data.value("createTime", static_cast<int64_t>(0)); // 服务端生成时间
+        res.gtime = http_res.header.count("gtime") ? std::stoll(http_res.header["gtime"]) : 0; // 响应头 gtime
         res.success = !res.challenge.empty();
         if (!res.success) {
             res.err_msg = "Challenge缺失";
+        }
+        
+        // 验签：gtime + gnonce + body
+        if (res.success && !info.session_public_key.empty()) {
+            std::string res_gtime = http_res.header.count("gtime") ? http_res.header["gtime"] : "";
+            std::string res_gnonce = http_res.header.count("gnonce") ? http_res.header["gnonce"] : "";
+            std::string res_gsign = http_res.header.count("gsign") ? http_res.header["gsign"] : "";
+            
+            if (!res_gtime.empty() && !res_gnonce.empty() && !res_gsign.empty()) {
+                std::string res_text = res_gtime + res_gnonce + http_res.text;
+                SignatureConfig cfg;
+                cfg.public_key = info.session_public_key;
+                SignatureManager sm(cfg, rclcpp::get_logger("TokenManager"));
+                bool verified = sm.verify_data_with_base64_key(res_text, res_gsign, info.session_public_key);
+                if (!verified) {
+                    RCLCPP_WARN(rclcpp::get_logger("TokenManager"), "⚠️ Challenge响应验签失败");
+                } else {
+                    RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "✅ Challenge响应验签通过");
+                }
+            }
         }
     } catch (const std::exception& e) {
         res.success = false;
@@ -343,15 +350,31 @@ TokenResult TokenManager::get_jwt_token(const DeviceInfo& info, const ChallengeR
         body["challenge"] = challenge_res.challenge;
         std::string body_str = body.dump();
 
-        auto headers = build_headers_v2(info, body_str, true);
-        RCLCPP_INFO(rclcpp::get_logger("TokenManager"),
-                "Token请求头: gkey-no=%s gtime=%s gnonce=%s",
-                headers.count("gkey-no")? headers["gkey-no"].c_str():"(empty)",
-                headers["gtime"].c_str(), headers["gnonce"].c_str());
+        // 打印请求参数
+        RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "📤 Token请求参数 - sn:%s, model:%s, challenge:%s", 
+                    info.vin.c_str(), info.model.c_str(), challenge_res.challenge.substr(0, 20).c_str());
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "📥 Token请求体:%s", body_str.c_str());
+
+        auto headers = build_headers(info, body_str, true, "");
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "📤 Token请求头 - gkey-no:%s, gversion:%s, gclient:%s, gapp-version:%s, gtime:%s, gnonce:%s, gsign:%s", 
+                    headers["gkey-no"].substr(0, 20).c_str(),
+                    headers["gversion"].c_str(),
+                    headers["gclient"].c_str(),
+                    headers["gapp-version"].c_str(),
+                    headers["gtime"].c_str(),
+                    headers["gnonce"].substr(0, 16).c_str(),
+                    headers["gsign"].substr(0, 20).c_str());
         RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "Token签名前20:%s", headers["gsign"].substr(0,20).c_str());
         std::string url = info.api_base_url + "/api/adevice/v1/auth/getToken";
         auto http_res = cpr::Post(cpr::Url{url}, headers, cpr::Body{body_str}, cpr::Timeout{5000});
         RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "Token HTTP返回码:%ld", http_res.status_code);
+        
+        // 打印响应头
+        RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "📥 Token响应头 - gtime:%s, gnonce:%s, gsign:%s", 
+                    http_res.header.count("gtime") ? http_res.header["gtime"] : "",
+                    http_res.header.count("gnonce") ? http_res.header["gnonce"] : "",
+                    http_res.header.count("gsign") ? http_res.header["gsign"] : "");
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "Token响应体:%s", http_res.text.c_str());
         if (http_res.error) {
             res.success = false;
             res.err_msg = "HTTP错误:" + http_res.error.message;
@@ -360,7 +383,6 @@ TokenResult TokenManager::get_jwt_token(const DeviceInfo& info, const ChallengeR
         if (http_res.status_code != 200) {
             res.success = false;
             res.err_msg = "HTTP状态:" + std::to_string(http_res.status_code);
-            RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "Token错误响应正文: %s", http_res.text.c_str());
             return res;
         }
 
@@ -385,10 +407,26 @@ TokenResult TokenManager::get_jwt_token(const DeviceInfo& info, const ChallengeR
         res.success = !res.jwt_token.empty();
         if (!res.success) {
             res.err_msg = "token缺失";
-        } else {
-            RCLCPP_INFO(rclcpp::get_logger("TokenManager"),
-                        "✅ 获取JWT成功：前24=%s，exp=%ldms",
-                        res.jwt_token.substr(0, 24).c_str(), res.exp);
+        }
+        
+        // 验签：gtime + gnonce + body
+        if (res.success && !info.session_public_key.empty()) {
+            std::string res_gtime = http_res.header.count("gtime") ? http_res.header["gtime"] : "";
+            std::string res_gnonce = http_res.header.count("gnonce") ? http_res.header["gnonce"] : "";
+            std::string res_gsign = http_res.header.count("gsign") ? http_res.header["gsign"] : "";
+            
+            if (!res_gtime.empty() && !res_gnonce.empty() && !res_gsign.empty()) {
+                std::string res_text = res_gtime + res_gnonce + http_res.text;
+                SignatureConfig cfg;
+                cfg.public_key = info.session_public_key;
+                SignatureManager sm(cfg, rclcpp::get_logger("TokenManager"));
+                bool verified = sm.verify_data_with_base64_key(res_text, res_gsign, info.session_public_key);
+                if (!verified) {
+                    RCLCPP_WARN(rclcpp::get_logger("TokenManager"), "⚠️ Token响应验签失败");
+                } else {
+                    RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "✅ Token响应验签通过");
+                }
+            }
         }
     } catch (const std::exception& e) {
         res.success = false;
@@ -398,12 +436,11 @@ TokenResult TokenManager::get_jwt_token(const DeviceInfo& info, const ChallengeR
 #endif
 }
 
-// 刷新MQTT连接令牌（真实实现）
-TokenResult TokenManager::refresh_mqtt_token(const DeviceInfo& info, const std::string& current_token) {
+// 刷新JWT令牌（真实实现）
+TokenResult TokenManager::refresh_jwt_token(const DeviceInfo& info, const std::string& current_token) {
 #if USE_MOCK_TOKEN
-    // Mock：直接返回新的模拟令牌
     TokenResult res;
-    res.jwt_token = current_token + "_REFRESHED";
+    res.jwt_token = "MOCK_REFRESHED_JWT_TOKEN";
     res.exp = 3600000;
     res.success = true;
     return res;
@@ -413,18 +450,14 @@ TokenResult TokenManager::refresh_mqtt_token(const DeviceInfo& info, const std::
     try {
         nlohmann::json body;
         body["sn"] = info.vin;
-        body["model"] = info.model;
+        body["token"] = current_token;
         std::string body_str = body.dump();
 
-        auto headers = build_headers_v2(info, body_str, true, current_token);
-        RCLCPP_INFO(rclcpp::get_logger("TokenManager"),
-                "Refresh请求头: gkey-no=%s gtime=%s gnonce=%s",
-                headers.count("gkey-no")? headers["gkey-no"].c_str():"(empty)",
-                headers["gtime"].c_str(), headers["gnonce"].c_str());
-        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "Refresh签名前20:%s", headers["gsign"].substr(0,20).c_str());
+        auto headers = build_headers(info, body_str, true, current_token);
+        RCLCPP_DEBUG(rclcpp::get_logger("TokenManager"), "RefreshToken签名前20:%s", headers["gsign"].substr(0,20).c_str());
         std::string url = info.api_base_url + "/api/adevice/v1/auth/refreshToken";
         auto http_res = cpr::Post(cpr::Url{url}, headers, cpr::Body{body_str}, cpr::Timeout{5000});
-        RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "Refresh HTTP返回码:%ld", http_res.status_code);
+        RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "RefreshToken HTTP返回码:%ld", http_res.status_code);
         if (http_res.error) {
             res.success = false;
             res.err_msg = "HTTP错误:" + http_res.error.message;
@@ -433,7 +466,6 @@ TokenResult TokenManager::refresh_mqtt_token(const DeviceInfo& info, const std::
         if (http_res.status_code != 200) {
             res.success = false;
             res.err_msg = "HTTP状态:" + std::to_string(http_res.status_code);
-            RCLCPP_ERROR(rclcpp::get_logger("TokenManager"), "Refresh错误响应正文: %s", http_res.text.c_str());
             return res;
         }
 
@@ -449,10 +481,6 @@ TokenResult TokenManager::refresh_mqtt_token(const DeviceInfo& info, const std::
         res.success = !res.jwt_token.empty();
         if (!res.success) {
             res.err_msg = "token缺失";
-        } else {
-            RCLCPP_INFO(rclcpp::get_logger("TokenManager"),
-                        "✅ 刷新JWT成功：前24=%s，exp=%ldms",
-                        res.jwt_token.substr(0, 24).c_str(), res.exp);
         }
     } catch (const std::exception& e) {
         res.success = false;
@@ -467,12 +495,11 @@ bool TokenManager::check_challenge_exp(const ChallengeResult& challenge_res) {
     int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()
     ).count();
-    // 使用服务端返回的真实生成时间，若缺失/为0则使用当前时间兜底
-    int64_t challenge_create_time = challenge_res.create_time;
-    if (challenge_create_time <= 0) {
-        RCLCPP_WARN(rclcpp::get_logger("TokenManager"), "⚠️ Challenge生成时间为0，使用当前时间兜底校验");
-        challenge_create_time = now;
-    }
+    
+    // 使用 Challenge 的实际获取时间（从响应头 gtime 获取）
+    // 如果 challenge_res.gtime 为 0，说明响应中没有 gtime 字段
+    // 此时应该使用当前时间作为 Challenge 的获取时间
+    int64_t challenge_create_time = (challenge_res.gtime == 0) ? now : challenge_res.gtime;
     bool is_valid = (now - challenge_create_time) < challenge_res.exp;
     
     RCLCPP_INFO(rclcpp::get_logger("TokenManager"), "校验Challenge有效期：%s（当前时间%ld，生成时间%ld，有效期%ld）",

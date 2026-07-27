@@ -1,0 +1,168 @@
+shared_control_assist:
+  ros__parameters:
+    # ---------------- Topic 配置 ----------------
+    # 摇杆/人工控制输入，节点会在此基础上做限速、避障和窄门角速度修正。
+    input_control_topic: "/handle/control"
+
+    # 最终输出到底盘电机控制链路的速度指令。
+    output_control_topic: "/nav/control"
+
+    # 车辆实际速度，用于门洞状态机估算通过进度；没有该数据时会退化使用上一帧输出速度。
+    wheel_speed_topic: "/wheel/twist"
+
+    # 三个水平雷达输入，要求 TF 能从各雷达 frame 转到 base_frame。
+    left_scan_topic: "/scan/left"
+    right_scan_topic: "/scan/right"
+    back_scan_topic: "/scan/back"
+
+    # 辅助总开关。false 时进入 MANUAL_ONLY，但仍保留最后安全裁剪。
+    assist_enable_topic: "/assist/enable"
+
+    # 调试/可视化输出。
+    assist_points_topic: "/assist/points"
+    assist_local_grid_topic: "/assist/local_grid"
+    assist_state_topic: "/assist/state"
+    debug_markers_topic: "/assist/debug/markers"
+    debug_reason_topic: "/assist/debug/reason"
+    debug_door_score_topic: "/assist/debug/door_score"
+
+    # 车体坐标系，x 向前、y 向左。
+    base_frame: "base_link"
+
+    # ---------------- 频率与超时 ----------------
+    # 主控制循环频率，最终 /nav/control 按此频率发布。
+    control_rate: 50.0
+
+    # 点云、栅格、Marker、状态文本等调试 topic 的发布频率。
+    debug_publish_rate: 10.0
+
+    # 摇杆超时后立即输出零速度。
+    command_timeout: 0.20
+
+    # 雷达数据超过该时间未更新时视为掉线；有非零控制命令时会触发保守停车。
+    lidar_timeout: 0.30
+
+    # TF 连续失败超过该时间后进入 FAULT。
+    tf_fail_timeout: 0.50
+
+    # 至少需要多少路新鲜雷达数据才允许执行非零控制。三水平雷达方案默认要求 3 路都在线。
+    min_fresh_lidars: 3
+
+    # 关闭后不发布点云、栅格、Marker、状态等调试 topic。
+    publish_debug_topics: true
+
+    # ---------------- 车体尺寸 ----------------
+    # 车辆几何尺寸，单位 m。front_edge/rear_edge 是 base_link 下车体前后边缘。
+    vehicle_length: 0.96
+    vehicle_width: 0.68
+    front_edge: 0.48
+    rear_edge: -0.48
+
+    # 过滤车体自身点时的额外边界，避免雷达扫到车体结构被当成障碍。
+    footprint_padding: 0.03
+
+    # ---------------- 雷达点处理 ----------------
+    # LaserScan 距离过滤范围，超出范围、NaN、Inf 都会被丢弃。
+    scan_min_range: 0.05
+    scan_max_range: 4.00
+
+    # 雷达点采样步长。1 表示不降采样；CPU 紧张时可调大。
+    scan_sample_step: 1
+
+    # ---------------- 局部栅格 ----------------
+    # 栅格坐标范围在 base_frame 下，覆盖前方过门、侧边贴边和后退保护区域。
+    grid_resolution: 0.03
+    grid_x_min: -1.20
+    grid_x_max: 2.20
+    grid_y_min: -1.20
+    grid_y_max: 1.20
+
+    # 栅格障碍膨胀半径，用于 RViz 和调试观察；安全距离另由下面安全参数控制。
+    grid_inflation: 0.08
+
+    # ---------------- 安全区与限速 ----------------
+    # stop_distance 内触发停车；slow_distance 内按距离连续降速。
+    front_stop_distance: 0.18
+    front_slow_distance: 0.60
+    rear_stop_distance: 0.16
+    rear_slow_distance: 0.45
+    side_stop_distance: 0.05
+    side_slow_distance: 0.18
+
+    # 停车判定所需最小点数，降低单点噪声误触发。
+    min_valid_points_for_stop: 3
+
+    # 软件急停后保持零速度的时间。
+    emergency_stop_hold_time: 0.30
+
+    # ---------------- 门洞检测 ----------------
+    # 只在前方 ROI 内搜索门洞候选，降低侧后方障碍误判。
+    door_roi_x_min: 0.25
+    door_roi_x_max: 2.00
+    door_roi_y_min: -0.90
+    door_roi_y_max: 0.90
+
+    # 可通行门宽约束。min_door_width 应大于 vehicle_width + 2 * required_side_margin。
+    min_door_width: 0.72
+    max_door_width: 1.20
+    required_side_margin: 0.05
+
+    # 最大自由间隙检测的 y 方向离散分辨率和 x 截面采样设置。
+    door_bin_resolution: 0.03
+    door_x_sample_step: 0.08
+    door_x_window: 0.08
+
+    # 候选需要连续稳定的帧数；enter 是进入窄门辅助阈值，keep 是保持阈值。
+    door_stable_frame_count: 4
+    door_confidence_enter: 0.65
+    door_confidence_keep: 0.45
+
+    # 门候选短时丢失时允许保持上一候选的时间。
+    candidate_lost_timeout: 0.40
+
+    # ---------------- 窄门状态机 ----------------
+    # 用户前推超过该值才允许自动进入窄门辅助。
+    user_forward_threshold: 0.03
+
+    # 用户明显反向/大角速度操作时退出窄门辅助，保留人工优先。
+    user_cancel_angular_threshold: 0.60
+
+    # 状态机距离阈值，单位 m。
+    approach_distance: 1.20
+    align_distance: 0.80
+    enter_distance: 0.35
+
+    # 进入 ENTER 状态所需横向/角度误差。
+    lateral_error_enter: 0.04
+    angle_error_enter_deg: 5.0
+
+    # COMPLETE/ABORT 状态保持时间，到时回到 IDLE。
+    complete_hold_time: 0.50
+
+    # ---------------- 共享控制器 ----------------
+    # MANUAL_ONLY 下使用的速度上限。
+    manual_v_max: 0.45
+    manual_w_max: 1.00
+
+    # 普通障碍辅助模式速度上限。
+    obstacle_assist_v_max: 0.35
+    obstacle_assist_w_max: 0.80
+
+    # 窄门辅助速度上限；ALIGN/ENTER 会使用更低的 door_align_v_max。
+    door_v_max: 0.15
+    door_align_v_max: 0.08
+    door_w_max: 0.45
+
+    # 角速度修正增益：横向误差、角度误差、左右间隙差。
+    k_lateral: 1.20
+    k_angle: 1.00
+    k_gap: 0.80
+
+    # 自动辅助角速度与用户角速度的混合比例，越大越偏自动修正。
+    blend_ratio_approach: 0.50
+    blend_ratio_align: 0.80
+    blend_ratio_passing: 0.70
+
+    # 输出加速度限制，降低轮椅顿挫。
+    max_accel_linear: 0.25
+    max_accel_angular: 0.80

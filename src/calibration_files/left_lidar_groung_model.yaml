@@ -1,0 +1,32 @@
+ground_model:
+  ranges:
+    - x: 0.438363
+      y: -0.029887
+      det_x: 0.219247
+      det_y: -0.975669
+
+  start_point_side:
+    - x: -0.00427825
+      y: 0.351049
+      z: 0.0
+
+  end_point_side:
+    - x: 0.440926
+      y: -0.00256114
+      z: 0.0
+
+  segment_counts_side: [17, 20, 17, 16, 12]
+
+  start_point_front:
+    - x: 0.440926
+      y: -0.00256114
+      z: 0.0
+
+  end_point_front:
+    - x: 0.684197
+      y: -0.188805
+      z: 0.0
+
+  segment_counts_front: [11, 8]
+
+

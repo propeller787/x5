@@ -5,6 +5,8 @@
 
 #include "safety_node/output_shaper.h"
 
+#include <cmath>
+
 TEST(OutputShaperTest, EmergencyStopUsesRateLimitedDeceleration)
 {
   OutputShaper shaper;
@@ -147,7 +149,9 @@ TEST(OutputShaperTest, DirectionChangesStopBeforeReversing)
   negative.angular.z = -1.0;
   auto stopped = shaper.shape(negative, 0.025);
   EXPECT_GT(stopped.linear.x, 0.0);
-  EXPECT_DOUBLE_EQ(stopped.angular.z, 0.0);
+  // 方向反转时角速度按 slew rate 平滑过零，不再单周期归零
+  // 0.2 - max_angular_decel_rad_s2_(2.0) * dt(0.025) = 0.2 - 0.05 = 0.15
+  EXPECT_NEAR(stopped.angular.z, 0.15, 1e-9);
   for (int i = 0; i < 100 && stopped.linear.x > 1e-9; ++i) {
     stopped = shaper.shape(negative, 0.025);
     EXPECT_GE(stopped.linear.x, 0.0);
@@ -162,7 +166,79 @@ TEST(OutputShaperTest, DirectionChangesStopBeforeReversing)
   shaper.shape(initial, 0.025);
   const auto limited = shaper.shape(negative, 0.025);
   EXPECT_NEAR(limited.linear.x, -0.1015625, 1e-9);
-  EXPECT_DOUBLE_EQ(limited.angular.z, -0.15);
+  // 同向增幅（-0.1 → -1.0 均为负，非反转）：按加速 slew rate 限幅
+  // max_angular_accel_rad_s2_(2.0) * dt(0.025) = 0.05 → -0.1 - 0.05 = -0.15
+  EXPECT_NEAR(limited.angular.z, -0.15, 1e-9);
+}
+
+TEST(OutputShaperTest, LowPassLinearToZeroPreservesSteering)
+{
+  OutputShaper shaper;
+  geometry_msgs::msg::Twist moving;
+  moving.linear.x = 0.4;
+  moving.angular.z = 0.3;
+  shaper.shape(moving, 0.05);
+
+  const auto out = shaper.lowPassLinearToZero(0.05, 0.30, 0.3);
+
+  // 线速度按 exp(-dt/τ) 衰减
+  EXPECT_NEAR(out.linear.x, 0.4 * std::exp(-0.05 / 0.30), 1e-9);
+  // 角速度不参与衰减：前障贴身时仍要能转向脱离
+  EXPECT_DOUBLE_EQ(out.angular.z, 0.3);
+}
+
+TEST(OutputShaperTest, LowPassToZeroStillDecaysSteering)
+{
+  OutputShaper shaper;
+  geometry_msgs::msg::Twist moving;
+  moving.linear.x = 0.4;
+  moving.angular.z = 0.3;
+  shaper.shape(moving, 0.05);
+
+  // 对照组：摇杆回中用的双轴低通仍旧把角速度一起收敛
+  const auto out = shaper.lowPassToZero(0.05, 0.30);
+  EXPECT_NEAR(out.angular.z, 0.3 * std::exp(-0.05 / 0.30), 1e-9);
+}
+
+TEST(OutputShaperTest, LowPassLinearToZeroRateLimitsAngularTarget)
+{
+  OutputShaper shaper;
+  geometry_msgs::msg::Twist moving;
+  moving.linear.x = 0.4;
+  moving.angular.z = 0.1;
+  shaper.shape(moving, 0.05);
+
+  // 保留转向不等于放开转向：仍走 slewAngularToward 的 |Δωz| 限幅
+  // 默认 max_angular_accel_rad_s2_=2.0, dt=0.05 → max_delta=0.1
+  // 从 0.1 增大到 1.0：0.1 + 0.1 = 0.2
+  const auto out = shaper.lowPassLinearToZero(0.05, 0.30, 1.0);
+  EXPECT_NEAR(out.angular.z, 0.2, 1e-9);
+}
+
+// 低通滑行距离闭式解 d = τ·v₀：0.35 m/s + τ=0.30 应停在约 10 cm 内，
+// 即 16 cm 触发时仍留得住 stop_buffer。
+TEST(OutputShaperTest, LowPassLinearToZeroSlideDistanceMatchesTauTimesSpeed)
+{
+  OutputShaper shaper;
+  geometry_msgs::msg::Twist moving;
+  moving.linear.x = 0.35;
+  shaper.shape(moving, 0.05);
+
+  constexpr double kDt = 0.05;
+  constexpr double kTau = 0.30;
+  double distance = 0.0;
+  geometry_msgs::msg::Twist out = moving;
+  int steps = 0;
+  for (; steps < 500 && out.linear.x > 0.0; ++steps) {
+    out = shaper.lowPassLinearToZero(kDt, kTau, 0.0);
+    distance += out.linear.x * kDt;
+  }
+
+  EXPECT_DOUBLE_EQ(out.linear.x, 0.0);
+  EXPECT_LT(steps, 500);
+  // 连续解 τ·(v₀ − 停止阈值) = 0.102 m；离散求和略小。
+  EXPECT_GT(distance, 0.08);
+  EXPECT_LT(distance, 0.11);
 }
 
 TEST(OutputShaperTest, LinearAccelerationChangeIsJerkBounded)

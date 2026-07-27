@@ -83,10 +83,10 @@ constexpr double MIN_SPEED_LIMIT = 0.056;
 /**
  * @brief 最大速度限制 (m/s)
  * 
- * 换算: 1.67 m/s ≈ 6.0 km/h
+ * 换算: 2.22 m/s ≈ 8.0 km/h
  * 说明: 障碍物较远时允许的最大速度
  */
-constexpr double MAX_SPEED_LIMIT = 1.67;
+constexpr double MAX_SPEED_LIMIT = 2.22;
 
 // ==================== 聚类参数配置 ====================
 

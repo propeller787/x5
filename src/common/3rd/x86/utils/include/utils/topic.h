@@ -18,6 +18,7 @@ constexpr const char *appControlTopic = "/app/control";                    // ap
 constexpr const char *carWheelSpeedTopic = "/car/speed";                   // 车辆底盘信息
 constexpr const char *carWheelSpeedStaTopic = "/wheel/twist";              // 车辆底盘信息
 constexpr const char *carEncoderTopic = "/car/encoder";                    // 车辆电机圈数
+constexpr const char *wheelOdomTopic = "/sensor/wheel_odom";               // 轮速计里程计 nav_msgs/Odometry
 constexpr const char *healthDataTopic = "/sensor/health/data";             // 健康计信息
 constexpr const char *healthTftDataTopic = "/sensor/tft/health/data";      // tft健康计信息
 constexpr const char *sensorTftChargingStatusTopic = "/sensor/recharge/charging_status";
@@ -46,7 +47,8 @@ constexpr const char *rightTiltLaserTopic = "/scan/right_tilt";
 constexpr const char *backLaserTopic = "/scan/back";
 constexpr const char *leftTiltPointTopice = "/perception/left_tilt/pointcloud";
 constexpr const char *rightTiltPointTopice = "/perception/right_tilt/pointcloud";
-
+constexpr const char *leftTiltDebugScanTopic = "/safety/debug/tilt_left";
+constexpr const char *rightTiltDebugScanTopic = "/safety/debug/tilt_right";
 // 物理按键失效发布 1 驻车失败 2 解除驻车失败 3 助行失败
 constexpr const char *physicalButtonFailureTopic = "/vlago/physical/button/failure";
 // 安全功能开启/关闭发布 1 开启 0 关闭

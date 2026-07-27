@@ -121,4 +121,6 @@ private:
     
     // Z方向过滤阈值（米）- 过滤掉z小于此值的点
     double tilt_z_filter_threshold_;
+
+    bool debug_publish_{false};
 };

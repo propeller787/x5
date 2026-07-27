@@ -1,0 +1,24 @@
+# TFT 用户配置示例（程序默认读写 /opt/freego/user_config.yaml）
+# 用户名：字符串
+username: "未绑定"
+# 车辆模式：1 舒适 2 运动 (TFT屏 0 舒适 1 运动)
+vehicle_mode: 1
+# 声音开关：0 关闭 1 打开
+sound_on: 1
+# 当前软件版本号：字符串
+software_version: ""
+# 软件包可升级状态：0 不可升级 1 可升级
+upgrade_available: 0
+# 软件包可下载状态：0 不可下载 1 可下载
+download_available: 0
+# app下载界面状态：0 第一次开机 1 暂不下载 2 已下载下一步
+app_download_page_state: 0
+# app绑定界面：0 第一次开机 1 暂不绑定 2 已绑定(通过云端下发)
+app_bind_page_state: 0
+# 安全预警开关：0 关闭 1 打开
+safety_warning_enabled: 1
+# 档位记录：1-4 档
+gear_position: 1
+# 隐私协议
+privacy_policy: ""
+

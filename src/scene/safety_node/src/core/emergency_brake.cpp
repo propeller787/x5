@@ -40,6 +40,14 @@ bool EmergencyBrake::shouldEmergencyBrake(
     context != nullptr &&
     context->direction_command_active &&
     context->controlled_escape_active;
+  if (params_.braking_suppress_distance_emergency &&
+    params_.min_distance_braking_enabled &&
+    context != nullptr &&
+    context->forward_approach &&
+    risk.braking_limited)
+  {
+    return risk.emergency;
+  }
   if (risk.emergency) {
     return true;
   }

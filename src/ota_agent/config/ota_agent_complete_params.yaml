@@ -1,0 +1,152 @@
+ota_agent_node:
+  ros__parameters:
+    vin: "ZQKJ001"                      # 车辆识别码（VIN）
+    model: 1001                         # 车型 ID
+    model_str: "FREEGO X5 Air"          # 车型型号字符串
+    api_base_url: "http://39.107.107.204:22000"  # 云端 API 基础 URL
+    session_key: ""                     # 会话密钥（从 token_manager 获取）
+
+    # 2. MQTT 配置参数
+    mqtt:
+      broker: "mqtts://39.106.140.222:28883"  # MQTT Broker 地址
+      client_id: "ZQKJ001"              # MQTT 客户端 ID 唯一（使用 VIN）
+      username: ""                      # MQTT 用户名
+      password: ""                      # MQTT 密码
+      ca_cert: ""                       # CA 证书路径
+      cipher: ""                        # 加密套件
+      insecure_skip_verify: true        # 是否跳过服务器验证
+      retry_attempts: 3                 # 连接重试次数
+      retry_delay_base: 1.0             # 重试延迟基数（秒）
+
+    # 3. HTTP 协议参数
+    http:
+      timeout_ms: 30000                 # HTTP 请求超时（毫秒）
+      language: "zh-CN"                 # 语言设置（Glanguage）
+      client: "vehicle"  # 客户端标识（GClient）
+    
+    protocol:
+      version: "1"                      # 协议版本（Gversion）
+    
+    software:
+      version: "1.0"                    # ota软件版本（GApp-Version）
+    
+    hardware:
+      version: ""                       # 硬件版本
+
+    # ===========================================
+    token: 
+      root_key_no: "2;ZQKJ001;3"
+
+    # ===========================================
+    # 5. 签名配置
+    # ===========================================
+    signature:
+      private_key: "ydSKNkOGdKx0ITtDp2GtTN9MChiDo6SQXSSRRusli0U="  # 私钥（Base64）
+      public_key: ""                    # 公钥路径
+
+    # ===========================================
+    # 6. 版本管理参数
+    # ===========================================
+    domain:
+      version_file: "/tmp/ota_agent/domain_version.json"  # 域控版本文件路径（使用/tmp 避免权限问题）
+    
+    controller:
+      package_path: ""                  # 控制器固件包路径
+      boot_push_enabled: false          # Boot 推送使能
+    
+    mainline:
+      version: ""                  # 主线版本号
+      config_json_path: "/opt/freego/freego_version.json"
+
+    # ===========================================
+    # 7. ECU 映射参数
+    # ===========================================
+    ecu:
+      hardware_sn_map_json: "{}"        # ECU 硬件序列号映射 JSON
+      model_map_json: "{}"              # ECU 型号映射 JSON
+
+    # ===========================================
+    # 8. 广播配置参数
+    # ===========================================
+    boot:
+      broadcast:
+        enabled: false                  # Boot 广播使能
+        period_ms: 100                  # Boot 广播周期（毫秒）
+        topic: "/ota/boot_broadcast"    # Boot 广播主题
+        payload: "request_upgrade"      # Boot 广播内容
+    
+    version:
+      broadcast:
+        enabled: false                  # 版本广播使能
+        period_ms: 1000                 # 版本广播周期（毫秒）
+        topic: "/ota/version_broadcast" # 版本广播主题
+
+    # ===========================================
+    # 9. CAN 通信参数
+    # ===========================================
+    can:
+      use_socketcan: true              # 是否使用 SocketCAN
+      ifname: "can2"                    # CAN 接口名称
+      send_retries: 3                   # CAN 发送重试次数
+      retry_delay_ms: 50                # CAN 重试延迟（毫秒）
+      id:
+        domain: 0x3588                  # 域控 CAN ID
+        upper: 0x0510                   # 上控 CAN ID
+        lower: 0x0520                   # 下控 CAN ID
+
+    # ===========================================
+    # 10. 刷写（Flash）配置参数
+    # ===========================================
+    flash:
+      pull_mode: true                        # Pull 模式：true=下发 URL/MD5，false=推送镜像
+      pull_to_controllers_only: false         # Hybrid 模式：仅上/下控 Pull，3588 仍 Push
+      pull_timeout_sec: 300                # Pull 模式超时时间（秒）
+      self_flash_cmd: ""                # 自身刷写命令模板
+    
+    self:
+      reboot_cmd: ""                    # 自身重启命令模板
+      verify_cmd: ""                    # 自身验证命令模板
+      rollback_image_path: ""           # 回滚镜像路径
+
+    # 11. 完整性校验参数
+    integrity:
+      sha256_map_json: "{}"             # SHA256 校验映射 JSON
+      signature:
+        map_json: "{}"                  # 签名映射 JSON
+        pubkey_path: "/opt/freego/integrity/ed25519.b64"    # 签名公钥路径
+        algorithm: "ed25519"                # 签名算法
+        payload_template: "{version}|{url}|{md5}|{sha256}"  # 签名载荷模板
+      l3:
+        expected_versions_json: "{}"    # L3 层期望版本 JSON
+        required_nodes:
+          - ""                          # L3 层必需节点列表
+      l4:
+        required_nodes:                 # L4 层必需节点列表
+          - "cloud_manager"
+          - "common"
+          - "interface"
+          - "ota_agent"
+          - "postback"
+
+    # ===========================================
+    # 12. DBC 发布参数
+    # ===========================================
+    dbc:
+      enabled: false                    # DBC 发布使能
+      audio_type: 1                     # 音频提示类型
+      publish_count: 1                  # DBC 发布次数
+      publish_interval_ms: 200          # DBC 发布间隔（毫秒）
+
+    # ===========================================
+    # 13. ISO-TP 参数
+    # ===========================================
+    isotp:
+      chunk_size: 7                     # ISO-TP 连续帧有效载荷大小
+
+    # ===========================================
+    # 14. Mock CAN 测试参数
+    # ===========================================
+    mock_can:
+      outcome: "success"                # Mock CAN 结果：success | failure | timeout
+      fail_after_step: 2                # 触发失败前的进度步数
+      step_delay_ms: 100                # 是否输出完整 Token 日志

@@ -18,6 +18,14 @@
 #include <algorithm>
 #include <numeric>
 
+/** RATE_LIMITED 模式：每周期线速度/角速度最大变化量及线加速度上限（与 TFT 舒适/运动参数对应） */
+struct SmoothCommandLimits {
+    double max_linear_delta = 0.01; // 每周期 |Δvx| 上限 (m/s)
+    double max_angular_delta = 0.01; // 每周期 |Δωz| 上限 (rad/s)
+    /** 线加速度 (m/s²)；与 max_linear_delta 同时生效时取 min(Δ, a·dt)。设较大值则主要由 max_linear_delta 限制 */
+    double max_linear_accel_m_s2 = 100.0;
+};
+
 // 平滑滤波类型
 enum class FilterType {
     MOVING_AVERAGE,     // 移动平均
@@ -36,7 +44,9 @@ public:
     void setFilterType(FilterType type);
     void setWindowSize(size_t window_size);
     void setAlpha(double alpha);  // 指数平滑系数
-    
+    /** 仅 RATE_LIMITED：设置每周期线/角速度变化与线加速度上限（由 DecisionMaker 按 TFT 模式刷新） */
+    void setCommandLimits(const SmoothCommandLimits& limits);
+
     // 滤波处理
     geometry_msgs::msg::Twist filter(const geometry_msgs::msg::Twist& input);
     
@@ -81,4 +91,9 @@ private:
     SpeedReductionKalmanFilter speed_kf_;
     std::chrono::steady_clock::time_point last_kalman_time_;
     bool has_last_kalman_time_;
+
+    // RATE_LIMITED：指令变化率与计时
+    SmoothCommandLimits command_limits_;
+    std::chrono::steady_clock::time_point last_rate_limit_time_;
+    bool has_rate_limit_time_ = false;
 };

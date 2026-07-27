@@ -106,7 +106,7 @@ HandleCanAdapter::HandleCanAdapter(std::unordered_map<std::string, std::shared_p
     m_per_count_ = (2.0 * kPi * wheel_radius_m_) / counts_per_revolution_;
     wheel_odom_frame_id_ = this->get_parameter("wheel_odom_frame_id").as_string();
     wheel_odom_child_frame_id_ = this->get_parameter("wheel_odom_child_frame_id").as_string();
-    wheel_odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(wheelOdomTopic, 10);
+    wheel_odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(wheelOdomTopic, 30);
     RCLCPP_INFO(logger_, "Wheel odometry publisher on %s (radius=%.4fm separation=%.4fm counts/rev=%.1f)",
                 wheelOdomTopic, wheel_radius_m_, wheel_separation_m_, counts_per_revolution_);
 }

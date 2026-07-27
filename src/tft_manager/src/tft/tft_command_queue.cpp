@@ -117,67 +117,43 @@ void TftCommandQueue::processCommand(const TftCommand& cmd)
         return;
     }
 
+    const uint8_t station = tft_module_->stationAddr();
+
     switch (cmd.type) {
     case TftCommand::Type::PAGE_ID: {
-        // 构造页面ID命令：5AA5078200845A010001
-        std::vector<uint8_t> buf(10);
-        buf[0] = 0x5A;
-        buf[1] = 0xA5;
-        buf[2] = 0x07;
-        buf[3] = 0x82;
-        buf[4] = 0x00;
-        buf[5] = 0x84;
-        buf[6] = 0x5A;
-        buf[7] = 0x01;
-        buf[8] = (cmd.param1 >> 8) & 0xFF;
-        buf[9] = cmd.param1 & 0xFF;
-        tft_module_->startWrite(reinterpret_cast<char*>(buf.data()), buf.size());
+        // 关键字 0x5A01 + 页面ID 写入寄存器 0x0084
+        std::vector<uint8_t> payload{
+            0x5A, 0x01,
+            static_cast<uint8_t>((cmd.param1 >> 8) & 0xFF),
+            static_cast<uint8_t>(cmd.param1 & 0xFF)};
+        tft_module_->sendDcBusWritePayload(station, 0x0084, payload);
         break;
     }
     case TftCommand::Type::ADDRESS_DATA: {
-        // 构造地址数据命令：5AA5 05 82 1000 0002
-        std::vector<uint8_t> buf(8);
-        buf[0] = 0x5A;
-        buf[1] = 0xA5;
-        buf[2] = 0x05;
-        buf[3] = 0x82;
-        buf[4] = (cmd.param1 >> 8) & 0xFF; // 地址高字节
-        buf[5] = cmd.param1 & 0xFF;        // 地址低字节
-        buf[6] = (cmd.param2 >> 8) & 0xFF; // 数据高字节
-        buf[7] = cmd.param2 & 0xFF;        // 数据低字节
-        tft_module_->startWrite(reinterpret_cast<char*>(buf.data()), buf.size());
+        // 固定写入寄存器 0x1000，下发电量/数值
+        std::vector<uint8_t> payload{
+            static_cast<uint8_t>((cmd.param2 >> 8) & 0xFF),
+            static_cast<uint8_t>(cmd.param2 & 0xFF)};
+        tft_module_->sendDcBusWritePayload(station, 0x1000, payload);
+        break;
+    }
+    case TftCommand::Type::READ_REGISTER: {
+        // 读寄存器，param1=寄存器，param2=读取数量
+        const uint16_t reg = static_cast<uint16_t>(cmd.param1);
+        const uint8_t count = static_cast<uint8_t>(cmd.param2 & 0xFF);
+        tft_module_->sendDcBusRead(station, reg, count);
         break;
     }
     case TftCommand::Type::TEXT_DATA: {
-        // 构造文本数据命令
-        size_t total_length = 4 + 2 + cmd.text.length();
-        std::vector<uint8_t> buf(total_length);
-        buf[0] = 0x5A;
-        buf[1] = 0xA5;
-        buf[2] = total_length - 3;
-        buf[3] = 0x82;
-        buf[4] = (cmd.param1 >> 8) & 0xFF;
-        buf[5] = cmd.param1 & 0xFF;
-        for (size_t i = 0; i < cmd.text.length(); i++) {
-            buf[6 + i] = cmd.text[i];
-        }
-        tft_module_->startWrite(reinterpret_cast<char*>(buf.data()), buf.size());
+        std::vector<uint8_t> payload(cmd.text.begin(), cmd.text.end());
+        tft_module_->sendDcBusWritePayload(station, static_cast<uint16_t>(cmd.param1), payload);
         break;
     }
     case TftCommand::Type::ELECTRIC_INDEX: {
-        // 构造电量索引命令：5AA5 07 82 8001 0064 0064
-        std::vector<uint8_t> buf(10);
-        buf[0] = 0x5A;
-        buf[1] = 0xA5;
-        buf[2] = 0x07;
-        buf[3] = 0x82;
-        buf[4] = (cmd.param1 >> 8) & 0xFF;
-        buf[5] = cmd.param1 & 0xFF;
-        buf[6] = (cmd.param2 >> 8) & 0xFF;
-        buf[7] = cmd.param2 & 0xFF;
-        buf[8] = (cmd.param3 >> 8) & 0xFF;
-        buf[9] = cmd.param3 & 0xFF;
-        tft_module_->startWrite(reinterpret_cast<char*>(buf.data()), buf.size());
+        std::vector<uint8_t> payload{
+            static_cast<uint8_t>((cmd.param2 >> 8) & 0xFF), static_cast<uint8_t>(cmd.param2 & 0xFF),
+            static_cast<uint8_t>((cmd.param3 >> 8) & 0xFF), static_cast<uint8_t>(cmd.param3 & 0xFF)};
+        tft_module_->sendDcBusWritePayload(station, static_cast<uint16_t>(cmd.param1), payload);
         break;
     }
     case TftCommand::Type::RAW_DATA: {

@@ -46,6 +46,7 @@ struct HarnessConfig
   bool debug_enabled = false;
   bool require_perception = true;
   bool publish_standard_transforms = true;
+  bool self_filter_enabled = true;
   int min_fresh_sources = 1;
   double tf_lookup_timeout_s = 0.01;
   bool rebuild_map_each_frame = true;
@@ -81,9 +82,11 @@ rclcpp::NodeOptions testOptions(const std::string & node_name, const HarnessConf
       rclcpp::Parameter("debug.perception.max_points", 1000),
       rclcpp::Parameter("perception.max_points_per_source", 1000),
       rclcpp::Parameter("perception.max_pending_points", 5000),
+      rclcpp::Parameter("perception.self_filter.enabled", config.self_filter_enabled),
       rclcpp::Parameter("input_health.control_command_timeout_s", 0.12),
       rclcpp::Parameter("input_health.joystick_timeout_s", 0.12),
       rclcpp::Parameter("input_health.joystick_deadzone", 5),
+      rclcpp::Parameter("input_health.joystick_reverse_threshold", 20),
       rclcpp::Parameter("input_health.wheel_feedback_timeout_s", 0.12),
       rclcpp::Parameter("input_health.require_wheel_feedback", true),
       rclcpp::Parameter("input_health.perception_timeout_s", 0.12),
@@ -92,6 +95,12 @@ rclcpp::NodeOptions testOptions(const std::string & node_name, const HarnessConf
         "input_health.min_fresh_perception_sources",
         config.min_fresh_sources),
       rclcpp::Parameter("input_health.require_perception", config.require_perception),
+      rclcpp::Parameter("output.direction_reversal_fast_stop_enabled", true),
+      rclcpp::Parameter("output.direction_reversal_stop_decel_m_s2", 2.5),
+      rclcpp::Parameter("output.direction_reversal_stop_jerk_m_s3", 8.0),
+      rclcpp::Parameter("output.direction_reversal_release_speed_m_s", 0.03),
+      // 跳过本机 /opt/freego/user_config.yaml，避免开发机持久化状态干扰单测。
+      rclcpp::Parameter("user_config_file", ""),
     });
   return options;
 }
@@ -425,6 +434,17 @@ bool containsLog(const std::vector<std::string> & logs, const std::string & text
     [&text](const std::string & log) {return log.find(text) != std::string::npos;});
 }
 
+bool containsExplainedSpeedIntervention(const std::vector<std::string> & logs)
+{
+  return std::any_of(
+    logs.begin(), logs.end(),
+    [](const std::string & log) {
+      return log.find("\"speed_intervention_active\":true") != std::string::npos &&
+      log.find("\"speed_intervention_reason\":\"") != std::string::npos &&
+      log.find("\"speed_intervention_reason\":\"none\"") == std::string::npos;
+    });
+}
+
 size_t residentBytes()
 {
   std::ifstream statm("/proc/self/statm");
@@ -496,6 +516,9 @@ TEST_F(SafetyNodeIoTest, CenteredJoystickSmoothlyStopsDecayingControl)
 
   EXPECT_GT(harness.last_output.linear.x, 0.0);
   EXPECT_LT(harness.last_output.linear.x, 0.8);
+  EXPECT_TRUE(containsLog(harness.logs, "\"speed_intervention_active\":true"));
+  EXPECT_TRUE(
+    containsLog(harness.logs, "\"speed_intervention_reason\":\"joystick_neutral_brake"));
 
   harness.runFor(
     1600ms, [&]() {
@@ -506,6 +529,51 @@ TEST_F(SafetyNodeIoTest, CenteredJoystickSmoothlyStopsDecayingControl)
 
   EXPECT_NEAR(harness.last_output.linear.x, 0.0, 1e-9);
   EXPECT_NEAR(harness.last_output.angular.z, 0.0, 1e-9);
+}
+
+TEST_F(SafetyNodeIoTest, ReverseJoystickFastStopsResidualForwardCommand)
+{
+  IoHarness harness("safety_node_reverse_fast_stop_test");
+  harness.auto_publish_joystick = false;
+  harness.runFor(
+    600ms, [&]() {
+      harness.publishJoystick(80, 0);
+      harness.publishControl(0.8);
+      harness.publishWheel(0.8);
+    });
+
+  ASSERT_TRUE(harness.received_output);
+  const double forward_output = harness.last_output.linear.x;
+  ASSERT_GT(forward_output, 0.1);
+
+  harness.runFor(
+    300ms, [&]() {
+      harness.publishJoystick(-80, 0);
+      harness.publishControl(0.8);
+      harness.publishWheel(0.8);
+    });
+
+  EXPECT_GE(harness.last_output.linear.x, 0.0);
+  EXPECT_LT(harness.last_output.linear.x, forward_output - 1e-3);
+
+  harness.runFor(
+    1800ms, [&]() {
+      harness.publishJoystick(-80, 0);
+      harness.publishControl(0.8);
+      harness.publishWheel(0.0);
+    });
+
+  EXPECT_NEAR(harness.last_output.linear.x, 0.0, 1e-9);
+  EXPECT_NEAR(harness.last_output.angular.z, 0.0, 1e-9);
+
+  harness.runFor(
+    600ms, [&]() {
+      harness.publishJoystick(-80, 0);
+      harness.publishControl(-0.4);
+      harness.publishWheel(0.0);
+    });
+
+  EXPECT_LT(harness.last_output.linear.x, -0.01);
 }
 
 TEST_F(SafetyNodeIoTest, WheelTimeoutForcesZeroOutput)
@@ -579,6 +647,10 @@ TEST_F(SafetyNodeIoTest, TopicTypesAndQosMatchInterfaceContract)
       topics, "/safety/debug/perception_markers", "visualization_msgs/msg/MarkerArray"));
   EXPECT_TRUE(hasTopicType(topics, "/safety/local_map", "nav_msgs/msg/OccupancyGrid"));
   EXPECT_TRUE(hasTopicType(topics, "/safety/intervention_log", "std_msgs/msg/String"));
+  // 对外状态/预警上报：类型须与 scene_node 逐字节同构，消费端（TFT / 灯效 / 语音 / 底盘）不做适配。
+  EXPECT_TRUE(hasTopicType(topics, auxiliaryStatusTopic, "std_msgs/msg/Bool"));
+  EXPECT_TRUE(hasTopicType(topics, cursorAlarmTopic, "std_msgs/msg/Int32"));
+  EXPECT_TRUE(hasTopicType(topics, collisionWarningTopic, "interface/msg/CollisionWarning"));
 
   const auto scan_endpoints =
     harness.driver->get_subscriptions_info_by_topic(leftLaserTopic);
@@ -624,6 +696,7 @@ TEST_F(SafetyNodeIoTest, FiveSensorSourcesAppearWithExpectedDebugColors)
   EXPECT_TRUE(namespaces.count("horizontal_obstacle_primitives") > 0);
   EXPECT_TRUE(namespaces.count("tilt_obstacle_primitives") > 0);
   EXPECT_TRUE(namespaces.count("published_command_trajectory") > 0);
+  EXPECT_TRUE(namespaces.count("joystick_intent_trajectory") > 0);
 }
 
 TEST_F(SafetyNodeIoTest, MessageFrameIdOverridesFallbackAndTransformIsApplied)
@@ -907,6 +980,36 @@ TEST_F(SafetyNodeIoTest, NonFinitePointCloudInputDoesNotLeakToControlOutput)
   EXPECT_TRUE(std::isfinite(harness.last_output.angular.z));
 }
 
+TEST_F(SafetyNodeIoTest, TiltRadarEmergencyBypassesOutputSmoothing)
+{
+  HarnessConfig config;
+  config.mode = "safe_assist";
+  config.self_filter_enabled = false;
+  IoHarness harness("safety_node_tilt_hard_stop_test", config);
+  harness.runFor(
+    600ms, [&]() {
+      harness.publishControl(0.8);
+      harness.publishWheel(0.8);
+      harness.publishSensor(4.0f);
+    });
+
+  ASSERT_TRUE(harness.received_output);
+  ASSERT_GT(harness.last_output.linear.x, 0.1);
+
+  harness.runFor(
+    120ms, [&]() {
+      harness.publishControl(0.8);
+      harness.publishWheel(0.8);
+      harness.publishSensor(4.0f);
+      harness.publishCloud(
+        harness.left_cloud_pub, "left_tilt_rotate", 0.08f, 0.0f, 0.0f);
+    });
+
+  EXPECT_DOUBLE_EQ(harness.last_output.linear.x, 0.0);
+  EXPECT_DOUBLE_EQ(harness.last_output.angular.z, 0.0);
+  EXPECT_TRUE(containsLog(harness.logs, "\"tilt_intervention\":\"emergency\""));
+}
+
 TEST_F(SafetyNodeIoTest, SingleSensorLossKeepsOperatingWhenOneFreshSourceIsEnough)
 {
   HarnessConfig config;
@@ -947,7 +1050,6 @@ TEST_F(SafetyNodeIoTest, FrontObstacleReducesForwardCommand)
   EXPECT_LT(harness.last_output.linear.x, 0.1);
   EXPECT_TRUE(containsLog(harness.logs, "\"emergency_stop\":true"));
   EXPECT_TRUE(containsLog(harness.logs, "\"emergency_reason\":\""));
-  EXPECT_FALSE(containsLog(harness.logs, "\"emergency_reason\":\"none\""));
   EXPECT_TRUE(containsLog(harness.logs, "\"has_collision\":true"));
   EXPECT_TRUE(containsLog(harness.logs, "\"min_ttc\":"));
   EXPECT_TRUE(containsLog(harness.logs, "\"min_clearance\":"));
@@ -955,6 +1057,11 @@ TEST_F(SafetyNodeIoTest, FrontObstacleReducesForwardCommand)
   EXPECT_FALSE(containsLog(harness.logs, "\"map_ttc\":inf"));
   EXPECT_FALSE(containsLog(harness.logs, "\"min_ttc\":inf"));
   EXPECT_FALSE(containsLog(harness.logs, "\"min_clearance\":inf"));
+  EXPECT_TRUE(containsExplainedSpeedIntervention(harness.logs));
+  EXPECT_TRUE(containsLog(harness.logs, "\"speed_debug_joystick_linear_x\":"));
+  EXPECT_TRUE(containsLog(harness.logs, "\"speed_debug_controller_linear_x\":"));
+  EXPECT_TRUE(containsLog(harness.logs, "\"speed_debug_output_linear_x\":"));
+  EXPECT_TRUE(containsLog(harness.logs, "\"speed_debug_reduction_m_s\":"));
 }
 
 TEST_F(SafetyNodeIoTest, RearObstacleReducesReverseCommand)

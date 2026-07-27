@@ -18,6 +18,8 @@ struct EmergencyBrakeContext
   bool direction_command_active = false;
   bool directional_clearance_valid = false;
   bool controlled_escape_active = false;
+  /** 前进接近障碍（MDB 模式下距离型急停由包络负责） */
+  bool forward_approach = false;
   double directional_clearance = std::numeric_limits < double > ::infinity();
 };
 

@@ -203,6 +203,8 @@ void VehicleInterface::wheelSpeedCallback(const geometry_msgs::msg::TwistStamped
     // 数据格式约定: linear.x=左轮速度, linear.y=右轮速度
     current_state_.wheel_speed_left = msg->twist.linear.x;
     current_state_.wheel_speed_right = msg->twist.linear.y;
+    current_state_.linear_velocity = msg->twist.linear.x;
+    current_state_.angular_velocity = msg->twist.angular.z;
     current_state_.timestamp = this->now();
     
     RCLCPP_DEBUG(this->get_logger(), 
@@ -211,6 +213,6 @@ void VehicleInterface::wheelSpeedCallback(const geometry_msgs::msg::TwistStamped
     
     // 触发轮速变化回调 (传递给Tracking模块)
     if (wheel_speed_callback_) {
-        wheel_speed_callback_(current_state_.wheel_speed_left, current_state_.wheel_speed_right);
+        wheel_speed_callback_(current_state_.linear_velocity, current_state_.angular_velocity);
     }
 }

@@ -14,8 +14,8 @@ namespace cloud_manager {
 // 设备信息（基础）
 struct DeviceInfo {
     std::string vin = "VIN_001";  // 设备唯一标识
-    std::string model = "X5";     // 设备型号
-    std::string private_key = "MOCK_ED25519_PRIVATE_KEY"; // 设备私钥（Mock）
+    std::string model = "x5";     // 设备型号
+    std::string private_key = "MOCK_ED25519_PRIVATE_KEY";  // 设备私钥（Mock）
 };
 
 // 挑战应答结果（防重放攻击核心）

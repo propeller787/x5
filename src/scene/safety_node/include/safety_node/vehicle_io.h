@@ -11,6 +11,7 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#include <interface/msg/car_info.hpp>
 #include <interface/msg/joystick.hpp>
 #include <mutex>
 #include <rclcpp/rclcpp.hpp>
@@ -25,6 +26,25 @@ struct WheelFeedback
   bool fresh = false;
 };
 
+/** 原始摇杆快照 */
+struct JoystickSnapshot
+{
+  interface::msg::Joystick msg;
+  rclcpp::Time timestamp {rclcpp::Time(0, 0, RCL_ROS_TIME)};
+  bool received = false;
+  bool fresh = false;
+};
+
+/** 整车信息快照（档位 / 驾驶模式 / 手动抱闸），供巡航限速与抱闸退出使用 */
+struct CarInfoState
+{
+  int gear = 0;                ///< 档位 1..4
+  int mode_type = 0;           ///< 1 舒适 2 运动
+  bool brake_engaged = false;  ///< 左/右手动抱闸任一开启
+  bool received = false;
+  bool fresh = false;
+};
+
 /** 手柄控制快照 */
 struct ControlCommand
 {
@@ -33,6 +53,7 @@ struct ControlCommand
   bool received = false;
   bool fresh = false;
   bool driver_neutral = false;
+  bool driver_reverse_request = false;
 };
 
 class VehicleIo {
@@ -49,10 +70,17 @@ public:
     const rclcpp::Time & now,
     double timeout_s,
     double joystick_timeout_s = 0.25,
-    int joystick_deadzone = 5) const;
+    int joystick_deadzone = 5,
+    int joystick_reverse_threshold = 20) const;
 
   /** 最新车体速度反馈；过期时速度自动归零 */
   WheelFeedback wheelFeedback(const rclcpp::Time & now, double timeout_s) const;
+
+  /** 最新原始摇杆；过期时 fresh=false */
+  JoystickSnapshot latestJoystick(const rclcpp::Time & now, double timeout_s) const;
+
+  /** 最新整车信息（档位/驾驶模式/抱闸）；过期时 fresh=false */
+  CarInfoState carInfo(const rclcpp::Time & now, double timeout_s) const;
 
 private:
   static bool isFresh(
@@ -64,15 +92,20 @@ private:
   void onHandle(const geometry_msgs::msg::Twist::SharedPtr msg);
   void onJoystick(const interface::msg::Joystick::SharedPtr msg);
   void onWheel(const geometry_msgs::msg::TwistStamped::SharedPtr msg);
+  void onCarInfo(const interface::msg::CarInfo::SharedPtr msg);
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Subscription < geometry_msgs::msg::Twist > ::SharedPtr handle_sub_;
   rclcpp::Subscription < interface::msg::Joystick > ::SharedPtr joystick_sub_;
   rclcpp::Subscription < geometry_msgs::msg::TwistStamped > ::SharedPtr wheel_sub_;
+  rclcpp::Subscription < interface::msg::CarInfo > ::SharedPtr car_info_sub_;
   mutable std::mutex mutex_;
   ControlCommand control_;
   interface::msg::Joystick joystick_;
   rclcpp::Time joystick_timestamp_ {rclcpp::Time(0, 0, RCL_ROS_TIME)};
   bool joystick_received_ = false;
   WheelFeedback wheels_;
+  interface::msg::CarInfo car_info_;
+  rclcpp::Time car_info_timestamp_ {rclcpp::Time(0, 0, RCL_ROS_TIME)};
+  bool car_info_received_ = false;
 };

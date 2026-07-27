@@ -9,8 +9,6 @@
 
 #include "../../../common/utils/topic.h"
 
-#include <interface/msg/tilt_obstacle_scan.hpp>
-
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -48,6 +46,46 @@ std::string sourceNameFromId(uint8_t source_id)
       return "left";
   }
 }
+
+/**
+ * 从 TransformStamped 提取 3×3 旋转矩阵 + 平移向量。
+ * 避免 tf2::doTransform 逐点构造 PointStamped 临时对象 + 虚函数调用开销。
+ * 四元数 (qx, qy, qz, qw) → 旋转矩阵，标准公式。
+ */
+struct AffineTransform
+{
+  double r00, r01, r02;
+  double r10, r11, r12;
+  double r20, r21, r22;
+  double tx, ty, tz;
+
+  explicit AffineTransform(const geometry_msgs::msg::TransformStamped & t)
+  {
+    const auto & q = t.transform.rotation;
+    const double qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+    r00 = 1.0 - 2.0 * (qy * qy + qz * qz);
+    r01 = 2.0 * (qx * qy - qz * qw);
+    r02 = 2.0 * (qx * qz + qy * qw);
+    r10 = 2.0 * (qx * qy + qz * qw);
+    r11 = 1.0 - 2.0 * (qx * qx + qz * qz);
+    r12 = 2.0 * (qy * qz - qx * qw);
+    r20 = 2.0 * (qx * qz - qy * qw);
+    r21 = 2.0 * (qy * qz + qx * qw);
+    r22 = 1.0 - 2.0 * (qx * qx + qy * qy);
+    tx = t.transform.translation.x;
+    ty = t.transform.translation.y;
+    tz = t.transform.translation.z;
+  }
+
+  inline void apply(
+    double in_x, double in_y, double in_z,
+    double & out_x, double & out_y, double & out_z) const
+  {
+    out_x = r00 * in_x + r01 * in_y + r02 * in_z + tx;
+    out_y = r10 * in_x + r11 * in_y + r12 * in_z + ty;
+    out_z = r20 * in_x + r21 * in_y + r22 * in_z + tz;
+  }
+};
 } // namespace
 
 LidarPerception::LidarPerception(
@@ -83,20 +121,17 @@ LidarPerception::LidarPerception(
       }
       return node_->get_parameter(name).as_int();
     };
-  auto get_tilt_s = [&](const char * name, const std::string & fallback) {
-      if (!node_->has_parameter(name)) {
-        node_->declare_parameter<std::string>(name, fallback);
-      }
-      return node_->get_parameter(name).as_string();
-    };
   tilt_enabled_ = get_tilt_b("perception.tilt.enabled", true);
-  tilt_input_type_ = get_tilt_s("perception.tilt.input_type", "pointcloud2");
+  horizontal_enabled_ = get_tilt_b("perception.horizontal.enabled", true);
+  horizontal_left_enabled_ = get_tilt_b("perception.horizontal.left_enabled", true);
+  horizontal_right_enabled_ = get_tilt_b("perception.horizontal.right_enabled", true);
+  horizontal_back_enabled_ = get_tilt_b("perception.horizontal.back_enabled", true);
+  horizontal_feed_local_map_ = get_tilt_b("perception.horizontal.feed_local_map", true);
   tilt_feed_local_map_ = get_tilt_b("perception.tilt.feed_local_map", false);
-  tilt_max_range_m_ = get_tilt_d("perception.tilt.max_range_m", 1.0);
-  tilt_min_forward_x_m_ = get_tilt_d("perception.tilt.min_forward_x_m", 0.0);
-  tilt_roi_x_min_m_ = get_tilt_d("perception.tilt.roi_x_min_m", -0.3);
-  tilt_roi_x_max_m_ = get_tilt_d("perception.tilt.roi_x_max_m", 1.0);
-  tilt_roi_y_abs_m_ = get_tilt_d("perception.tilt.roi_y_abs_m", 0.45);
+  tilt_treat_as_horizontal_ = get_tilt_b("perception.tilt.treat_as_horizontal", false);
+  tilt_ground_reject_enabled_ = get_tilt_b("perception.tilt.ground_reject_enabled", true);
+  tilt_z_filter_enabled_ = get_tilt_b("perception.tilt.z_filter_enabled", false);
+  tilt_preserve_sensor_z_ = get_tilt_b("perception.tilt.preserve_sensor_z", true);
   tilt_z_threshold_ = get_tilt_d("perception.tilt.z_filter_threshold", 0.0);
   tilt_voxel_size_m_ = get_tilt_d("perception.tilt.voxel_size_m", 0.08);
   tilt_max_primitives_ = static_cast<size_t>(std::max<int64_t>(
@@ -110,6 +145,40 @@ LidarPerception::LidarPerception(
   self_filter_y_abs_ = node_->get_parameter("perception.self_filter.y_abs_m").as_double();
   self_filter_z_min_ = node_->get_parameter("perception.self_filter.z_min_m").as_double();
   self_filter_z_max_ = node_->get_parameter("perception.self_filter.z_max_m").as_double();
+  self_filter_side_margin_ = get_tilt_d("perception.self_filter.side_margin_m", 0.02);
+
+  // 感知 ROI 边界参数化（默认 [-2.5,6.5]×[-1.8,1.8]）
+  roi_x_min_ = get_tilt_d("perception.roi.x_min_m", -2.5);
+  roi_x_max_ = get_tilt_d("perception.roi.x_max_m", 6.5);
+  roi_y_min_ = get_tilt_d("perception.roi.y_min_m", -1.8);
+  roi_y_max_ = get_tilt_d("perception.roi.y_max_m", 1.8);
+
+  // 自车过滤沿真实车体轮廓收窄（含车头两条斜边），使斜边外的障碍不被误当自车滤除。
+  // footprint.* 由 SafetyNode 统一 declare；单元测试可能只声明部分参数，故用 declare-if-absent。
+  {
+    AvoidanceParams footprint_params;
+    footprint_params.robot_length = get_tilt_d("footprint.length_m", 0.88);
+    const double width_rear =
+      get_tilt_d("footprint.width_rear_m", get_tilt_d("footprint.width_m", 0.70));
+    footprint_params.robot_width_rear_m = width_rear;
+    footprint_params.robot_width_front_m = get_tilt_d("footprint.width_front_m", width_rear);
+    footprint_params.robot_rear_offset = get_tilt_d("footprint.rear_offset_m", 0.22);
+    footprint_params.footprint_use_dual_trapezoid =
+      get_tilt_b("footprint.use_dual_trapezoid", false);
+    if (footprint_params.footprint_use_dual_trapezoid) {
+      const auto load_segment = [&](const char * prefix, FootprintSegmentParams & segment) {
+          segment.length_m = get_tilt_d((std::string(prefix) + ".length_m").c_str(), 0.0);
+          segment.width_front_m = get_tilt_d((std::string(prefix) + ".width_front_m").c_str(), 0.0);
+          segment.width_rear_m = get_tilt_d((std::string(prefix) + ".width_rear_m").c_str(), 0.0);
+        };
+      load_segment("footprint.front_segment", footprint_params.footprint_front_segment);
+      load_segment("footprint.rear_segment", footprint_params.footprint_rear_segment);
+      footprint_params.robot_width_rear_m = footprint_params.footprint_rear_segment.width_rear_m;
+      footprint_params.robot_width_front_m = footprint_params.footprint_front_segment.width_front_m;
+    }
+    self_filter_footprint_.emplace(footprint_params);
+  }
+
   mount_edge_reject_radius_m_ =
     node_->get_parameter("perception.mount_edge_reject_radius_m").as_double();
   ground_reject_below_z_m_ =
@@ -128,12 +197,18 @@ LidarPerception::LidarPerception(
       if (!msg || !acceptSourceMessage("left", msg->header.stamp)) {
         return;
       }
+      if (!isHorizontalSourceEnabled("left")) {
+        return;
+      }
       processScan(msg, "laser_frame_left", "left");
     }, sub_options);
   right_scan_sub_ = node_->create_subscription<sensor_msgs::msg::LaserScan>(
     rightLaserTopic, rclcpp::SensorDataQoS(),
     [this](const sensor_msgs::msg::LaserScan::SharedPtr msg) {
       if (!msg || !acceptSourceMessage("right", msg->header.stamp)) {
+        return;
+      }
+      if (!isHorizontalSourceEnabled("right")) {
         return;
       }
       processScan(msg, "laser_frame_right", "right");
@@ -144,76 +219,35 @@ LidarPerception::LidarPerception(
       if (!msg || !acceptSourceMessage("back", msg->header.stamp)) {
         return;
       }
+      if (!isHorizontalSourceEnabled("back")) {
+        return;
+      }
       processScan(msg, "laser_frame_back", "back");
     }, sub_options);
 
   // lidar_obstacle_groundmodel 以 RELIABLE 发布，需匹配 QoS
   const rclcpp::QoS tilt_cloud_qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
-  const rclcpp::QoS tilt_scan_qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
-  const bool use_tilt_scan_input = (tilt_input_type_ == "tilt_scan");
 
-  if (use_tilt_scan_input) {
-    left_tilt_scan_sub_ = node_->create_subscription<interface::msg::TiltObstacleScan>(
-      leftTiltScanTopic, tilt_scan_qos,
-      [this](const interface::msg::TiltObstacleScan::SharedPtr msg) {
-        if (!msg || !acceptSourceMessage("left_tilt", msg->header.stamp)) {
-          return;
-        }
-        if (!tilt_enabled_) {
-          return;
-        }
-        std::vector<std::tuple<double, double, double>> batch;
-        batch.reserve(msg->filtered_points.size());
-        for (const auto & pt : msg->filtered_points) {
-          if (!std::isfinite(pt.x) || !std::isfinite(pt.y) || !std::isfinite(pt.z)) {
-            continue;
-          }
-          batch.emplace_back(pt.x, pt.y, pt.z);
-        }
-        processTiltScanPoints(msg->header.stamp, "left_tilt", batch);
-      }, sub_options);
-    right_tilt_scan_sub_ = node_->create_subscription<interface::msg::TiltObstacleScan>(
-      rightTiltScanTopic, tilt_scan_qos,
-      [this](const interface::msg::TiltObstacleScan::SharedPtr msg) {
-        if (!msg || !acceptSourceMessage("right_tilt", msg->header.stamp)) {
-          return;
-        }
-        if (!tilt_enabled_) {
-          return;
-        }
-        std::vector<std::tuple<double, double, double>> batch;
-        batch.reserve(msg->filtered_points.size());
-        for (const auto & pt : msg->filtered_points) {
-          if (!std::isfinite(pt.x) || !std::isfinite(pt.y) || !std::isfinite(pt.z)) {
-            continue;
-          }
-          batch.emplace_back(pt.x, pt.y, pt.z);
-        }
-        processTiltScanPoints(msg->header.stamp, "right_tilt", batch);
-      }, sub_options);
-  } else {
-    // ── 倾斜雷达：PointCloud2（默认，兼容现有 bag / groundmodel） ──
-    left_tilt_cloud_sub_ = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
-      leftTiltPointTopice, tilt_cloud_qos,
-      [this](const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-        if (!msg || !acceptSourceMessage("left_tilt", msg->header.stamp)) {
-          return;
-        }
-        if (tilt_enabled_) {
-          processCloud(msg, "left_tilt_rotate", "left_tilt");
-        }
-      }, sub_options);
-    right_tilt_cloud_sub_ = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
-      rightTiltPointTopice, tilt_cloud_qos,
-      [this](const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-        if (!msg || !acceptSourceMessage("right_tilt", msg->header.stamp)) {
-          return;
-        }
-        if (tilt_enabled_) {
-          processCloud(msg, "right_tilt_rotate", "right_tilt");
-        }
-      }, sub_options);
-  }
+  left_tilt_cloud_sub_ = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
+    leftTiltPointTopice, tilt_cloud_qos,
+    [this](const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+      if (!msg || !acceptSourceMessage("left_tilt", msg->header.stamp)) {
+        return;
+      }
+      if (tilt_enabled_) {
+        processCloud(msg, "left_tilt_rotate", "left_tilt");
+      }
+    }, sub_options);
+  right_tilt_cloud_sub_ = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
+    rightTiltPointTopice, tilt_cloud_qos,
+    [this](const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+      if (!msg || !acceptSourceMessage("right_tilt", msg->header.stamp)) {
+        return;
+      }
+      if (tilt_enabled_) {
+        processCloud(msg, "right_tilt_rotate", "right_tilt");
+      }
+    }, sub_options);
 }
 
 bool LidarPerception::acceptSourceMessage(
@@ -240,11 +274,40 @@ bool LidarPerception::acceptSourceMessage(
   }
 
   last_source_message_[id] = message_stamp;
+  RCLCPP_INFO_THROTTLE(
+    node_->get_logger(), *node_->get_clock(), 1000,
+    "[LidarPerception] %s: receive_time - data_time = %.3f ms",
+    source_name.c_str(), age_s * 1000.0);
   return perception_timeout_s_ <= 0.0 || age_s <= perception_timeout_s_;
 }
 
+bool LidarPerception::isHorizontalSourceEnabled(const std::string & source_name) const
+{
+  if (!horizontal_enabled_) {
+    return false;
+  }
+  if (source_name == "left") {
+    return horizontal_left_enabled_;
+  }
+  if (source_name == "right") {
+    return horizontal_right_enabled_;
+  }
+  if (source_name == "back") {
+    return horizontal_back_enabled_;
+  }
+  return false;
+}
+
+bool LidarPerception::isSourceEnabledForHealth(uint8_t source_id) const
+{
+  if (isTiltSourceId(source_id)) {
+    return tilt_enabled_;
+  }
+  return isHorizontalSourceEnabled(sourceNameFromId(source_id));
+}
+
 bool LidarPerception::rejectBaseLinkPoint(
-  double x, double y, double z, bool cloud_source) const
+  double x, double y, double z, bool cloud_source, bool for_tilt) const
 {
   if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
     return true;
@@ -254,15 +317,29 @@ bool LidarPerception::rejectBaseLinkPoint(
   {
     return true;
   }
-  if (cloud_source && z < ground_reject_below_z_m_) {
+  if (cloud_source &&
+    (!for_tilt || tilt_ground_reject_enabled_) &&
+    z < ground_reject_below_z_m_)
+  {
     return true;
   }
   if (!self_filter_enabled_) {
     return false;
   }
-  return x >= self_filter_x_min_ && x <= self_filter_x_max_ &&
-         std::abs(y) <= self_filter_y_abs_ &&
-         z >= self_filter_z_min_ && z <= self_filter_z_max_;
+  if (x < self_filter_x_min_ || x > self_filter_x_max_ ||
+    z < self_filter_z_min_ || z > self_filter_z_max_)
+  {
+    return false;
+  }
+  // 横向上限沿真实车体轮廓收窄：车头两段斜边处半宽随之减小，斜边外的障碍不再被误当自车。
+  // 收窄后的上限不会超过 y_abs 盒体，故只会比原来滤除更少的点，不会新增盲区。
+  double y_limit = self_filter_y_abs_;
+  if (self_filter_footprint_) {
+    const double body_limit =
+      self_filter_footprint_->physicalHalfWidthAtX(x) + std::max(0.0, self_filter_side_margin_);
+    y_limit = std::min(y_limit, body_limit);
+  }
+  return std::abs(y) <= y_limit;
 }
 
 void LidarPerception::markSourceTransformValid(
@@ -292,28 +369,67 @@ bool LidarPerception::lookupTransform(
   }
 }
 
+bool LidarPerception::acceptBaseLinkObstaclePoint(
+  double x, double y, double z,
+  bool cloud_source,
+  bool for_tilt) const
+{
+  if (rejectBaseLinkPoint(x, y, z, cloud_source, for_tilt)) {
+    return false;
+  }
+  return PerceptionUtils::inRoi(x, y, roi_x_min_, roi_x_max_, roi_y_min_, roi_y_max_);
+}
+
+bool LidarPerception::acceptTiltObstacleInBaseLink(double x, double y, double z) const
+{
+  if (!std::isfinite(z)) {
+    return false;
+  }
+  if (tilt_z_filter_enabled_ &&
+    !PerceptionUtils::validTiltZ(z, tilt_z_threshold_))
+  {
+    return false;
+  }
+  // 斜雷达为 PointCloud2 来源（cloud_source=true），for_tilt=true 使
+  // rejectBaseLinkPoint 的地面过滤分支在 tilt_ground_reject_enabled_ 时生效。
+  return acceptBaseLinkObstaclePoint(x, y, z, true, true);
+}
+
 void LidarPerception::appendBaseLinkPoints(
   const std::vector<std::tuple<double, double, double>> & pts,
-  const std::string & source_name)
+  const std::string & source_name,
+  const rclcpp::Time & stamp)
 {
   std::lock_guard<std::mutex> lock(mutex_);
   const uint8_t id = PerceptionUtils::sourceId(source_name);
   const size_t source_id = static_cast<size_t>(id);
   const bool tilt_source = isTiltSourceId(id);
+  // 点集与其帧时间戳必须原子提交，避免控制线程读到“新时间戳 + 上一帧点集”。
+  latest_source_points_stamp_[source_id] = stamp;
+  latest_source_points_valid_[source_id] = true;
   auto & source_points = latest_source_points_[source_id];
   if (pts.size() > max_points_per_source_) {
-    source_points.assign(
-      pts.end() - static_cast<std::ptrdiff_t>(max_points_per_source_), pts.end());
+    // 均匀降采样：等间隔取样，保留全角度覆盖。
+    // 旧实现取尾部会丢弃起始角度范围的点，可能在车体前方制造盲区。
+    source_points.clear();
+    source_points.reserve(max_points_per_source_);
+    const size_t stride = pts.size() / max_points_per_source_;
+    for (size_t i = 0; i < pts.size() && source_points.size() < max_points_per_source_; i += stride) {
+      source_points.push_back(pts[i]);
+    }
   } else {
     source_points = pts;
   }
 
-  obstacle_points_.clear();
   horizontal_obstacle_points_.clear();
   tilt_obstacle_points_.clear();
   for (size_t sid = 0; sid < latest_source_points_.size(); ++sid) {
     const uint8_t cached_id = static_cast<uint8_t>(sid);
-    const bool cached_tilt = isTiltSourceId(cached_id);
+    if (!isSourceEnabledForHealth(cached_id)) {
+      continue;
+    }
+    // treat_as_horizontal 时斜雷达点并入水平数据流，参与 Footprint/制动包络主链。
+    const bool cached_tilt = isTiltSourceId(cached_id) && !tilt_treat_as_horizontal_;
     auto & target = cached_tilt ? tilt_obstacle_points_ : horizontal_obstacle_points_;
     for (const auto & latest : latest_source_points_[sid]) {
       ObstaclePoint point;
@@ -322,19 +438,21 @@ void LidarPerception::appendBaseLinkPoints(
       point.z = std::get<2>(latest);
       point.source = sourceNameFromId(cached_id);
       target.push_back(point);
-      if (!cached_tilt) {
-        obstacle_points_.push_back(latest);
-      }
     }
   }
 
-  if (local_map_enabled_ && (!tilt_source || tilt_feed_local_map_)) {
-    pending_points_.insert(pending_points_.end(), pts.begin(), pts.end());
-    if (pending_points_.size() > max_pending_points_) {
-      pending_points_.erase(
-        pending_points_.begin(),
-        pending_points_.begin() +
-        static_cast<std::ptrdiff_t>(pending_points_.size() - max_pending_points_));
+  if (local_map_enabled_) {
+    // treat_as_horizontal 时斜雷达按水平雷达的 feed 策略写入 LocalMap。
+    const bool feed_as_tilt = tilt_source && !tilt_treat_as_horizontal_;
+    const bool feed_pending = feed_as_tilt ? tilt_feed_local_map_ : horizontal_feed_local_map_;
+    if (feed_pending) {
+      pending_points_.insert(pending_points_.end(), pts.begin(), pts.end());
+      if (pending_points_.size() > max_pending_points_) {
+        pending_points_.erase(
+          pending_points_.begin(),
+          pending_points_.begin() +
+          static_cast<std::ptrdiff_t>(pending_points_.size() - max_pending_points_));
+      }
     }
   }
 
@@ -395,12 +513,15 @@ void LidarPerception::processScan(
   markSourceTransformValid(source_name, stamp);
 
   if (msg->ranges.empty()) {
-    appendBaseLinkPoints({}, source_name);
+    appendBaseLinkPoints({}, source_name, stamp);
     return;
   }
 
   std::vector<std::tuple<double, double, double>> batch;
   batch.reserve(msg->ranges.size());
+
+  // 批量仿射变换：预提取旋转矩阵+平移，逐点手动变换，避免每点构造 PointStamped + doTransform 虚函数调用
+  const AffineTransform tf(transform);
 
   for (size_t i = 0; i < msg->ranges.size(); ++i) {
     const float range = msg->ranges[i];
@@ -409,21 +530,15 @@ void LidarPerception::processScan(
     }
     const float angle = msg->angle_min + static_cast<float>(i) * msg->angle_increment;
     const auto [lx, ly] = PerceptionUtils::polarToCartesian(range, angle);
-    geometry_msgs::msg::PointStamped in;
-    geometry_msgs::msg::PointStamped out;
-    in.point.x = lx;
-    in.point.y = ly;
-    tf2::doTransform(in, out, transform);
-    if (rejectBaseLinkPoint(out.point.x, out.point.y, out.point.z, false)) {
+    double bx, by, bz;
+    tf.apply(lx, ly, 0.0, bx, by, bz);
+    if (!acceptBaseLinkObstaclePoint(bx, by, bz)) {
       continue;
     }
-    if (!PerceptionUtils::inRoi(out.point.x, out.point.y)) {
-      continue;
-    }
-    batch.emplace_back(out.point.x, out.point.y, out.point.z);
+    batch.emplace_back(bx, by, bz);
   }
 
-  appendBaseLinkPoints(batch, source_name);
+  appendBaseLinkPoints(batch, source_name, stamp);
 }
 
 void LidarPerception::processCloud(
@@ -435,18 +550,18 @@ void LidarPerception::processCloud(
     return;
   }
 
-  const std::string source_frame =
-    msg->header.frame_id.empty() ? default_frame : msg->header.frame_id;
   const rclcpp::Time stamp(
     msg->header.stamp, node_->get_clock()->get_clock_type());
+  const std::string frame =
+    msg->header.frame_id.empty() ? default_frame : msg->header.frame_id;
   geometry_msgs::msg::TransformStamped transform;
-  if (!lookupTransform(source_frame, stamp, transform)) {
+  if (!lookupTransform(frame, stamp, transform)) {
     return;
   }
   markSourceTransformValid(source_name, stamp);
 
   if (msg->data.empty()) {
-    appendBaseLinkPoints({}, source_name);
+    appendBaseLinkPoints({}, source_name, stamp);
     return;
   }
 
@@ -456,73 +571,27 @@ void LidarPerception::processCloud(
   std::vector<std::tuple<double, double, double>> batch;
   batch.reserve(cloud.points.size());
 
+  // 批量仿射变换：预提取旋转矩阵+平移，逐点手动变换
+  const AffineTransform tf(transform);
+
   for (const auto & pt : cloud.points) {
     if (!std::isfinite(pt.x) || !std::isfinite(pt.y) || !std::isfinite(pt.z)) {
       continue;
     }
-    geometry_msgs::msg::PointStamped in;
-    geometry_msgs::msg::PointStamped out;
-    in.point.x = pt.x;
-    in.point.y = pt.y;
-    in.point.z = pt.z;
-    tf2::doTransform(in, out, transform);
-    if (!PerceptionUtils::validTiltZ(out.point.z, tilt_z_threshold_)) {
+    double bx = 0.0;
+    double by = 0.0;
+    double bz = 0.0;
+    tf.apply(pt.x, pt.y, pt.z, bx, by, bz);
+    if (tilt_preserve_sensor_z_) {
+      bz = pt.z;   // preserve_sensor_z：z 保留传感器 frame 原始值
+    }
+    if (!acceptTiltObstacleInBaseLink(bx, by, bz)) {
       continue;
     }
-    if (rejectBaseLinkPoint(out.point.x, out.point.y, out.point.z, true)) {
-      continue;
-    }
-    if (!acceptTiltBaseLinkPoint(out.point.x, out.point.y, out.point.z)) {
-      continue;
-    }
-    batch.emplace_back(out.point.x, out.point.y, out.point.z);
+    batch.emplace_back(bx, by, bz);
   }
 
-  appendBaseLinkPoints(batch, source_name);
-}
-
-bool LidarPerception::acceptTiltBaseLinkPoint(double x, double y, double z) const
-{
-  if (!PerceptionUtils::validTiltZ(z, tilt_z_threshold_)) {
-    return false;
-  }
-  if (x < tilt_min_forward_x_m_ ||
-    x < tilt_roi_x_min_m_ ||
-    x > tilt_roi_x_max_m_ ||
-    std::abs(y) > tilt_roi_y_abs_m_ ||
-    (tilt_max_range_m_ > 0.0 && std::hypot(x, y) > tilt_max_range_m_))
-  {
-    return false;
-  }
-  return PerceptionUtils::inRoi(x, y);
-}
-
-void LidarPerception::processTiltScanPoints(
-  const builtin_interfaces::msg::Time & stamp,
-  const std::string & source_name,
-  const std::vector<std::tuple<double, double, double>> & base_link_points)
-{
-  const rclcpp::Time message_stamp(stamp, node_->get_clock()->get_clock_type());
-  markSourceTransformValid(source_name, message_stamp);
-
-  std::vector<std::tuple<double, double, double>> batch;
-  batch.reserve(base_link_points.size());
-  for (const auto & pt : base_link_points) {
-    const double x = std::get<0>(pt);
-    const double y = std::get<1>(pt);
-    const double z = std::get<2>(pt);
-    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
-      continue;
-    }
-    if (rejectBaseLinkPoint(x, y, z, true)) {
-      continue;
-    }
-    if (!acceptTiltBaseLinkPoint(x, y, z)) {
-      continue;
-    }
-    batch.emplace_back(x, y, z);
-  }
-  appendBaseLinkPoints(batch, source_name);
+  appendBaseLinkPoints(batch, source_name, stamp);
 }
 
 std::vector<std::tuple<double, double, double>> LidarPerception::takePendingPoints()
@@ -544,11 +613,20 @@ ObstacleField LidarPerception::buildHorizontalObstacleField(
   const AvoidanceParams & params,
   const rclcpp::Time & stamp) const
 {
+  if (!horizontal_enabled_) {
+    return ObstacleField{};
+  }
   std::lock_guard<std::mutex> lock(mutex_);
   return ObstacleFieldBuilder::buildFromPoints(
     horizontal_obstacle_points_, stamp, params, 0.12, params.max_obstacle_primitives);
 }
 
+/**
+ * 从 tilt_obstacle_points_ 构建斜雷达专用 ObstacleField。
+ *
+ * 供 AvoidanceController::evaluateTiltIntervention 使用：体素更细（tilt_voxel_size_m）、
+ * 图元半径取自 tilt_ttc.obstacle_radius_m，与水平场分离体素化。
+ */
 ObstacleField LidarPerception::buildTiltObstacleField(
   const AvoidanceParams & params,
   const rclcpp::Time & stamp) const
@@ -578,11 +656,21 @@ PerceptionHealth LidarPerception::health(const rclcpp::Time & now, double timeou
   std::lock_guard<std::mutex> lock(mutex_);
   PerceptionHealth result;
   for (size_t i = 0; i < source_received_.size(); ++i) {
+    // 方案 4：per-source 启用位图先行填充——未收到消息的源也要标注启用状态，
+    // 启用但从未新鲜的源同样构成降级输入（对应加电即缺失的失效模式）。
+    if (i < result.source_enabled.size()) {
+      result.source_enabled[i] = isSourceEnabledForHealth(static_cast<uint8_t>(i));
+    }
     if (!source_received_[i]) {
       continue;
     }
+    if (!isSourceEnabledForHealth(static_cast<uint8_t>(i))) {
+      continue;
+    }
     ++result.received_source_count;
-    const bool tilt_source = isTiltSourceId(static_cast<uint8_t>(i));
+    // treat_as_horizontal 时斜雷达计入水平雷达健康统计（满足 require_horizontal_perception）。
+    const bool tilt_source =
+      isTiltSourceId(static_cast<uint8_t>(i)) && !tilt_treat_as_horizontal_;
     if (tilt_source) {
       ++result.received_tilt_source_count;
     } else {
@@ -598,6 +686,9 @@ PerceptionHealth LidarPerception::health(const rclcpp::Time & now, double timeou
       transform_age_s >= -0.05 && transform_age_s <= timeout_s))
     {
       ++result.fresh_source_count;
+      if (i < result.source_fresh.size()) {
+        result.source_fresh[i] = true;
+      }
       if (tilt_source) {
         ++result.fresh_tilt_source_count;
       } else {
@@ -632,10 +723,23 @@ std::vector<TiltSourceSnapshot> LidarPerception::snapshotTiltSources(
     TiltSourceSnapshot snapshot;
     snapshot.source_name = source_name;
     snapshot.source_id = PerceptionUtils::sourceId(source_name);
-    for (const auto & point : tilt_obstacle_points_) {
-      if (point.source == source_name) {
-        snapshot.filtered_points.push_back(point);
-      }
+    const size_t source_id = static_cast<size_t>(snapshot.source_id);
+    snapshot.frame_valid =
+      tilt_enabled_ && latest_source_points_valid_[source_id];
+    if (snapshot.frame_valid) {
+      snapshot.frame_stamp_ns = latest_source_points_stamp_[source_id].nanoseconds();
+      snapshot.frame_age_s =
+        std::max(0.0, (stamp - latest_source_points_stamp_[source_id]).seconds());
+    }
+    // 直接按源读取最新完整帧。即使 treat_as_horizontal=true，低通专用快照仍只含斜雷达；
+    // 不改变 horizontal_obstacle_points_ / tilt_obstacle_points_ 的既有控制语义。
+    for (const auto & latest : latest_source_points_[source_id]) {
+      ObstaclePoint point;
+      point.x = std::get<0>(latest);
+      point.y = std::get<1>(latest);
+      point.z = std::get<2>(latest);
+      point.source = source_name;
+      snapshot.filtered_points.push_back(point);
     }
     snapshot.primitive_field = ObstacleFieldBuilder::buildFromPoints(
       snapshot.filtered_points,
@@ -652,13 +756,13 @@ void LidarPerception::clear()
 {
   std::lock_guard<std::mutex> lock(mutex_);
   pending_points_.clear();
-  obstacle_points_.clear();
   horizontal_obstacle_points_.clear();
   tilt_obstacle_points_.clear();
   debug_points_.clear();
   for (auto & points : latest_source_points_) {
     points.clear();
   }
+  latest_source_points_valid_.fill(false);
   source_received_.fill(false);
   source_transform_valid_.fill(false);
 }

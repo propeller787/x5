@@ -9,10 +9,10 @@
 
 namespace cloud_manager {
 
-// 签名配置（支持传入私钥/公钥的 hex 或 Base64 编码）
+// 签名配置（支持传入私钥/公钥的 hex 编码）
 struct SignatureConfig {
-    std::string private_key = ""; // 私钥（hex/Base64），可为空（退化为mock）
-    std::string public_key = "";  // 公钥（hex/Base64），可为空（若私钥包含公钥则从私钥派生）
+    std::string private_key = ""; // 私钥（hex），可为空（退化为mock）
+    std::string public_key = "";  // 公钥（hex），可为空（若私钥包含公钥则从私钥派生）
     std::string sign_separator = "|";                     // 数据与签名的分隔符
     bool enforce_strict = false; // 若为 true：生产模式，缺少公钥/libsodium 则验签失败
 };
@@ -77,17 +77,11 @@ public:
             return;
         }
 
-        // 解析私钥（支持 seed(32 bytes) 或 secretkey(64 bytes)，来源可为 hex 或 Base64）
+        // 解析私钥（支持 seed(32 bytes hex)、secretkey(64 bytes hex) 或 Base64 格式）
         if (!config_.private_key.empty()) {
             std::vector<unsigned char> sk;
-            bool parsed = false;
+            // 先尝试 hex 格式
             if (hex_to_bytes(config_.private_key, sk)) {
-                parsed = true;
-            } else {
-                // 尝试Base64
-                if (b64_to_bytes(config_.private_key, sk)) parsed = true;
-            }
-            if (parsed) {
                 if (sk.size() == crypto_sign_SECRETKEYBYTES) {
                     secret_key_ = sk;
                     // 若未提供公钥，则从 secret key 的后半段获取
@@ -95,26 +89,47 @@ public:
                         public_key_.assign(secret_key_.begin() + crypto_sign_PUBLICKEYBYTES, secret_key_.end());
                     }
                     use_sodium_ = true;
+                    RCLCPP_INFO(logger_, "✅ 私钥解析成功（hex 格式，长度：%zu bytes）", sk.size());
                 } else if (sk.size() == crypto_sign_SEEDBYTES) {
                     // 从 seed 生成 keypair
                     secret_key_.resize(crypto_sign_SECRETKEYBYTES);
                     public_key_.resize(crypto_sign_PUBLICKEYBYTES);
                     crypto_sign_seed_keypair(public_key_.data(), secret_key_.data(), sk.data());
                     use_sodium_ = true;
+                    RCLCPP_INFO(logger_, "✅ 私钥解析成功（seed hex 格式，长度：%zu bytes）", sk.size());
+                } else {
+                    RCLCPP_WARN(logger_, "⚠️ 提供的私钥长度不符合 Ed25519 要求，将回退到 mock 签名");
+                    use_sodium_ = false;
+                }
+            } else if (b64_to_bytes(config_.private_key, sk)) {
+                // 尝试 Base64 格式
+                RCLCPP_INFO(logger_, "🔍 尝试解析私钥（Base64 格式，输入长度：%zu，解析后长度：%zu bytes）", 
+                            config_.private_key.size(), sk.size());
+                if (sk.size() == crypto_sign_SECRETKEYBYTES) {
+                    secret_key_ = sk;
+                    // 若未提供公钥，则从 secret key 的后半段获取
+                    if (config_.public_key.empty()) {
+                        public_key_.assign(secret_key_.begin() + crypto_sign_PUBLICKEYBYTES, secret_key_.end());
+                    }
+                    use_sodium_ = true;
+                    RCLCPP_INFO(logger_, "✅ 私钥解析成功（Base64 格式，长度：%zu bytes）", sk.size());
+                } else if (sk.size() == crypto_sign_SEEDBYTES) {
+                    // 从 seed 生成 keypair
+                    secret_key_.resize(crypto_sign_SECRETKEYBYTES);
+                    public_key_.resize(crypto_sign_PUBLICKEYBYTES);
+                    crypto_sign_seed_keypair(public_key_.data(), secret_key_.data(), sk.data());
+                    use_sodium_ = true;
+                    RCLCPP_INFO(logger_, "✅ 私钥解析成功（Base64 seed 格式，长度：%zu bytes）", sk.size());
                 } else {
                     RCLCPP_WARN(logger_, "⚠️ 提供的私钥长度不符合 Ed25519 要求，将回退到 mock 签名");
                     use_sodium_ = false;
                 }
             } else {
-                RCLCPP_WARN(logger_, "⚠️ 无法解析私钥（既非hex也非Base64），将回退到 mock 签名");
+                RCLCPP_WARN(logger_, "⚠️ 无法解析私钥 hex/Base64，将回退到 mock 签名");
             }
         } else if (!config_.public_key.empty()) {
-            // 只提供了公钥（用于验签），解析公钥（hex 或 Base64）
-            if (!hex_to_bytes(config_.public_key, public_key_)) {
-                std::vector<unsigned char> pk_b64;
-                if (b64_to_bytes(config_.public_key, pk_b64)) public_key_.swap(pk_b64);
-            }
-            if (!public_key_.empty()) {
+            // 只提供了公钥（用于验签），解析公钥（支持 hex 或 Base64）
+            if (hex_to_bytes(config_.public_key, public_key_)) {
                 if (public_key_.size() != crypto_sign_PUBLICKEYBYTES) {
                     RCLCPP_WARN(logger_, "⚠️ 提供的公钥长度不正确，公钥验签将不可用");
                     public_key_.clear();
@@ -122,6 +137,16 @@ public:
                     // 可以用于验签，但不能用于加签
                     use_sodium_ = true;
                 }
+            } else if (b64_to_bytes(config_.public_key, public_key_)) {
+                if (public_key_.size() != crypto_sign_PUBLICKEYBYTES) {
+                    RCLCPP_WARN(logger_, "⚠️ 提供的公钥长度不正确，公钥验签将不可用");
+                    public_key_.clear();
+                } else {
+                    // 可以用于验签，但不能用于加签
+                    use_sodium_ = true;
+                }
+            } else {
+                RCLCPP_WARN(logger_, "⚠️ 无法解析公钥 hex/Base64，公钥验签将不可用");
             }
         }
 
@@ -211,6 +236,39 @@ public:
             return false;
         }
         RCLCPP_INFO(logger_, "✅ 验签通过");
+        return true;
+    }
+
+    // 使用 Base64 格式的公钥进行验签（支持动态设置公钥）
+    bool verify_data_with_base64_key(const std::string& raw_data, const std::string& signature, const std::string& public_key_b64) {
+        if (!use_sodium_) {
+            if (config_.enforce_strict) {
+                RCLCPP_ERROR(logger_, "❌ libsodium 未初始化，严格模式下拒绝消息");
+                return false;
+            }
+            RCLCPP_WARN(logger_, "⚠️ libsodium 未初始化，默认通过（非严格模式）");
+            return true;
+        }
+
+        std::vector<unsigned char> sig_bytes;
+        if (!b64_to_bytes(signature, sig_bytes) || sig_bytes.size() != crypto_sign_BYTES) {
+            RCLCPP_ERROR(logger_, "❌ 提供的签名不是有效的 Base64 或长度错误");
+            return false;
+        }
+
+        std::vector<unsigned char> pub_key_bytes;
+        if (!b64_to_bytes(public_key_b64, pub_key_bytes) || pub_key_bytes.size() != crypto_sign_PUBLICKEYBYTES) {
+            RCLCPP_ERROR(logger_, "❌ 提供的公钥不是有效的 Base64 或长度错误");
+            return false;
+        }
+
+        if (crypto_sign_verify_detached(sig_bytes.data(),
+                                       reinterpret_cast<const unsigned char*>(raw_data.data()), raw_data.size(),
+                                       pub_key_bytes.data()) != 0) {
+            RCLCPP_ERROR(logger_, "❌ Ed25519 验签失败（使用提供的公钥）");
+            return false;
+        }
+        RCLCPP_INFO(logger_, "✅ 验签通过（使用提供的公钥）");
         return true;
     }
 
