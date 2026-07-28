@@ -5,6 +5,8 @@
 /perception/lidar_fusion/points
 /perception/obstacle_points
 /local_costmap/costmap
+/localmap/occupymap
+/localmap/occupymap_raw
 /mppi/local_intent_path
 /cmd_vel_safety_gate_node/mode
 /handle/control

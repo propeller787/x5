@@ -226,7 +226,7 @@ echo "Record topics: ${#RECORD_TOPICS[@]} from ${RECORD_TOPICS_FILE}"
 echo "QoS overrides: ${QOS_FILE}"
 
 if [[ "${DRY_RUN}" -eq 1 ]]; then
-  echo "[dry-run] colcon build --packages-up-to wheelchair_obstacle lidar_fusion localization (unless --skip-build)"
+  echo "[dry-run] colcon build --packages-up-to wheelchair_obstacle lidar_fusion localization localmap_occupymap (unless --skip-build)"
   echo "[dry-run] ros2 launch wheelchair_obstacle mppi_stack_no_sensors.launch.py use_sim_time:=${SIM_TIME_FLAG} ${RVIZ_ARG} start_bag_record:=false"
   echo "[dry-run] ros2 bag record ${RECORD_SIM_ARGS[*]} -o ${REPLAY_BAG} ${RECORD_TOPICS[*]}"
   echo "[dry-run] ros2 bag play ${BASELINE_BAG} --rate ${PLAY_RATE} ${PLAY_CLOCK_FLAG[*]} --qos-profile-overrides-path ${QOS_FILE} --topics ${PLAY_TOPICS[*]}"
@@ -236,7 +236,7 @@ fi
 
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   cd "${WORKSPACE_ROOT}"
-  colcon build --symlink-install --packages-up-to wheelchair_obstacle lidar_fusion localization
+  colcon build --symlink-install --packages-up-to wheelchair_obstacle lidar_fusion localization localmap_occupymap
   source_ros_setup "${WORKSPACE_ROOT}/install/setup.bash"
 fi
 

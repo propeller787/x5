@@ -1,0 +1,53 @@
+# ROS 2 / colcon workspace
+build/
+install/
+log/
+
+# CMake
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+Makefile
+compile_commands.json
+
+# Object files & link artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# IDE & language servers
+.idea/
+.vscode/
+*.code-workspace
+.cache/
+.clangd/
+
+# OS & editor
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Exported costmap images
+output/
+
+# Rosbag data (keep metadata.yaml if needed)
+bags/**/*.db3
+bags/**/*.mcap
+bags/**/*.bag

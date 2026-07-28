@@ -6,12 +6,14 @@
 #
 # Layers started here (toggle each with the matching argument):
 #   perception   : horizontal_lidar_fusion -> obstacle_cloud_filter
-#                  (the local costmap is now built inside controller_server via
-#                   wheelchair_obstacle::RebuildObstacleLayer — a per-cycle
-#                   full-rebuild ObstacleLayer variant — + InflationLayer)
+#                  (+ localmap_occupymap when use_localmap_costmap:=true)
 #   localization : odom_fusion_node (/odom/fused)
 #   control      : controller_server (MPPI) + lifecycle_manager + joystick_local_path
 #                  + cmd_vel_safety_gate  (via mppi_wheelchair_controller.launch.py)
+#
+# Costmap sources (use_localmap_costmap):
+#   true  : occupymap_node + ExternalOccupymapLayer (mppi_controller_server_localmap.yaml)
+#   false : RebuildObstacleLayer + InflationLayer (mppi_controller_server.yaml)
 #
 # Expected external inputs (from the skipped sensor / lidar layer):
 #   /scan/left /scan/right /scan/back   (horizontal lidars)
@@ -28,7 +30,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -44,7 +46,7 @@ def _include(package, launch_file, condition, launch_arguments=None):
     )
 
 
-def generate_launch_description():
+def _launch_setup(context, *args, **kwargs):
     use_sim_time = LaunchConfiguration('use_sim_time')
     start_perception = LaunchConfiguration('start_perception')
     start_localization = LaunchConfiguration('start_localization')
@@ -56,64 +58,93 @@ def generate_launch_description():
     bag_record_interval_sec = LaunchConfiguration('bag_record_interval_sec')
     bag_record_max_count = LaunchConfiguration('bag_record_max_count')
     bag_record_output_dir = LaunchConfiguration('bag_record_output_dir')
+    occupymap_params_file = LaunchConfiguration('occupymap_params_file')
 
     pkg_share = get_package_share_directory('wheelchair_obstacle')
+    default_controller_params = os.path.join(
+        pkg_share, 'config', 'mppi_controller_server_localmap.yaml')
+    default_legacy_controller_params = os.path.join(
+        pkg_share, 'config', 'mppi_controller_server.yaml')
     localization_params = os.path.join(
         get_package_share_directory('localization'), 'config', 'odom_fusion_params.yaml')
-    default_rviz = os.path.join(pkg_share, 'rviz', 'nav_debug.rviz')
     bag_record_script = os.path.join(pkg_share, 'scripts', 'cyclic_rosbag_record.sh')
     default_bag_qos = os.path.join(pkg_share, 'config', 'mppi_stack_bag_qos.yaml')
     default_bag_topics = os.path.join(pkg_share, 'config', 'mppi_stack_bag_topics.txt')
-    default_bag_output = os.path.join(os.path.expanduser('~'), 'bags', 'mppi_stack_cyclic')
 
-    # --- perception layer ---
-    lidar_fusion = _include(
-        'lidar_fusion', 'horizontal_lidar_fusion.launch.py', start_perception)
-    obstacle_filter = _include(
-        'wheelchair_obstacle', 'obstacle_cloud_filter.launch.py', start_perception)
+    use_local = LaunchConfiguration('use_localmap_costmap').perform(context).lower() in (
+        'true', '1', 'yes')
+    params_override = LaunchConfiguration('controller_params_file').perform(context)
+    if params_override:
+        controller_params = params_override
+    else:
+        controller_params = (
+            default_controller_params if use_local else default_legacy_controller_params)
 
-    # --- localization layer (no launch file in the package -> run the node) ---
-    odom_fusion = Node(
-        package='localization',
-        executable='odom_fusion_node',
-        name='odom_fusion_node',
-        output='screen',
-        parameters=[localization_params, {'use_sim_time': use_sim_time}],
-        condition=IfCondition(start_localization),
-    )
+    actions = [
+        _include('lidar_fusion', 'horizontal_lidar_fusion.launch.py', start_perception),
+        _include('wheelchair_obstacle', 'obstacle_cloud_filter.launch.py', start_perception),
+    ]
 
-    # --- control layer ---
-    control = _include(
-        'wheelchair_obstacle', 'mppi_wheelchair_controller.launch.py', start_control,
-        launch_arguments={
-            'use_sim_time': use_sim_time,
-            'enable_safety_gate': enable_safety_gate,
-        })
+    if use_local:
+        actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(
+                get_package_share_directory('localmap_occupymap'),
+                'launch', 'occupymap.launch.py')),
+            launch_arguments={
+                'use_sim_time': use_sim_time,
+                'params_file': occupymap_params_file,
+            }.items(),
+        ))
 
-    # --- debug visualization (optional) ---
-    rviz = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        arguments=['-d', rviz_config],
-        parameters=[{'use_sim_time': use_sim_time}],
-        condition=IfCondition(start_rviz),
-    )
+    actions.extend([
+        Node(
+            package='localization',
+            executable='odom_fusion_node',
+            name='odom_fusion_node',
+            output='screen',
+            parameters=[localization_params, {'use_sim_time': use_sim_time}],
+            condition=IfCondition(start_localization),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(
+                pkg_share, 'launch', 'mppi_wheelchair_controller.launch.py')),
+            condition=IfCondition(start_control),
+            launch_arguments={
+                'use_sim_time': use_sim_time,
+                'enable_safety_gate': enable_safety_gate,
+                'params_file': controller_params,
+            }.items(),
+        ),
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            output='screen',
+            arguments=['-d', rviz_config],
+            parameters=[{'use_sim_time': use_sim_time}],
+            condition=IfCondition(start_rviz),
+        ),
+        ExecuteProcess(
+            cmd=[
+                bag_record_script,
+                '--interval', bag_record_interval_sec,
+                '--max-count', bag_record_max_count,
+                '--output-dir', bag_record_output_dir,
+                '--qos-file', default_bag_qos,
+                '--topics-file', default_bag_topics,
+            ],
+            output='screen',
+            condition=IfCondition(start_bag_record),
+        ),
+    ])
 
-    # --- cyclic rosbag recorder (optional) ---
-    bag_record = ExecuteProcess(
-        cmd=[
-            bag_record_script,
-            '--interval', bag_record_interval_sec,
-            '--max-count', bag_record_max_count,
-            '--output-dir', bag_record_output_dir,
-            '--qos-file', default_bag_qos,
-            '--topics-file', default_bag_topics,
-        ],
-        output='screen',
-        condition=IfCondition(start_bag_record),
-    )
+    return actions
+
+
+def generate_launch_description():
+    pkg_share = get_package_share_directory('wheelchair_obstacle')
+    default_occupymap_params = os.path.join(
+        pkg_share, 'config', 'occupymap_wheelchair.param.yaml')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -135,7 +166,8 @@ def generate_launch_description():
             'start_rviz', default_value='false',
             description='Open RViz2 with the navigation debug config'),
         DeclareLaunchArgument(
-            'rviz_config', default_value=default_rviz,
+            'rviz_config',
+            default_value=os.path.join(pkg_share, 'rviz', 'nav_debug.rviz'),
             description='RViz2 config file for the navigation stack'),
         DeclareLaunchArgument(
             'start_bag_record', default_value='false',
@@ -147,12 +179,17 @@ def generate_launch_description():
             'bag_record_max_count', default_value='10',
             description='Max rosbag segments to keep; oldest deleted when exceeded'),
         DeclareLaunchArgument(
-            'bag_record_output_dir', default_value=default_bag_output,
+            'bag_record_output_dir',
+            default_value=os.path.join(os.path.expanduser('~'), 'bags', 'mppi_stack_cyclic'),
             description='Directory for cyclic rosbag segments (bag_YYYYMMDD_HHMMSS/)'),
-        lidar_fusion,
-        obstacle_filter,
-        odom_fusion,
-        control,
-        rviz,
-        bag_record,
+        DeclareLaunchArgument(
+            'use_localmap_costmap', default_value='true',
+            description='Use localmap_occupymap + ExternalOccupymapLayer for MPPI costmap'),
+        DeclareLaunchArgument(
+            'controller_params_file', default_value='',
+            description='Override controller_server params yaml (empty = auto by use_localmap_costmap)'),
+        DeclareLaunchArgument(
+            'occupymap_params_file', default_value=default_occupymap_params,
+            description='occupymap_node params when use_localmap_costmap is true'),
+        OpaqueFunction(function=_launch_setup),
     ])

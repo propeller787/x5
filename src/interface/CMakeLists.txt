@@ -19,6 +19,8 @@ find_package(sensor_msgs REQUIRED)
 # === Protobuf support ===
 find_package(Protobuf REQUIRED)
 file(GLOB proto_files RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" proto/*.proto)
+# Legacy ota_*.proto duplicate vehicle_ota_*.proto (same package/messages → link errors).
+list(FILTER proto_files EXCLUDE REGEX "^proto/ota_(status|up)\\.proto$")
 
 if(proto_files)
   protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${proto_files})
