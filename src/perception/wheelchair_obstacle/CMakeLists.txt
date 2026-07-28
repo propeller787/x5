@@ -127,7 +127,10 @@ install(DIRECTORY config launch rviz
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/cyclic_rosbag_record.sh
+install(PROGRAMS
+  scripts/cyclic_rosbag_record.sh
+  scripts/replay_mppi_bag.sh
+  scripts/compare_mppi_bag_replay.py
   DESTINATION share/${PROJECT_NAME}/scripts
 )
 

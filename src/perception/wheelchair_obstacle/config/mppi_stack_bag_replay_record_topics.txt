@@ -1,0 +1,11 @@
+# Output topics to record during MPPI bag replay (one per line).
+/cmd_vel
+/nav/control
+/odom/fused
+/perception/lidar_fusion/points
+/perception/obstacle_points
+/local_costmap/costmap
+/mppi/local_intent_path
+/cmd_vel_safety_gate_node/mode
+/handle/control
+/wheel/twist

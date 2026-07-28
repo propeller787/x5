@@ -1,0 +1,12 @@
+# Input topics to replay from a recorded MPPI bag (one per line).
+# Do NOT include stack outputs (/cmd_vel, /nav/control, /odom/fused, costmap, etc.).
+/scan/left
+/scan/right
+/scan/back
+/sensor/imu/data
+/wheel/twist
+/handle/control
+/sensor/joystick
+/vlago/car/info
+/tf
+/tf_static
