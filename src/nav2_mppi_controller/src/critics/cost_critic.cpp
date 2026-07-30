@@ -151,7 +151,7 @@ void CostCritic::score(CriticData & data)
       // The footprintCostAtPose will always return "INSCRIBED" if footprint is over it
       // So the center point has more information than the footprint
       pose_cost = costAtPose(traj.x(i, j), traj.y(i, j));
-      if (pose_cost < 1.0f) {continue;}  // In free space
+      if (pose_cost < 1.0f && !near_goal) {continue;}  // In free space
 
       if (inCollision(pose_cost, traj.x(i, j), traj.y(i, j), traj.yaws(i, j))) {
         trajectory_collide = true;

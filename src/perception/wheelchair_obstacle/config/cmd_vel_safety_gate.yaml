@@ -45,18 +45,18 @@ cmd_vel_safety_gate_node:
     rear_overhang: 0.2
     # 完全停止时保险杠与障碍物之间保留的间隙。
     standoff: 0.08
-    reaction_time: 0.2
+    reaction_time: 0.1
     # 刹车计算所用的减速度；保持 <= 限速门的 |ax_min|（1.5），使加速度限制器总能真正达到它。
-    brake_decel: 1.2
+    brake_decel: 2.2
     # AVOID -> PASSTHROUGH 在 d_engage + release_gap 处释放（迟滞）。
-    release_gap: 0.6
+    release_gap: 0.3
     # 接近速度上限：在两种模式下都把速度限制为 sqrt(2*brake_decel*clearance)，使轮椅在距最近
     # 障碍物 standoff 处减速停下。这是在有限传感器量程内保证 3/4 挡安全的关键。
     proximity_speed_cap: true
 
     min_dwell: 0.5
     # 行进方向扇区的半角（弧度）~ atan2(w=0.34, d_engage)+余量。
-    sector_half_angle: 0.45
+    sector_half_angle: 0.30
 
     # 回退用的固定阈值（仅当 dynamic_d_engage=false 时使用）。
     d_engage: 1.7
@@ -91,3 +91,17 @@ cmd_vel_safety_gate_node:
     # 尚未收到挡位反馈、或挡位越界时使用的兜底上限（m/s）。设为 <=0 表示此时不限速。
     gear_default_mps: 1.6667
     car_info_topic: "/vlago/car/info"
+
+    # --- 按 obstacle_points 周边密度分三档限制角速度（带迟滞）---
+    # 复用 obstacle_points_topic，无额外订阅。空旷全速；复杂环境约 30°/s。
+    # 调试：/cmd_vel_safety_gate_node/wz_density_tier (0=OPEN, 1=MODERATE, 2=DENSE)
+    wz_density_cap_enable: true
+    density_check_radius: 1.2
+    # [OPEN, MODERATE, DENSE] 角速度上限 (rad/s)。0.524 ≈ 30°/s，0.785 ≈ 45°/s
+    wz_density_caps_rps: [1.30, 0.785, 0.524]
+    # 半径内障碍点数量迟滞：OPEN->MODERATE / MODERATE->OPEN / MODERATE->DENSE / DENSE->MODERATE
+    obstacle_count_engage_moderate: 12
+    obstacle_count_release_open: 6
+    obstacle_count_engage_dense: 40
+    obstacle_count_release_moderate: 28
+    wz_density_min_dwell: 0.4

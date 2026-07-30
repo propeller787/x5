@@ -15,7 +15,16 @@ controller_server:
     min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
 
+    # 摇杆短弧/原地转向时，10s 内 xy 位移常 <0.15m，默认 progress checker
+    # (0.5m / 10s) 会周期性报 "Failed to make progress" 并 abort FollowPath，
+    # 导致 /cmd_vel wz 每隔 ~10s 归零 ~0.16s。
+    progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["general_goal_checker"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.05
+      movement_time_allowance: 10.0
 
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"

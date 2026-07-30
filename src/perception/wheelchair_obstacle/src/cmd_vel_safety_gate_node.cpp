@@ -94,6 +94,7 @@ public:
   using Joystick = interface::msg::Joystick;
 
   enum class Mode : uint8_t { PASSTHROUGH = 0, AVOID = 1 };
+  enum class WzDensityTier : uint8_t { OPEN = 0, MODERATE = 1, DENSE = 2 };
 
   CmdVelSafetyGateNode()
   : rclcpp::Node("cmd_vel_safety_gate_node")
@@ -155,6 +156,21 @@ public:
     gear_default_mps_ = declare_parameter<double>("gear_default_mps", 1.6667);
     car_info_topic_ = declare_parameter<std::string>("car_info_topic", "/vlago/car/info");
 
+    // Obstacle-point tiered wz cap (open / moderate / dense) with hysteresis.
+    wz_density_cap_enable_ = declare_parameter<bool>("wz_density_cap_enable", true);
+    density_check_radius_ = declare_parameter<double>("density_check_radius", 1.2);
+    wz_density_caps_rps_ = declare_parameter<std::vector<double>>(
+      "wz_density_caps_rps", std::vector<double>{1.30, 0.785, 0.524});
+    obstacle_count_engage_moderate_ = declare_parameter<int>(
+      "obstacle_count_engage_moderate", 12);
+    obstacle_count_release_open_ = declare_parameter<int>(
+      "obstacle_count_release_open", 6);
+    obstacle_count_engage_dense_ = declare_parameter<int>(
+      "obstacle_count_engage_dense", 40);
+    obstacle_count_release_moderate_ = declare_parameter<int>(
+      "obstacle_count_release_moderate", 28);
+    wz_density_min_dwell_ = declare_parameter<double>("wz_density_min_dwell", 0.4);
+
     if (d_release_ <= d_engage_) {
       RCLCPP_WARN(
         get_logger(),
@@ -196,6 +212,8 @@ public:
 
     out_pub_ = create_publisher<Twist>(out_topic_, 10);
     mode_pub_ = create_publisher<UInt8>(std::string(get_name()) + "/mode", 10);
+    wz_tier_pub_ = create_publisher<UInt8>(
+      std::string(get_name()) + "/wz_density_tier", 10);
 
     const double period = 1.0 / std::max(0.1, publish_rate_hz_);
     timer_ = create_wall_timer(
@@ -209,12 +227,14 @@ public:
       get_logger(),
       "cmd_vel_safety_gate: in=%s handle=%s rocker=%s cloud=%s out=%s input_type=%s "
       "passthrough=%d d_engage=%.2f d_release=%.2f min_dwell=%.2f "
-      "sector_half=%.2f cmd_timeout=%.2f rocker_deadband=%.1f vx=[%.2f,%.2f] wz_max=%.2f",
+      "sector_half=%.2f cmd_timeout=%.2f rocker_deadband=%.1f vx=[%.2f,%.2f] wz_max=%.2f "
+      "wz_density_cap=%d",
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
       obstacle_topic_.c_str(), out_topic_.c_str(), input_type_.c_str(),
       passthrough_enable_ ? 1 : 0,
       d_engage_, d_release_, min_dwell_, sector_half_angle_, cmd_timeout_,
-      rocker_deadband_, vx_min_, vx_max_, wz_max_);
+      rocker_deadband_, vx_min_, vx_max_, wz_max_,
+      wz_density_cap_enable_ ? 1 : 0);
   }
 
 private:
@@ -298,6 +318,75 @@ private:
     std::lock_guard<std::mutex> lock(gear_mutex_);
     latest_gear_ = msg->gear;
     have_gear_ = true;
+  }
+
+  // Count obstacle points within density_check_radius_ of base_link origin.
+  int nearbyObstaclePointCount() const
+  {
+    const double r2 = density_check_radius_ * density_check_radius_;
+    int count = 0;
+    std::lock_guard<std::mutex> lock(cloud_mutex_);
+    for (const auto & p : cloud_pts_) {
+      if ((p.first * p.first + p.second * p.second) <= r2) {
+        ++count;
+      }
+    }
+    return count;
+  }
+
+  void updateWzDensityTier(int nearby_count, const rclcpp::Time & tnow)
+  {
+    if (!wz_density_cap_enable_) {
+      return;
+    }
+
+    WzDensityTier desired = current_wz_tier_;
+    switch (current_wz_tier_) {
+      case WzDensityTier::OPEN:
+        if (nearby_count >= obstacle_count_engage_moderate_) {
+          desired = WzDensityTier::MODERATE;
+        }
+        break;
+      case WzDensityTier::MODERATE:
+        if (nearby_count >= obstacle_count_engage_dense_) {
+          desired = WzDensityTier::DENSE;
+        } else if (nearby_count < obstacle_count_release_open_) {
+          desired = WzDensityTier::OPEN;
+        }
+        break;
+      case WzDensityTier::DENSE:
+        if (nearby_count < obstacle_count_release_moderate_) {
+          desired = WzDensityTier::MODERATE;
+        }
+        break;
+    }
+
+    if (desired == current_wz_tier_) {
+      return;
+    }
+    if ((tnow - last_wz_tier_change_stamp_).seconds() < wz_density_min_dwell_) {
+      return;
+    }
+    current_wz_tier_ = desired;
+    last_wz_tier_change_stamp_ = tnow;
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "wz obstacle tier -> %s (nearby_points=%d)",
+      desired == WzDensityTier::OPEN ? "OPEN" :
+      (desired == WzDensityTier::MODERATE ? "MODERATE" : "DENSE"),
+      nearby_count);
+  }
+
+  double wzDensityCap() const
+  {
+    if (!wz_density_cap_enable_ || wz_density_caps_rps_.empty()) {
+      return wz_max_;
+    }
+    const size_t idx = static_cast<size_t>(current_wz_tier_);
+    if (idx >= wz_density_caps_rps_.size()) {
+      return wz_max_;
+    }
+    return std::min(wz_max_, wz_density_caps_rps_[idx]);
   }
 
   // Max |linear.x| allowed by the currently selected gear. Returns +inf when the
@@ -512,9 +601,21 @@ private:
       }
     }
 
+    // --- Obstacle-point tiered wz cap (hysteresis): slow in-place turns near
+    // obstacles; full wz_max in open space. Reuses obstacle_points_topic. ---
+    double effective_wz_max = wz_max_;
+    if (wz_density_cap_enable_ && input_ok && !halted) {
+      if (!cloud_ok) {
+        current_wz_tier_ = WzDensityTier::DENSE;
+      } else {
+        updateWzDensityTier(nearbyObstaclePointCount(), tnow);
+      }
+      effective_wz_max = wzDensityCap();
+    }
+
     Twist out;
     if (!halted && input_ok) {
-      out = applyLimits(target, tnow);
+      out = applyLimits(target, tnow, effective_wz_max);
     } else {
       // Halting: zero output, also reset last command so accel limit does not
       // fight the deceleration when commands resume.
@@ -532,9 +633,13 @@ private:
     UInt8 mode_msg;
     mode_msg.data = static_cast<uint8_t>(mode);
     mode_pub_->publish(mode_msg);
+
+    UInt8 tier_msg;
+    tier_msg.data = static_cast<uint8_t>(current_wz_tier_);
+    wz_tier_pub_->publish(tier_msg);
   }
 
-  Twist applyLimits(const Twist & target, const rclcpp::Time & tnow)
+  Twist applyLimits(const Twist & target, const rclcpp::Time & tnow, double wz_cap)
   {
     Twist out;
 
@@ -543,7 +648,7 @@ private:
     // Clamp to velocity envelope first.
     const double vx_des = clamp(target.linear.x, vx_min_, vx_max_);
     const double vy_des = clamp(target.linear.y, -vy_max_, vy_max_);
-    const double wz_des = clamp(target.angular.z, -wz_max_, wz_max_);
+    const double wz_des = clamp(target.angular.z, -wz_cap, wz_cap);
 
     // Then clamp the per-cycle delta to the acceleration envelope, using
     // symmetric bounds derived from ax_min/ax_max and az_max.
@@ -600,6 +705,14 @@ private:
   std::vector<double> gear_speed_caps_mps_{0.5556, 1.1111, 1.6667};
   double gear_default_mps_{1.6667};
   std::string car_info_topic_{"/vlago/car/info"};
+  bool wz_density_cap_enable_{true};
+  double density_check_radius_{1.2};
+  std::vector<double> wz_density_caps_rps_{1.30, 0.785, 0.524};
+  int obstacle_count_engage_moderate_{12};
+  int obstacle_count_release_open_{6};
+  int obstacle_count_engage_dense_{40};
+  int obstacle_count_release_moderate_{28};
+  double wz_density_min_dwell_{0.4};
 
   // Subscriptions / publisher / timer
   rclcpp::Subscription<Twist>::SharedPtr twist_sub_;
@@ -611,6 +724,7 @@ private:
   rclcpp::Subscription<CarInfo>::SharedPtr car_info_sub_;
   rclcpp::Publisher<Twist>::SharedPtr out_pub_;
   rclcpp::Publisher<UInt8>::SharedPtr mode_pub_;
+  rclcpp::Publisher<UInt8>::SharedPtr wz_tier_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   // State
@@ -647,6 +761,8 @@ private:
   // Arbitration state (touched only from the timer thread).
   Mode current_mode_{Mode::AVOID};
   rclcpp::Time last_mode_change_stamp_{0, 0, RCL_ROS_TIME};
+  WzDensityTier current_wz_tier_{WzDensityTier::OPEN};
+  rclcpp::Time last_wz_tier_change_stamp_{0, 0, RCL_ROS_TIME};
 
   Twist last_out_;
   rclcpp::Time last_pub_stamp_{0, 0, RCL_ROS_TIME};
