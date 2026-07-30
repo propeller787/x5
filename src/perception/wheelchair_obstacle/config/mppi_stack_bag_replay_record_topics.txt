@@ -1,13 +1,19 @@
 # Output topics to record during MPPI bag replay (one per line).
+# Do NOT record /odom/fused, /tf, /tf_static: they are played from baseline during
+# replay; recording them picks up duplicate publishers and breaks RViz visualization.
+# Use baseline bag (or Visualization dual-bag replay) for pose/TF in RViz.
 /cmd_vel
 /nav/control
-/odom/fused
 /perception/lidar_fusion/points
 /perception/obstacle_points
 /local_costmap/costmap
+/local_costmap/costmap_updates
+/local_costmap/published_footprint
 /localmap/occupymap
 /localmap/occupymap_raw
 /mppi/local_intent_path
+/controller_server/trajectories
+/controller_server/transformed_global_plan
 /cmd_vel_safety_gate_node/mode
 /handle/control
 /wheel/twist

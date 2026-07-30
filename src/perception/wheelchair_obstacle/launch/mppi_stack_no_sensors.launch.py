@@ -33,7 +33,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
@@ -81,8 +81,12 @@ def _launch_setup(context, *args, **kwargs):
             default_controller_params if use_local else default_legacy_controller_params)
 
     actions = [
-        _include('lidar_fusion', 'horizontal_lidar_fusion.launch.py', start_perception),
-        _include('wheelchair_obstacle', 'obstacle_cloud_filter.launch.py', start_perception),
+        _include(
+            'lidar_fusion', 'horizontal_lidar_fusion.launch.py', start_perception,
+            {'use_sim_time': use_sim_time}),
+        _include(
+            'wheelchair_obstacle', 'obstacle_cloud_filter.launch.py', start_perception,
+            {'use_sim_time': use_sim_time}),
     ]
 
     if use_local:
@@ -103,7 +107,11 @@ def _launch_setup(context, *args, **kwargs):
             name='odom_fusion_node',
             output='screen',
             parameters=[localization_params, {'use_sim_time': use_sim_time}],
-            condition=IfCondition(start_localization),
+            condition=IfCondition(PythonExpression([
+                "'", start_localization, "' == 'true' or '",
+                start_localization, "' == '1' or '",
+                start_localization, "' == 'yes'"
+            ])),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(

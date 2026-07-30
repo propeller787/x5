@@ -28,10 +28,12 @@ QOS_FILE=""
 PLAY_RATE="1.0"
 USE_SIM_TIME=1
 START_RVIZ=0
+START_LOCALIZATION=0
 DRY_RUN=0
 SKIP_BUILD=0
 STACK_WARMUP_SEC=3
 LAUNCH_SETTLE_SEC=3
+REPLAY_DOMAIN_ID="${REPLAY_ROS_DOMAIN_ID:-77}"
 
 usage()
 {
@@ -50,6 +52,7 @@ Options:
   --qos PATH          QoS overrides for ros2 bag play (scan best_effort)
   --rate RATE         ros2 bag play rate. Default: 1.0
   --stack-warmup SEC  Seconds to wait after launch before record/play. Default: 3
+  --live-localization Run odom_fusion_node instead of playing /odom/fused+/tf (debug only)
   --start-rviz        Open RViz2 with nav_debug.rviz
   --wall-clock        Use wall clock instead of sim time (not recommended)
   --skip-build        Do not run colcon build for MPPI stack packages
@@ -103,6 +106,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --start-rviz)
       START_RVIZ=1
+      shift
+      ;;
+    --live-localization)
+      START_LOCALIZATION=1
       shift
       ;;
     --wall-clock)
@@ -162,6 +169,16 @@ fi
 
 mapfile -t PLAY_TOPICS < <(grep -v '^[[:space:]]*#' "${PLAY_TOPICS_FILE}" | grep -v '^[[:space:]]*$' || true)
 mapfile -t RECORD_TOPICS < <(grep -v '^[[:space:]]*#' "${RECORD_TOPICS_FILE}" | grep -v '^[[:space:]]*$' || true)
+if [[ "${START_LOCALIZATION}" -eq 1 ]]; then
+  filtered=()
+  for topic in "${PLAY_TOPICS[@]}"; do
+    if [[ "${topic}" == "/odom/fused" || "${topic}" == "/tf" || "${topic}" == "/tf_static" ]]; then
+      continue
+    fi
+    filtered+=("${topic}")
+  done
+  PLAY_TOPICS=("${filtered[@]}")
+fi
 if [[ ${#PLAY_TOPICS[@]} -eq 0 ]]; then
   echo "No play topics in ${PLAY_TOPICS_FILE}" >&2
   exit 2
@@ -190,7 +207,18 @@ source_ros_setup /opt/ros/humble/setup.bash
 if [[ -f "${WORKSPACE_ROOT}/install/setup.bash" ]]; then
   source_ros_setup "${WORKSPACE_ROOT}/install/setup.bash"
 fi
+export ROS_DOMAIN_ID="${REPLAY_DOMAIN_ID}"
 set -u
+
+kill_stray_replay_nodes() {
+  # Leftover odom_fusion_node processes publish a second /odom/fused and corrupt replay bags.
+  if pgrep -f '/localization/odom_fusion_node' >/dev/null 2>&1; then
+    echo "[WARN] Killing stray odom_fusion_node before replay (ROS_DOMAIN_ID=${ROS_DOMAIN_ID})." >&2
+    pkill -f '/localization/odom_fusion_node' 2>/dev/null || true
+    sleep 0.5
+  fi
+}
+kill_stray_replay_nodes
 
 DURATION_S="$(python3 - <<PY
 import yaml
@@ -221,13 +249,15 @@ echo "Replay out:    ${REPLAY_BAG}"
 echo "Report:        ${REPORT}"
 echo "Duration:      ${DURATION_S}s (+4s margin)"
 echo "Sim time:      ${USE_SIM_TIME}"
+echo "ROS domain:    ${ROS_DOMAIN_ID}"
 echo "Play topics:   ${#PLAY_TOPICS[@]} from ${PLAY_TOPICS_FILE}"
 echo "Record topics: ${#RECORD_TOPICS[@]} from ${RECORD_TOPICS_FILE}"
+echo "Localization:  $([[ "${START_LOCALIZATION}" -eq 1 ]] && echo 'live odom_fusion' || echo 'open-loop (/odom/fused+/tf from bag)')"
 echo "QoS overrides: ${QOS_FILE}"
 
 if [[ "${DRY_RUN}" -eq 1 ]]; then
   echo "[dry-run] colcon build --packages-up-to wheelchair_obstacle lidar_fusion localization localmap_occupymap (unless --skip-build)"
-  echo "[dry-run] ros2 launch wheelchair_obstacle mppi_stack_no_sensors.launch.py use_sim_time:=${SIM_TIME_FLAG} ${RVIZ_ARG} start_bag_record:=false"
+  echo "[dry-run] ros2 launch wheelchair_obstacle mppi_stack_no_sensors.launch.py use_sim_time:=${SIM_TIME_FLAG} ${RVIZ_ARG} start_bag_record:=false start_localization:=${START_LOCALIZATION}"
   echo "[dry-run] ros2 bag record ${RECORD_SIM_ARGS[*]} -o ${REPLAY_BAG} ${RECORD_TOPICS[*]}"
   echo "[dry-run] ros2 bag play ${BASELINE_BAG} --rate ${PLAY_RATE} ${PLAY_CLOCK_FLAG[*]} --qos-profile-overrides-path ${QOS_FILE} --topics ${PLAY_TOPICS[*]}"
   echo "[dry-run] python3 ${SCRIPT_DIR}/compare_mppi_bag_replay.py --baseline ${BASELINE_BAG} --replay ${REPLAY_BAG} --output ${REPORT}"
@@ -327,10 +357,16 @@ wait_for_controller_active()
   return 0
 }
 
+LOCALIZATION_FLAG="start_localization:=false"
+if [[ "${START_LOCALIZATION}" -eq 1 ]]; then
+  LOCALIZATION_FLAG="start_localization:=true"
+fi
+
 ros2 launch wheelchair_obstacle mppi_stack_no_sensors.launch.py \
   use_sim_time:="${SIM_TIME_FLAG}" \
   "${RVIZ_ARG}" \
-  start_bag_record:=false &
+  start_bag_record:=false \
+  "${LOCALIZATION_FLAG}" &
 STACK_PID=$!
 
 echo "Launch settle: ${LAUNCH_SETTLE_SEC}s for nodes to register..."
@@ -347,7 +383,7 @@ ros2 bag record "${RECORD_SIM_ARGS[@]}" -o "${REPLAY_BAG}" "${RECORD_TOPICS[@]}"
 REC_PID=$!
 sleep 1
 
-echo "Playing baseline bag (~${DURATION_S}s). /clock and sensor inputs come from the bag."
+echo "Playing baseline bag (~${DURATION_S}s). /clock, sensors, and (unless --live-localization) /odom/fused+/tf come from the bag."
 set +e
 timeout --signal INT "${DURATION_S}" \
   ros2 bag play "${BASELINE_BAG}" \

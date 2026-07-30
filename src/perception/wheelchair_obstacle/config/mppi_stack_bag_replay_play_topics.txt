@@ -1,5 +1,12 @@
 # Input topics to replay from a recorded MPPI bag (one per line).
-# Do NOT include stack outputs (/cmd_vel, /nav/control, /odom/fused, costmap, etc.).
+# Do NOT include stack outputs (/cmd_vel, /nav/control, costmap, MPPI paths, etc.).
+#
+# Pose (open-loop localization): play recorded /odom/fused + /tf and keep
+# start_localization:=false in replay_mppi_bag.sh. Do NOT run odom_fusion_node
+# alongside played odom/tf — that creates two odom->base_link authorities.
+/odom/fused
+/tf
+/tf_static
 /scan/left
 /scan/right
 /scan/back
@@ -8,5 +15,3 @@
 /handle/control
 /sensor/joystick
 /vlago/car/info
-/tf
-/tf_static
