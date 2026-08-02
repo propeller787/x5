@@ -234,7 +234,7 @@ private:
       v_user = std::copysign(turn_assist_vx_, (v_user != 0.0) ? v_user : 1.0);
     }
 
-    w_user = applyAvoidanceAssist(v_user, w_user, tnow);
+    // w_user = applyAvoidanceAssist(v_user, w_user, tnow);
     const Path path = buildPath(*odom, v_user, w_user);
     path_pub_->publish(path);
     sendGoal(path);
@@ -302,6 +302,7 @@ private:
 
   return w_user + assist_wz_state_;
 }
+
   Path buildPath(const Odometry & odom, double v_user, double w_user) const
   {
     Path path;
