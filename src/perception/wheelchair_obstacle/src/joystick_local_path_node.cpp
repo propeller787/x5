@@ -16,6 +16,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <geometry_msgs/msg/polygon.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -27,6 +28,7 @@
 
 #include "interface/msg/car_info.hpp"
 #include "interface/msg/joystick.hpp"
+#include "nav2_costmap_2d/footprint.hpp"
 #include "nav2_msgs/action/follow_path.hpp"
 
 namespace
@@ -143,6 +145,15 @@ public:
     dt_ = declare_parameter<double>("dt", 0.10);
     send_rate_hz_ = declare_parameter<double>("send_rate_hz", 5.0);
 
+    footprint_publish_enable_ = declare_parameter<bool>("footprint_publish_enable", true);
+    footprint_topic_ = declare_parameter<std::string>(
+      "footprint_topic", "/local_costmap/footprint");
+    footprint_base_ = declare_parameter<std::string>(
+      "footprint_base",
+      "[[0.935, 0.34], [0.935, -0.34], [-0.2, -0.34], [-0.2, 0.34]]");
+    gear_footprint_padding_m_ = declare_parameter<std::vector<double>>(
+      "gear_footprint_padding_m", {0.01, 0.02, 0.03, 0.04});
+
     use_spatial_range_ = (path_generation_mode_ == "spatial_range");
 
     odom_sub_ = create_subscription<Odometry>(
@@ -153,13 +164,16 @@ public:
       joystick_sub_ = create_subscription<Joystick>(
         joystick_topic_, 10,
         std::bind(&JoystickLocalPathNode::onJoystick, this, std::placeholders::_1));
-      car_info_sub_ = create_subscription<CarInfo>(
-        car_info_topic_, 10,
-        std::bind(&JoystickLocalPathNode::onCarInfo, this, std::placeholders::_1));
     } else {
       control_sub_ = create_subscription<Twist>(
         control_topic_, 10,
         std::bind(&JoystickLocalPathNode::onControl, this, std::placeholders::_1));
+    }
+
+    if (footprint_publish_enable_ || use_spatial_range_) {
+      car_info_sub_ = create_subscription<CarInfo>(
+        car_info_topic_, 10,
+        std::bind(&JoystickLocalPathNode::onCarInfo, this, std::placeholders::_1));
     }
 
     obstacle_sub_ = create_subscription<PointCloud2>(
@@ -167,6 +181,15 @@ public:
       std::bind(&JoystickLocalPathNode::onObstaclePoints, this, std::placeholders::_1));
 
     path_pub_ = create_publisher<Path>(intent_path_topic_, 1);
+    if (footprint_publish_enable_) {
+      if (!nav2_costmap_2d::makeFootprintFromString(footprint_base_, footprint_base_pts_)) {
+        RCLCPP_ERROR(get_logger(), "Invalid footprint_base: %s", footprint_base_.c_str());
+        footprint_publish_enable_ = false;
+      } else {
+        footprint_pub_ = create_publisher<geometry_msgs::msg::Polygon>(footprint_topic_, 1);
+        publishFootprintForGear(gear_default_index_);
+      }
+    }
     action_client_ = rclcpp_action::create_client<FollowPath>(this, action_name_);
 
     const double period = 1.0 / std::max(0.1, send_rate_hz_);
@@ -188,6 +211,15 @@ public:
         joystick_topic_.c_str(), forward_sector_deg_, backward_sector_deg_,
         sector_hysteresis_deg_, 180.0 - half_back, path_interpolation_steps_);
     }
+    if (footprint_publish_enable_) {
+      RCLCPP_INFO(
+        get_logger(), "footprint publish: topic=%s gear_padding_cm=[%.0f,%.0f,%.0f,%.0f]",
+        footprint_topic_.c_str(),
+        gear_footprint_padding_m_.size() > 0 ? gear_footprint_padding_m_[0] * 100.0 : 0.0,
+        gear_footprint_padding_m_.size() > 1 ? gear_footprint_padding_m_[1] * 100.0 : 0.0,
+        gear_footprint_padding_m_.size() > 2 ? gear_footprint_padding_m_[2] * 100.0 : 0.0,
+        gear_footprint_padding_m_.size() > 3 ? gear_footprint_padding_m_[3] * 100.0 : 0.0);
+    }
   }
 
 private:
@@ -207,9 +239,15 @@ private:
 
   void onCarInfo(const CarInfo::SharedPtr msg)
   {
-    std::lock_guard<std::mutex> lock(gear_mutex_);
-    latest_gear_ = static_cast<int>(msg->gear);
-    have_gear_ = true;
+    int gear = static_cast<int>(msg->gear);
+    {
+      std::lock_guard<std::mutex> lock(gear_mutex_);
+      latest_gear_ = gear;
+      have_gear_ = true;
+    }
+    if (footprint_publish_enable_) {
+      publishFootprintForGear(gear);
+    }
   }
 
   void onOdom(const Odometry::SharedPtr msg)
@@ -390,6 +428,45 @@ private:
       drive_sector_ = DriveSector::Forward;
     }
     return drive_sector_;
+  }
+
+  double gearFootprintPadding(int gear) const
+  {
+    const auto pick = [](const std::vector<double> & table, int g, int fallback_g) {
+      if (table.empty()) {
+        return 0.0;
+      }
+      if (g >= 1 && g <= static_cast<int>(table.size())) {
+        return table[static_cast<size_t>(g - 1)];
+      }
+      const int fb = std::max(1, std::min(fallback_g, static_cast<int>(table.size())));
+      return table[static_cast<size_t>(fb - 1)];
+    };
+    return pick(gear_footprint_padding_m_, gear, gear_default_index_);
+  }
+
+  void publishFootprintForGear(int gear)
+  {
+    if (!footprint_pub_ || footprint_base_pts_.empty()) {
+      return;
+    }
+
+    const double padding = gearFootprintPadding(gear);
+    if (have_published_footprint_ && std::abs(padding - last_footprint_padding_) < 1e-6) {
+      return;
+    }
+
+    auto pts = footprint_base_pts_;
+    nav2_costmap_2d::padFootprint(pts, padding);
+
+    geometry_msgs::msg::Polygon poly = nav2_costmap_2d::toPolygon(pts);
+    footprint_pub_->publish(poly);
+    last_footprint_padding_ = padding;
+    have_published_footprint_ = true;
+
+    RCLCPP_INFO(
+      get_logger(), "local_costmap footprint gear=%d padding=%.0fcm",
+      gear, padding * 100.0);
   }
 
   void gearRanges(double & max_forward, double & max_back, double & max_lateral)
@@ -691,6 +768,14 @@ private:
   double dt_{0.10};
   double send_rate_hz_{5.0};
 
+  bool footprint_publish_enable_{true};
+  std::string footprint_topic_;
+  std::string footprint_base_;
+  std::vector<double> gear_footprint_padding_m_;
+  std::vector<geometry_msgs::msg::Point> footprint_base_pts_;
+  double last_footprint_padding_{-1.0};
+  bool have_published_footprint_{false};
+
   DriveSector drive_sector_{DriveSector::Forward};
 
   bool have_last_sent_goal_{false};
@@ -704,6 +789,7 @@ private:
   rclcpp::Subscription<Odometry>::SharedPtr odom_sub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr obstacle_sub_;
   rclcpp::Publisher<Path>::SharedPtr path_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::Polygon>::SharedPtr footprint_pub_;
   rclcpp_action::Client<FollowPath>::SharedPtr action_client_;
   rclcpp::TimerBase::SharedPtr timer_;
 

@@ -68,8 +68,13 @@ ament_target_dependencies(joystick_local_path_node
   geometry_msgs
   sensor_msgs
   nav2_msgs
+  nav2_costmap_2d
   interface
   tf2
+)
+
+target_link_libraries(joystick_local_path_node
+  nav2_costmap_2d::nav2_costmap_2d_core
 )
 
 add_executable(cmd_vel_safety_gate_node

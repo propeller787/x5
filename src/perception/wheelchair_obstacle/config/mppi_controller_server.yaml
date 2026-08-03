@@ -187,7 +187,8 @@ local_costmap:
       # 实测车体：前悬伸 f=0.935，后悬伸 r=0.2，半宽 w=0.34（base_link 位于驱动轮轴上，因此
       # 原点位于靠后位置）。
       footprint: "[[0.935, 0.34], [0.935, -0.34], [-0.2, -0.34], [-0.2, 0.34]]"
-      footprint_padding: 0.03
+      # padding 由 joystick_local_path 按挡位发布到 /local_costmap/footprint
+      footprint_padding: 0.0
 
       plugins: ["obstacle_layer", "inflation_layer"]
 
