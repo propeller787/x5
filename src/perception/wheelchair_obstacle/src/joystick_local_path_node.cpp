@@ -62,6 +62,23 @@ double clampNorm(double v, double lo, double hi)
   return std::max(lo, std::min(hi, v));
 }
 
+double normalizeAngle(double a)
+{
+  while (a > M_PI) {
+    a -= 2.0 * M_PI;
+  }
+  while (a < -M_PI) {
+    a += 2.0 * M_PI;
+  }
+  return a;
+}
+
+double lerpAngle(double a, double b, double t)
+{
+  const double diff = normalizeAngle(b - a);
+  return normalizeAngle(a + t * diff);
+}
+
 }  // namespace
 
 enum class DriveSector
@@ -123,6 +140,7 @@ public:
     gear_default_index_ = declare_parameter<int>("gear_default_index", 3);
     path_interpolation_steps_ = declare_parameter<int>("path_interpolation_steps", 20);
     min_goal_distance_m_ = declare_parameter<double>("min_goal_distance_m", 0.12);
+    path_yaw_lateral_eps_m_ = declare_parameter<double>("path_yaw_lateral_eps_m", 0.03);
     goal_resend_xy_delta_m_ = declare_parameter<double>("goal_resend_xy_delta_m", 0.05);
     goal_resend_yaw_delta_ = declare_parameter<double>("goal_resend_yaw_delta", 0.08);
 
@@ -344,7 +362,7 @@ private:
       v_user = std::copysign(turn_assist_vx_, (v_user != 0.0) ? v_user : 1.0);
     }
 
-    w_user = applyAvoidanceAssist(v_user, w_user, tnow);
+    // w_user = applyAvoidanceAssist(v_user, w_user, tnow);
     path = buildPathFromVelocity(*odom, v_user, w_user);
     return true;
   }
@@ -399,7 +417,7 @@ private:
       dy_body *= scale;
     }
 
-    path = buildPathToBodyOffset(*odom, dx_body, dy_body);
+    path = buildPathToBodyOffset(*odom, dx_body, dy_body, rx, ry);
     return true;
   }
 
@@ -495,8 +513,17 @@ private:
     max_lateral = pick(gear_lateral_range_m_, gear, gear_default_index_);
   }
 
+  // Body-frame yaw offset at path end: 0 for pure forward/back; otherwise stick bearing.
+  double goalYawOffsetBody(double dy_body, double rx, double ry) const
+  {
+    if (std::abs(dy_body) < path_yaw_lateral_eps_m_) {
+      return 0.0;
+    }
+    return std::atan2(ry, rx);
+  }
+
   Path buildPathToBodyOffset(
-    const Odometry & odom, double dx_body, double dy_body) const
+    const Odometry & odom, double dx_body, double dy_body, double rx, double ry) const
   {
     Path path;
     path.header.stamp = now();
@@ -510,7 +537,8 @@ private:
     const double sin_y = std::sin(yaw0);
     const double goal_x = x0 + cos_y * dx_body - sin_y * dy_body;
     const double goal_y = y0 + sin_y * dx_body + cos_y * dy_body;
-    const double path_yaw = yaw0;
+
+    const double yaw_goal = yaw0 + goalYawOffsetBody(dy_body, rx, ry);
 
     const int steps = std::max(2, path_interpolation_steps_);
 
@@ -521,75 +549,75 @@ private:
       p.pose.position.x = x0 + t * (goal_x - x0);
       p.pose.position.y = y0 + t * (goal_y - y0);
       p.pose.position.z = 0.0;
-      p.pose.orientation = quaternionFromYaw(path_yaw);
+      p.pose.orientation = quaternionFromYaw(lerpAngle(yaw0, yaw_goal, t));
       path.poses.push_back(p);
     }
 
     return path;
   }
 
-  double applyAvoidanceAssist(double v_user, double w_user, const rclcpp::Time & tnow)
-  {
-    if (!avoidance_assist_enabled_ || v_user <= lin_deadband_) {
-      assist_wz_state_ *= assist_smoothing_;
-      return w_user + assist_wz_state_;
-    }
+  // double applyAvoidanceAssist(double v_user, double w_user, const rclcpp::Time & tnow)
+  // {
+  //   if (!avoidance_assist_enabled_ || v_user <= lin_deadband_) {
+  //     assist_wz_state_ *= assist_smoothing_;
+  //     return w_user + assist_wz_state_;
+  //   }
 
-    if (std::abs(w_user) >= assist_user_turn_override_) {
-      assist_wz_state_ *= assist_smoothing_;
-      return w_user + assist_wz_state_;
-    }
+  //   if (std::abs(w_user) >= assist_user_turn_override_) {
+  //     assist_wz_state_ *= assist_smoothing_;
+  //     return w_user + assist_wz_state_;
+  //   }
 
-    PointCloud2::SharedPtr cloud;
-    rclcpp::Time stamp;
-    {
-      std::lock_guard<std::mutex> lock(obstacle_mutex_);
-      cloud = latest_obstacles_;
-      stamp = latest_obstacles_stamp_;
-    }
+  //   PointCloud2::SharedPtr cloud;
+  //   rclcpp::Time stamp;
+  //   {
+  //     std::lock_guard<std::mutex> lock(obstacle_mutex_);
+  //     cloud = latest_obstacles_;
+  //     stamp = latest_obstacles_stamp_;
+  //   }
 
-    if (!cloud || (tnow - stamp).seconds() > assist_obstacle_timeout_) {
-      assist_wz_state_ *= assist_smoothing_;
-      return w_user + assist_wz_state_;
-    }
+  //   if (!cloud || (tnow - stamp).seconds() > assist_obstacle_timeout_) {
+  //     assist_wz_state_ *= assist_smoothing_;
+  //     return w_user + assist_wz_state_;
+  //   }
 
-    double center_score = 0.0;
-    double left_score = 0.0;
-    double right_score = 0.0;
+  //   double center_score = 0.0;
+  //   double left_score = 0.0;
+  //   double right_score = 0.0;
 
-    sensor_msgs::PointCloud2ConstIterator<float> iter_x(*cloud, "x");
-    sensor_msgs::PointCloud2ConstIterator<float> iter_y(*cloud, "y");
+  //   sensor_msgs::PointCloud2ConstIterator<float> iter_x(*cloud, "x");
+  //   sensor_msgs::PointCloud2ConstIterator<float> iter_y(*cloud, "y");
 
-    for (; iter_x != iter_x.end(); ++iter_x, ++iter_y) {
-      const double x = *iter_x;
-      const double y = *iter_y;
+  //   for (; iter_x != iter_x.end(); ++iter_x, ++iter_y) {
+  //     const double x = *iter_x;
+  //     const double y = *iter_y;
 
-      if (x < assist_x_min_ || x > assist_x_max_ || std::abs(y) > assist_y_abs_) {
-        continue;
-      }
+  //     if (x < assist_x_min_ || x > assist_x_max_ || std::abs(y) > assist_y_abs_) {
+  //       continue;
+  //     }
 
-      const double weight = 1.0 / std::max(0.20, x);
+  //     const double weight = 1.0 / std::max(0.20, x);
 
-      if (std::abs(y) <= assist_center_y_abs_) {
-        center_score += weight;
-      } else if (y > 0.0) {
-        left_score += weight;
-      } else {
-        right_score += weight;
-      }
-    }
+  //     if (std::abs(y) <= assist_center_y_abs_) {
+  //       center_score += weight;
+  //     } else if (y > 0.0) {
+  //       left_score += weight;
+  //     } else {
+  //       right_score += weight;
+  //     }
+  //   }
 
-    double target_assist = 0.0;
-    if (center_score > 0.0) {
-      target_assist = (left_score <= right_score) ? assist_wz_ : -assist_wz_;
-    }
+  //   double target_assist = 0.0;
+  //   if (center_score > 0.0) {
+  //     target_assist = (left_score <= right_score) ? assist_wz_ : -assist_wz_;
+  //   }
 
-    target_assist = std::clamp(target_assist, -assist_max_wz_, assist_max_wz_);
-    assist_wz_state_ =
-      assist_smoothing_ * assist_wz_state_ + (1.0 - assist_smoothing_) * target_assist;
+  //   target_assist = std::clamp(target_assist, -assist_max_wz_, assist_max_wz_);
+  //   assist_wz_state_ =
+  //     assist_smoothing_ * assist_wz_state_ + (1.0 - assist_smoothing_) * target_assist;
 
-    return w_user + assist_wz_state_;
-  }
+  //   return w_user + assist_wz_state_;
+  // }
 
   Path buildPathFromVelocity(const Odometry & odom, double v_user, double w_user) const
   {
@@ -749,6 +777,7 @@ private:
   int gear_default_index_{3};
   int path_interpolation_steps_{20};
   double min_goal_distance_m_{0.12};
+  double path_yaw_lateral_eps_m_{0.03};
   double goal_resend_xy_delta_m_{0.05};
   double goal_resend_yaw_delta_{0.08};
   double odom_timeout_{0.30};
