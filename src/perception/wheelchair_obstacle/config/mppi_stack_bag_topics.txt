@@ -12,8 +12,14 @@
 /perception/lidar_fusion/points
 /perception/obstacle_points
 /mppi/local_intent_path
+# MPPI 输出（需 FollowPath.visualize:=true）：最优 rollout + 候选轨迹
+/trajectories
+# MPPI 正在跟踪的局部参考路径
+/controller_server/transformed_global_plan
 /local_costmap/costmap
 /local_costmap/costmap_updates
+# joystick_local_path 按挡位发布的动态 footprint（costmap 订阅）
+/local_costmap/footprint
 /vlago/car/info
 /cmd_vel_safety_gate_node/mode
 /tf

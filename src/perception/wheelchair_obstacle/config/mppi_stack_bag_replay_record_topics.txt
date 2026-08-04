@@ -12,7 +12,7 @@
 /localmap/occupymap
 /localmap/occupymap_raw
 /mppi/local_intent_path
-/controller_server/trajectories
+/trajectories
 /controller_server/transformed_global_plan
 /cmd_vel_safety_gate_node/mode
 /handle/control

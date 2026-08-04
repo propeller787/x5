@@ -42,7 +42,7 @@ joystick_local_path_node:
     # costmap 侧 footprint_padding 须为 0，避免重复膨胀。
     footprint_publish_enable: true
     footprint_topic: "/local_costmap/footprint"
-    footprint_base: "[[0.935, 0.34], [0.935, -0.34], [-0.2, -0.34], [-0.2, 0.34]]"
+    footprint_base: "[[-0.2, 0.32], [0.685, 0.34], [0.935, 0.17], [0.935, -0.17], [0.685, -0.34], [-0.2, -0.32]]"
     gear_footprint_padding_m: [0.01, 0.02, 0.03, 0.04]
 
     # velocity_integration 模式专用

@@ -571,7 +571,7 @@ Visualization Manager:
             Durability Policy: Volatile
             History Policy: Keep Last
             Reliability Policy: Reliable
-            Value: /controller_server/trajectories
+            Value: /trajectories
           Value: true
       Enabled: true
       Name: MPPI Control

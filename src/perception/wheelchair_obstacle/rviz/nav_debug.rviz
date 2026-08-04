@@ -190,7 +190,7 @@ Visualization Manager:
           Enabled: true
           Namespaces: {}
           Topic:
-            Value: /controller_server/trajectories
+            Value: /trajectories
             Depth: 5
             Durability Policy: Volatile
             History Policy: Keep Last

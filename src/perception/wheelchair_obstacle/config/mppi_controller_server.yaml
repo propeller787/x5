@@ -55,7 +55,6 @@ controller_server:
       vx_max: 5.0
       vx_min: -0.90
       vy_max: 0.0
-      # 对齐挡位角速度能力；原 0.57 过小导致只能停住再慢转。
       wz_max: 1.20
 
       # 略减 vx 采样、加大 wz 采样，使 rollout 更多探索“低速+大角速度”绕障轨迹。
@@ -67,9 +66,9 @@ controller_server:
       gamma: 0.01
       retry_attempt_limit: 1
       regenerate_noises: false
-      # 打开后，MPPI 会把候选轨迹与最优轨迹（“Optimal Trajectory”命名空间）发布到
-      # /controller_server/trajectories(visualization_msgs/MarkerArray)，并把跟踪的
-      # 局部路径发布到 /controller_server/transformed_global_plan(nav_msgs/Path)，
+      # 打开后，MPPI 会把候选轨迹与最优轨迹（“Optimal Trajectory” 命名空间）发布到
+      # /trajectories(visualization_msgs/MarkerArray)，并把跟踪的局部路径发布到
+      # /controller_server/transformed_global_plan(nav_msgs/Path)，
       # 供 RViz2 显示 MPPI 的输出路径。会略增 CPU，仅用于调试。
       visualize: true
 
@@ -184,9 +183,9 @@ local_costmap:
       always_send_full_costmap: true
       track_unknown_space: false
 
-      # 实测车体：前悬伸 f=0.935，后悬伸 r=0.2，半宽 w=0.34（base_link 位于驱动轮轴上，因此
-      # 原点位于靠后位置）。
-      footprint: "[[0.935, 0.34], [0.935, -0.34], [-0.2, -0.34], [-0.2, 0.34]]"
+      # 6 顶点双梯形（凸字）：后段宽体 + 前段脚托收窄。分节线 x=0.685，前缘 f=0.935
+      # （脚托半宽 0.17 m），后缘 r=0.2，后段半宽 w=0.34。对齐 safety_node 双梯形几何。
+      footprint: "[[-0.2, 0.32], [0.685, 0.34], [0.935, 0.17], [0.935, -0.17], [0.685, -0.34], [-0.2, -0.32]]"
       # padding 由 joystick_local_path 按挡位发布到 /local_costmap/footprint
       footprint_padding: 0.0
 
