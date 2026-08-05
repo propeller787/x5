@@ -1,4 +1,0 @@
-Invoking command in '/home/m1513/sou/freego_tft/freego_2025_tft/build/common': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /home/m1513/sou/freego_tft/freego_2025_tft/build/common -- -j16 -l16
-Invoked command in '/home/m1513/sou/freego_tft/freego_2025_tft/build/common' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /home/m1513/sou/freego_tft/freego_2025_tft/build/common -- -j16 -l16
-Invoking command in '/home/m1513/sou/freego_tft/freego_2025_tft/build/common': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /home/m1513/sou/freego_tft/freego_2025_tft/build/common
-Invoked command in '/home/m1513/sou/freego_tft/freego_2025_tft/build/common' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /home/m1513/sou/freego_tft/freego_2025_tft/build/common
