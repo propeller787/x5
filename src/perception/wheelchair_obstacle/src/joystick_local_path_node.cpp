@@ -1,9 +1,9 @@
 // Joystick / handle intent -> short local path -> Nav2 FollowPath (MPPI).
 //
-// spatial_range: stick position -> base_link goal; gear-scaled ranges.
-//   Forward/backward intent is encoded by goal position; path orientation is
-//   always current vehicle heading (reverse drives with vx < 0, no yaw flip).
-//   Sector boundary hysteresis +/- 10 deg at |stick angle| = 150 deg.
+// spatial_range: stick polar -> body-frame goal on concentric arcs (per gear).
+//   stick_r = |rocker|/100, stick_theta = atan2(ry,rx); goal = r*R*(cos,sin)(theta).
+//   Pure lateral (|rx| deadbanded) -> in-place turn via ry->wz. Moving path yaw
+//   lerps toward stick bearing. Forward/back sector picks R from gear tables.
 // velocity_integration: legacy /handle/control (v,w) integration.
 
 #include <algorithm>
@@ -134,6 +134,8 @@ public:
       "gear_back_range_m", {0.15, 0.25, 0.35, 0.50});
     gear_lateral_range_m_ = declare_parameter<std::vector<double>>(
       "gear_lateral_range_m", {-0.20, -0.40, -1.00, -1.50});
+    gear_lateral_wz_max_ = declare_parameter<std::vector<double>>(
+      "gear_lateral_wz_max", {0.55, 0.75, 0.95, 1.15});
     forward_sector_deg_ = declare_parameter<double>("forward_sector_deg", 300.0);
     backward_sector_deg_ = declare_parameter<double>("backward_sector_deg", 60.0);
     sector_hysteresis_deg_ = declare_parameter<double>("sector_hysteresis_deg", 10.0);
@@ -393,31 +395,45 @@ private:
 
     double max_forward = 0.0;
     double max_back = 0.0;
-    double max_lateral = 0.0;
-    gearRanges(max_forward, max_back, max_lateral);
+    double max_lateral_unused = 0.0;
+    gearRanges(max_forward, max_back, max_lateral_unused);
 
-    const double norm_x = clampNorm(rx / 100.0, -1.0, 1.0);
-    const double norm_y = clampNorm(ry / 100.0, -1.0, 1.0);
+    const double norm_x = rx / 100.0;
+    const double norm_y = ry / 100.0;
 
-    double dx_body = 0.0;
-    double dy_body = norm_y * max_lateral;
-    if (sector == DriveSector::Forward) {
-      dx_body = std::max(0.0, norm_x) * max_forward;
-    } else {
-      dx_body = std::min(0.0, norm_x) * max_back;
+    int gear = gear_default_index_;
+    {
+      std::lock_guard<std::mutex> lock(gear_mutex_);
+      if (have_gear_ && latest_gear_ >= 1) {
+        gear = latest_gear_;
+      }
     }
 
-    const double goal_dist = std::hypot(dx_body, dy_body);
-    if (goal_dist < 1e-4) {
+    // Pure lateral: no forward/back on stick -> spin in place (same xy, yaw only).
+    if (std::abs(rx) < 1e-6) {
+      const double wz = clampNorm(norm_y, -1.0, 1.0) * gearLateralWzMax(gear);
+      path = buildPathInPlaceTurn(*odom, wz);
+      return true;
+    }
+
+    const double stick_r = std::min(1.0, std::hypot(norm_x, norm_y));
+    const double stick_theta = std::atan2(norm_y, norm_x);
+    if (stick_r < 1e-6) {
       return false;
     }
+
+    const double R = (sector == DriveSector::Forward) ? max_forward : max_back;
+    double dx_body = stick_r * std::cos(stick_theta) * R;
+    double dy_body = stick_r * std::sin(stick_theta) * R;
+
+    const double goal_dist = std::hypot(dx_body, dy_body);
     if (goal_dist < min_goal_distance_m_) {
       const double scale = min_goal_distance_m_ / goal_dist;
       dx_body *= scale;
       dy_body *= scale;
     }
 
-    path = buildPathToBodyOffset(*odom, dx_body, dy_body, rx, ry);
+    path = buildPathToBodyOffset(*odom, dx_body, dy_body, stick_theta);
     return true;
   }
 
@@ -450,17 +466,25 @@ private:
 
   double gearFootprintPadding(int gear) const
   {
-    const auto pick = [](const std::vector<double> & table, int g, int fallback_g) {
-      if (table.empty()) {
-        return 0.0;
-      }
-      if (g >= 1 && g <= static_cast<int>(table.size())) {
-        return table[static_cast<size_t>(g - 1)];
-      }
-      const int fb = std::max(1, std::min(fallback_g, static_cast<int>(table.size())));
-      return table[static_cast<size_t>(fb - 1)];
-    };
-    return pick(gear_footprint_padding_m_, gear, gear_default_index_);
+    return pickGearTable(gear_footprint_padding_m_, gear, gear_default_index_);
+  }
+
+  double gearLateralWzMax(int gear) const
+  {
+    return pickGearTable(gear_lateral_wz_max_, gear, gear_default_index_);
+  }
+
+  static double pickGearTable(
+    const std::vector<double> & table, int g, int fallback_g)
+  {
+    if (table.empty()) {
+      return 0.0;
+    }
+    if (g >= 1 && g <= static_cast<int>(table.size())) {
+      return table[static_cast<size_t>(g - 1)];
+    }
+    const int fb = std::max(1, std::min(fallback_g, static_cast<int>(table.size())));
+    return table[static_cast<size_t>(fb - 1)];
   }
 
   void publishFootprintForGear(int gear)
@@ -497,33 +521,13 @@ private:
       }
     }
 
-    const auto pick = [](const std::vector<double> & table, int g, int fallback_g) {
-      if (table.empty()) {
-        return 0.0;
-      }
-      if (g >= 1 && g <= static_cast<int>(table.size())) {
-        return table[static_cast<size_t>(g - 1)];
-      }
-      const int fb = std::max(1, std::min(fallback_g, static_cast<int>(table.size())));
-      return table[static_cast<size_t>(fb - 1)];
-    };
-
-    max_forward = pick(gear_forward_range_m_, gear, gear_default_index_);
-    max_back = pick(gear_back_range_m_, gear, gear_default_index_);
-    max_lateral = pick(gear_lateral_range_m_, gear, gear_default_index_);
-  }
-
-  // Body-frame yaw offset at path end: 0 for pure forward/back; otherwise stick bearing.
-  double goalYawOffsetBody(double dy_body, double rx, double ry) const
-  {
-    if (std::abs(dy_body) < path_yaw_lateral_eps_m_) {
-      return 0.0;
-    }
-    return std::atan2(ry, rx);
+    max_forward = pickGearTable(gear_forward_range_m_, gear, gear_default_index_);
+    max_back = pickGearTable(gear_back_range_m_, gear, gear_default_index_);
+    max_lateral = pickGearTable(gear_lateral_range_m_, gear, gear_default_index_);
   }
 
   Path buildPathToBodyOffset(
-    const Odometry & odom, double dx_body, double dy_body, double rx, double ry) const
+    const Odometry & odom, double dx_body, double dy_body, double yaw_offset_body) const
   {
     Path path;
     path.header.stamp = now();
@@ -537,8 +541,7 @@ private:
     const double sin_y = std::sin(yaw0);
     const double goal_x = x0 + cos_y * dx_body - sin_y * dy_body;
     const double goal_y = y0 + sin_y * dx_body + cos_y * dy_body;
-
-    const double yaw_goal = yaw0 + goalYawOffsetBody(dy_body, rx, ry);
+    const double yaw_goal = normalizeAngle(yaw0 + yaw_offset_body);
 
     const int steps = std::max(2, path_interpolation_steps_);
 
@@ -550,6 +553,31 @@ private:
       p.pose.position.y = y0 + t * (goal_y - y0);
       p.pose.position.z = 0.0;
       p.pose.orientation = quaternionFromYaw(lerpAngle(yaw0, yaw_goal, t));
+      path.poses.push_back(p);
+    }
+
+    return path;
+  }
+
+  Path buildPathInPlaceTurn(const Odometry & odom, double wz) const
+  {
+    Path path;
+    path.header.stamp = now();
+    path.header.frame_id = global_frame_;
+
+    const double x0 = odom.pose.pose.position.x;
+    const double y0 = odom.pose.pose.position.y;
+    const double yaw0 = yawFromQuaternion(odom.pose.pose.orientation);
+
+    const int steps = std::max(2, path_interpolation_steps_);
+    for (int i = 0; i <= steps; ++i) {
+      const double t = static_cast<double>(i) / static_cast<double>(steps);
+      PoseStamped p;
+      p.header = path.header;
+      p.pose.position.x = x0;
+      p.pose.position.y = y0;
+      p.pose.position.z = 0.0;
+      p.pose.orientation = quaternionFromYaw(normalizeAngle(yaw0 + wz * t * horizon_));
       path.poses.push_back(p);
     }
 
@@ -771,6 +799,7 @@ private:
   std::vector<double> gear_forward_range_m_;
   std::vector<double> gear_back_range_m_;
   std::vector<double> gear_lateral_range_m_;
+  std::vector<double> gear_lateral_wz_max_;
   double forward_sector_deg_{300.0};
   double backward_sector_deg_{60.0};
   double sector_hysteresis_deg_{10.0};
