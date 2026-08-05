@@ -25,7 +25,7 @@
     map_frame: odom
     robot_base_frame: base_link
     costmap_layer: master
-    inflation_radius_m: 0.60
+    inflation_radius_m: 0.55
     inscribed_radius_m: 0.40
     cost_scaling_factor: 10.0
     track_unknown_space: false
