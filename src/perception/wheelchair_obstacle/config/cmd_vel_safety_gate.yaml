@@ -1,5 +1,11 @@
 cmd_vel_safety_gate_node:
   ros__parameters:
+    # 总开关：false 时跳过仲裁/限速/摇杆停车等全部逻辑，仅按 bypass_source 直通输出（测试用）。
+    gate_enable: false
+    # gate_enable=false 时有效：handle=/handle/control，cmd_vel=/cmd_vel
+    # bypass_source: "handle"
+    bypass_source: "cmd_vel"
+
     cmd_vel_in: "/cmd_vel"
     cmd_vel_out: "/nav/control"
     # 透传（PASSTHROUGH）源：来自固件、已按挡位缩放的摇杆速度。
@@ -23,7 +29,10 @@ cmd_vel_safety_gate_node:
     require_safety_state: false
     safety_fault_threshold: 1
 
-    cmd_timeout: 0.20
+    cmd_timeout: 0.30
+    # AVOID 模式下 /cmd_vel 超过 cmd_timeout 仍沿用最后一帧，直到 cmd_hold_timeout
+    # 才 fail-safe 停车。MPPI ~7–20 Hz 时避免 50 Hz 门控周期性清零（急刹）。
+    cmd_hold_timeout: 0.50
     publish_rate_hz: 50.0
 
     # --- 基于障碍物门控的透传仲裁 ---

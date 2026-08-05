@@ -23,7 +23,8 @@
 //       disabled, force AVOID (never passthrough on blind perception).
 //
 //   safety gating (applied to whichever source is selected):
-//     - drops commands older than cmd_timeout
+//     - drops commands older than cmd_hold_timeout (AVOID: holds last /cmd_vel
+//       until then to avoid zero pulses when MPPI publishes slower than 50 Hz)
 //     - halts when /safety_state (std_msgs/UInt8) reports a non-zero fault code
 //       (only enforced when require_safety_state is false; otherwise the gate
 //       stays operational even if no safety_state producer is running)
@@ -35,6 +36,9 @@
 // Output is always geometry_msgs/Twist on cmd_vel_out (remapped to /nav/control
 // in the launch file). The current arbitration mode is published on
 // <node>/mode (std_msgs/UInt8: 0=PASSTHROUGH, 1=AVOID) for debugging.
+//
+// gate_enable=false bypasses all arbitration and safety gating for testing;
+// bypass_source selects handle (default) or cmd_vel as the direct output.
 
 #include <algorithm>
 #include <chrono>
@@ -108,6 +112,16 @@ public:
     require_safety_state_ = declare_parameter<bool>("require_safety_state", false);
     safety_fault_threshold_ = declare_parameter<int>("safety_fault_threshold", 1);
 
+    gate_enable_ = declare_parameter<bool>("gate_enable", true);
+    bypass_source_ = declare_parameter<std::string>("bypass_source", "handle");
+    if (bypass_source_ != "handle" && bypass_source_ != "cmd_vel") {
+      RCLCPP_WARN(
+        get_logger(),
+        "bypass_source='%s' invalid; use 'handle' or 'cmd_vel', defaulting to handle",
+        bypass_source_.c_str());
+      bypass_source_ = "handle";
+    }
+
     // Raw rocker (interface/msg/Joystick, rocker_x/y in [-100, 100]) from
     // handle_can_adapter. Used to trigger an immediate stop the moment the
     // user releases the stick -- /handle/control lags because ODrive applies
@@ -116,7 +130,15 @@ public:
     rocker_deadband_ = declare_parameter<double>("rocker_deadband", 5.0);
     rocker_timeout_ = declare_parameter<double>("rocker_timeout", 0.30);
 
-    cmd_timeout_ = declare_parameter<double>("cmd_timeout", 0.20);
+    cmd_timeout_ = declare_parameter<double>("cmd_timeout", 0.30);
+    cmd_hold_timeout_ = declare_parameter<double>("cmd_hold_timeout", 0.50);
+    if (cmd_hold_timeout_ < cmd_timeout_) {
+      RCLCPP_WARN(
+        get_logger(),
+        "cmd_hold_timeout (%.2f) < cmd_timeout (%.2f); clamping hold to fresh window",
+        cmd_hold_timeout_, cmd_timeout_);
+      cmd_hold_timeout_ = cmd_timeout_;
+    }
     publish_rate_hz_ = declare_parameter<double>("publish_rate_hz", 50.0);
 
     // Arbitration (obstacle-gated passthrough).
@@ -225,14 +247,16 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "cmd_vel_safety_gate: in=%s handle=%s rocker=%s cloud=%s out=%s input_type=%s "
-      "passthrough=%d d_engage=%.2f d_release=%.2f min_dwell=%.2f "
-      "sector_half=%.2f cmd_timeout=%.2f rocker_deadband=%.1f vx=[%.2f,%.2f] wz_max=%.2f "
+      "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s out=%s "
+      "input_type=%s passthrough=%d d_engage=%.2f d_release=%.2f min_dwell=%.2f "
+      "sector_half=%.2f cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f vx=[%.2f,%.2f] wz_max=%.2f "
       "wz_density_cap=%d",
+      gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
       obstacle_topic_.c_str(), out_topic_.c_str(), input_type_.c_str(),
       passthrough_enable_ ? 1 : 0,
       d_engage_, d_release_, min_dwell_, sector_half_angle_, cmd_timeout_,
+      cmd_hold_timeout_,
       rocker_deadband_, vx_min_, vx_max_, wz_max_,
       wz_density_cap_enable_ ? 1 : 0);
   }
@@ -470,6 +494,11 @@ private:
   {
     const auto tnow = now();
 
+    if (!gate_enable_) {
+      publishBypass(tnow);
+      return;
+    }
+
     bool halted = false;
     std::string reason;
 
@@ -565,12 +594,18 @@ private:
       std::lock_guard<std::mutex> lock(input_mutex_);
       if (have_input_) {
         const double age = (tnow - latest_input_stamp_).seconds();
-        if (age > cmd_timeout_) {
-          halted = true;
-          reason = "cmd_vel stale";
-        } else {
+        if (age <= cmd_hold_timeout_) {
           target = latest_twist_;
           input_ok = true;
+          if (age > cmd_timeout_) {
+            RCLCPP_DEBUG_THROTTLE(
+              get_logger(), *get_clock(), 2000,
+              "cmd_vel hold (age=%.3fs, fresh<=%.2fs hold<=%.2fs)",
+              age, cmd_timeout_, cmd_hold_timeout_);
+          }
+        } else {
+          halted = true;
+          reason = "cmd_vel stale";
         }
       }
     }
@@ -665,6 +700,35 @@ private:
     return out;
   }
 
+  void publishBypass(const rclcpp::Time & tnow)
+  {
+    Twist out;
+    if (bypass_source_ == "cmd_vel") {
+      std::lock_guard<std::mutex> lock(input_mutex_);
+      if (have_input_) {
+        out = latest_twist_;
+      }
+    } else {
+      std::lock_guard<std::mutex> lock(handle_mutex_);
+      if (have_handle_) {
+        out = latest_handle_;
+      }
+    }
+
+    out_pub_->publish(out);
+    last_pub_stamp_ = tnow;
+    last_out_ = out;
+
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 5000,
+      "gate_enable=false: bypass %s -> %s",
+      bypass_source_.c_str(), out_topic_.c_str());
+
+    UInt8 mode_msg;
+    mode_msg.data = static_cast<uint8_t>(Mode::PASSTHROUGH);
+    mode_pub_->publish(mode_msg);
+  }
+
   // Parameters
   std::string in_stamped_topic_;
   std::string out_topic_;
@@ -677,7 +741,10 @@ private:
   double rocker_timeout_{0.30};
   bool require_safety_state_{false};
   int safety_fault_threshold_{1};
-  double cmd_timeout_{0.20};
+  bool gate_enable_{true};
+  std::string bypass_source_{"handle"};
+  double cmd_timeout_{0.30};
+  double cmd_hold_timeout_{0.50};
   double publish_rate_hz_{50.0};
   bool passthrough_enable_{true};
   double d_engage_{1.2};
