@@ -1,8 +1,10 @@
 // Joystick / handle intent -> short local path -> Nav2 FollowPath (MPPI).
 //
 // spatial_range: stick polar -> body-frame goal on concentric arcs (per gear).
-//   Pure lateral (|rx| deadbanded) -> in-place turn. Otherwise goal on arc with
-//   yaw lerped toward stick_theta.
+//   Forward sector: goal on arc, path yaw lerps toward stick_theta.
+//   Backward sector (60 deg + hysteresis): Cartesian goal behind vehicle,
+//   path yaw fixed at current heading -> MPPI drives vx<0 (reverse avoid, no U-turn).
+//   Pure lateral (|rx| deadbanded) -> in-place turn.
 //
 // MPPI warm-start reset (stick enters dead zone only):
 //   1. cancel FollowPath (handle or cancel_all_goals)
@@ -134,11 +136,14 @@ public:
       "gear_forward_range_m", {0.50, 1.00, 1.50, 2.00});
     gear_back_range_m_ = declare_parameter<std::vector<double>>(
       "gear_back_range_m", {0.15, 0.25, 0.35, 0.50});
+    gear_lateral_range_m_ = declare_parameter<std::vector<double>>(
+      "gear_lateral_range_m", {0.60, 0.80, 1.00, 1.50});
     gear_lateral_wz_max_ = declare_parameter<std::vector<double>>(
       "gear_lateral_wz_max", {0.55, 0.75, 0.95, 1.15});
     forward_sector_deg_ = declare_parameter<double>("forward_sector_deg", 300.0);
     backward_sector_deg_ = declare_parameter<double>("backward_sector_deg", 60.0);
     sector_hysteresis_deg_ = declare_parameter<double>("sector_hysteresis_deg", 10.0);
+    backward_reverse_path_enable_ = declare_parameter<bool>("backward_reverse_path_enable", true);
     gear_default_index_ = declare_parameter<int>("gear_default_index", 3);
     path_interpolation_steps_ = declare_parameter<int>("path_interpolation_steps", 20);
     min_goal_distance_m_ = declare_parameter<double>("min_goal_distance_m", 0.12);
@@ -211,9 +216,10 @@ public:
       RCLCPP_INFO(
         get_logger(),
         "spatial_range: joystick=%s forward=%.0fdeg back=%.0fdeg hysteresis=%.0fdeg "
-        "boundary=%.0fdeg steps=%d",
+        "boundary=%.0fdeg steps=%d backward_reverse=%s",
         joystick_topic_.c_str(), forward_sector_deg_, backward_sector_deg_,
-        sector_hysteresis_deg_, 180.0 - half_back, path_interpolation_steps_);
+        sector_hysteresis_deg_, 180.0 - half_back, path_interpolation_steps_,
+        backward_reverse_path_enable_ ? "on" : "off");
     }
     if (footprint_publish_enable_) {
       RCLCPP_INFO(
@@ -392,11 +398,17 @@ private:
       return false;
     }
 
+    const DriveSector prev_sector = drive_sector_;
     const DriveSector sector = updateDriveSector(rx, ry);
+    if (backward_reverse_path_enable_ && sector != prev_sector) {
+      scheduleMppiReset(
+        sector == DriveSector::Backward ? "backward sector" : "forward sector");
+    }
 
     double max_forward = 0.0;
     double max_back = 0.0;
-    gearForwardBackMax(max_forward, max_back);
+    double max_lateral = 0.0;
+    gearRanges(max_forward, max_back, max_lateral);
 
     const double norm_x = rx / 100.0;
     const double norm_y = ry / 100.0;
@@ -423,18 +435,38 @@ private:
       return false;
     }
 
-    const double R = (sector == DriveSector::Forward) ? max_forward : max_back;
-    double dx_body = stick_r * std::cos(stick_theta) * R;
-    double dy_body = stick_r * std::sin(stick_theta) * R;
-
-    const double goal_dist = std::hypot(dx_body, dy_body);
-    if (goal_dist < min_goal_distance_m_) {
-      const double scale = min_goal_distance_m_ / goal_dist;
-      dx_body *= scale;
-      dy_body *= scale;
+    double dx_body = 0.0;
+    double dy_body = 0.0;
+    if (sector == DriveSector::Forward ||
+      (sector == DriveSector::Backward && !backward_reverse_path_enable_))
+    {
+      const double R =
+        (sector == DriveSector::Forward) ? max_forward : max_back;
+      dx_body = stick_r * std::cos(stick_theta) * R;
+      dy_body = stick_r * std::sin(stick_theta) * R;
+      const double goal_dist = std::hypot(dx_body, dy_body);
+      if (goal_dist < min_goal_distance_m_) {
+        const double scale = min_goal_distance_m_ / goal_dist;
+        dx_body *= scale;
+        dy_body *= scale;
+      }
+      path = buildPathToBodyOffset(*odom, dx_body, dy_body, stick_theta);
+    } else {
+      const double norm_x_clamped = clampNorm(norm_x, -1.0, 1.0);
+      const double norm_y_clamped = clampNorm(norm_y, -1.0, 1.0);
+      dx_body = std::min(0.0, norm_x_clamped) * max_back;
+      dy_body = norm_y_clamped * max_lateral;
+      const double goal_dist = std::hypot(dx_body, dy_body);
+      if (goal_dist < 1e-4) {
+        return false;
+      }
+      if (goal_dist < min_goal_distance_m_) {
+        const double scale = min_goal_distance_m_ / goal_dist;
+        dx_body *= scale;
+        dy_body *= scale;
+      }
+      path = buildPathToBodyOffsetConstantHeading(*odom, dx_body, dy_body);
     }
-
-    path = buildPathToBodyOffset(*odom, dx_body, dy_body, stick_theta);
     return true;
   }
 
@@ -512,7 +544,7 @@ private:
       gear, padding * 100.0);
   }
 
-  void gearForwardBackMax(double & max_forward, double & max_back)
+  void gearRanges(double & max_forward, double & max_back, double & max_lateral)
   {
     int gear = gear_default_index_;
     {
@@ -523,6 +555,39 @@ private:
     }
     max_forward = pickGearTable(gear_forward_range_m_, gear, gear_default_index_);
     max_back = pickGearTable(gear_back_range_m_, gear, gear_default_index_);
+    max_lateral = pickGearTable(gear_lateral_range_m_, gear, gear_default_index_);
+  }
+
+  Path buildPathToBodyOffsetConstantHeading(
+    const Odometry & odom, double dx_body, double dy_body) const
+  {
+    Path path;
+    path.header.stamp = now();
+    path.header.frame_id = global_frame_;
+
+    const double x0 = odom.pose.pose.position.x;
+    const double y0 = odom.pose.pose.position.y;
+    const double yaw0 = yawFromQuaternion(odom.pose.pose.orientation);
+
+    const double cos_y = std::cos(yaw0);
+    const double sin_y = std::sin(yaw0);
+    const double goal_x = x0 + cos_y * dx_body - sin_y * dy_body;
+    const double goal_y = y0 + sin_y * dx_body + cos_y * dy_body;
+
+    const int steps = std::max(2, path_interpolation_steps_);
+
+    for (int i = 0; i <= steps; ++i) {
+      const double t = static_cast<double>(i) / static_cast<double>(steps);
+      PoseStamped p;
+      p.header = path.header;
+      p.pose.position.x = x0 + t * (goal_x - x0);
+      p.pose.position.y = y0 + t * (goal_y - y0);
+      p.pose.position.z = 0.0;
+      p.pose.orientation = quaternionFromYaw(yaw0);
+      path.poses.push_back(p);
+    }
+
+    return path;
   }
 
   Path buildPathToBodyOffset(
@@ -773,10 +838,12 @@ private:
   double joystick_timeout_{0.30};
   std::vector<double> gear_forward_range_m_;
   std::vector<double> gear_back_range_m_;
+  std::vector<double> gear_lateral_range_m_;
   std::vector<double> gear_lateral_wz_max_;
   double forward_sector_deg_{300.0};
   double backward_sector_deg_{60.0};
   double sector_hysteresis_deg_{10.0};
+  bool backward_reverse_path_enable_{true};
   int gear_default_index_{3};
   int path_interpolation_steps_{20};
   double min_goal_distance_m_{0.12};

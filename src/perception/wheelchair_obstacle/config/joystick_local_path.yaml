@@ -16,19 +16,20 @@ joystick_local_path_node:
     joystick_timeout: 0.30
     odom_timeout: 0.30
 
-    # 极坐标同心圆：stick_r=|rocker|/100，stick_theta=atan2(ry,rx)
-    # 前向扇区 goal = stick_r * gear_forward_range_m * (cos,sin)(theta)
-    # 后向扇区 goal = stick_r * gear_back_range_m * (cos,sin)(theta)
-    gear_forward_range_m: [0.60, 1.00, 1.50, 2.00]
+    # 极坐标同心圆（前向 300° 扇区）：stick_r=|rocker|/100，stick_theta=atan2(ry,rx)
+    # 前向 goal = stick_r * gear_forward_range_m * (cos,sin)(theta)，yaw 渐变到 stick_theta
+    gear_forward_range_m: [0.60, 1.00, 1.50, 2.50]
+    # 后向 60° 扇区（带 ±10° 回滞）：笛卡尔 goal，path yaw 保持当前 heading，MPPI 用 vx<0 倒车避障
     gear_back_range_m: [0.20, 0.30, 0.40, 0.50]
+    gear_lateral_range_m: [0.60, 0.80, 1.00, 1.50]
     # 纯左右（|rx| 死区）原地转：wz = (ry/100) * gear_lateral_wz_max
     gear_lateral_wz_max: [0.55, 0.75, 0.95, 1.15]
     horizon: 1.8
     gear_default_index: 3
 
-    # 前向 300° / 后向 60° 选择 R 表；|角|=150° 边界 ±10° 回滞
-    # 有位移时 path yaw 从当前 heading 渐变到 stick_theta（目标方位）。
-    # 摇杆回零进入死区：cancel + 等待 mppi_reset_quiet_sec 再 resend，清除 MPPI warm-start。
+    # 前向 300° / 后向 60° 选择路径模式；|角|=150° 边界 ±10° 回滞
+    # backward_reverse_path_enable: 后向扇区倒车避障（path yaw 不变，MPPI vx<0，不原地掉头）
+    backward_reverse_path_enable: true
     forward_sector_deg: 300.0
     backward_sector_deg: 60.0
     sector_hysteresis_deg: 10.0
