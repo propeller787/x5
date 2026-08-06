@@ -44,7 +44,7 @@ controller_server:
       # 须大于 MPPI 正常帧间隔（~0.18s@5Hz），小于回零 cancel→resend（~0.5s）。见 localmap 注释。
       reset_period: 0.35
       time_steps: 56
-      batch_size: 1200
+      batch_size: 800
       iteration_count: 1
 
       # 速度包络必须覆盖最高挡位（挡位），否则 MPPI / ConstraintCritic 会钳制从
@@ -73,7 +73,7 @@ controller_server:
       # /trajectories(visualization_msgs/MarkerArray)，并把跟踪的局部路径发布到
       # /controller_server/transformed_global_plan(nav_msgs/Path)，
       # 供 RViz2 显示 MPPI 的输出路径。会略增 CPU，仅用于调试。
-      visualize: true
+      visualize: false
 
       TrajectoryVisualizer:
         trajectory_step: 15

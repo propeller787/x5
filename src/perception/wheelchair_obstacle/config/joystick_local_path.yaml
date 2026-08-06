@@ -39,7 +39,7 @@ joystick_local_path_node:
     goal_resend_yaw_delta: 0.08
     # cancel 后等待再 resend；须 > FollowPath.reset_period（0.35s）以触发 Optimizer reset。
     mppi_reset_quiet_sec: 0.40
-    send_rate_hz: 8.0
+    send_rate_hz: 5.0
 
     # 按挡位发布 /local_costmap/footprint（1–4 挡 -> 1–4 cm padding）。
     # costmap 侧 footprint_padding 须为 0，避免重复膨胀。
