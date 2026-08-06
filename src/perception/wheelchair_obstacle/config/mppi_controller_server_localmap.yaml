@@ -15,15 +15,15 @@ controller_server:
     min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
 
-    # 摇杆短弧/原地转向时，10s 内 xy 位移常 <0.15m，默认 progress checker
-    # (0.5m / 10s) 会周期性报 "Failed to make progress" 并 abort FollowPath，
-    # 导致 /cmd_vel wz 每隔 ~10s 归零 ~0.16s。
+    # 摇杆短弧/原地转向时 xy 位移小，SimpleProgressChecker 会误报无进展。
+    # PoseProgressChecker：xy 或 yaw 任一在 movement_time_allowance 内达标即视为有进展。
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["general_goal_checker"]
 
     progress_checker:
-      plugin: "nav2_controller::SimpleProgressChecker"
+      plugin: "nav2_controller::PoseProgressChecker"
       required_movement_radius: 0.05
+      required_movement_angle: 0.35
       movement_time_allowance: 10.0
 
     general_goal_checker:
@@ -37,6 +37,9 @@ controller_server:
       motion_model: "DiffDrive"
 
       model_dt: 0.05
+      # MPPI 有效 ~5–7 Hz（dt≈0.18s）时 reset_period 必须 > 正常帧间隔，否则每帧 reset
+      # 卡顿（bag_113125: 330 次/59s）。取 0.35s：正常运行不 reset；回零 cancel~0.58s 后仍 reset。
+      reset_period: 0.35
       time_steps: 56
       batch_size: 1200
       iteration_count: 1
@@ -107,7 +110,8 @@ controller_server:
         trajectory_point_step: 4
         threshold_to_consider: 0.4
         offset_from_furthest: 6
-        use_path_orientations: false
+        # true: follow path pose yaw (required for in-place turn paths with identical xy).
+        use_path_orientations: true
 
       PathFollowCritic:
         enabled: true

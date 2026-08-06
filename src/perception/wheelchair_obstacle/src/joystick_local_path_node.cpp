@@ -1,9 +1,14 @@
 // Joystick / handle intent -> short local path -> Nav2 FollowPath (MPPI).
 //
 // spatial_range: stick polar -> body-frame goal on concentric arcs (per gear).
-//   stick_r = |rocker|/100, stick_theta = atan2(ry,rx); goal = r*R*(cos,sin)(theta).
-//   Pure lateral (|rx| deadbanded) -> in-place turn via ry->wz. Moving path yaw
-//   lerps toward stick bearing. Forward/back sector picks R from gear tables.
+//   Pure lateral (|rx| deadbanded) -> in-place turn. Otherwise goal on arc with
+//   yaw lerped toward stick_theta.
+//
+// MPPI warm-start reset (stick enters dead zone only):
+//   1. cancel FollowPath (handle or cancel_all_goals)
+//   2. wait mppi_reset_quiet_sec (> controller FollowPath.reset_period)
+//   3. sendGoal(..., cancel_active=true)
+//
 // velocity_integration: legacy /handle/control (v,w) integration.
 
 #include <algorithm>
@@ -21,8 +26,6 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
-#include <sensor_msgs/msg/point_cloud2.hpp>
-#include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 
@@ -93,7 +96,6 @@ public:
   using Twist = geometry_msgs::msg::Twist;
   using Odometry = nav_msgs::msg::Odometry;
   using Path = nav_msgs::msg::Path;
-  using PointCloud2 = sensor_msgs::msg::PointCloud2;
   using PoseStamped = geometry_msgs::msg::PoseStamped;
   using Joystick = interface::msg::Joystick;
   using CarInfo = interface::msg::CarInfo;
@@ -132,8 +134,6 @@ public:
       "gear_forward_range_m", {0.50, 1.00, 1.50, 2.00});
     gear_back_range_m_ = declare_parameter<std::vector<double>>(
       "gear_back_range_m", {0.15, 0.25, 0.35, 0.50});
-    gear_lateral_range_m_ = declare_parameter<std::vector<double>>(
-      "gear_lateral_range_m", {-0.20, -0.40, -1.00, -1.50});
     gear_lateral_wz_max_ = declare_parameter<std::vector<double>>(
       "gear_lateral_wz_max", {0.55, 0.75, 0.95, 1.15});
     forward_sector_deg_ = declare_parameter<double>("forward_sector_deg", 300.0);
@@ -142,24 +142,12 @@ public:
     gear_default_index_ = declare_parameter<int>("gear_default_index", 3);
     path_interpolation_steps_ = declare_parameter<int>("path_interpolation_steps", 20);
     min_goal_distance_m_ = declare_parameter<double>("min_goal_distance_m", 0.12);
-    path_yaw_lateral_eps_m_ = declare_parameter<double>("path_yaw_lateral_eps_m", 0.03);
     goal_resend_xy_delta_m_ = declare_parameter<double>("goal_resend_xy_delta_m", 0.05);
     goal_resend_yaw_delta_ = declare_parameter<double>("goal_resend_yaw_delta", 0.08);
+    // Must exceed FollowPath.reset_period so Optimizer clears warm-start after cancel.
+    mppi_reset_quiet_sec_ = declare_parameter<double>("mppi_reset_quiet_sec", 0.40);
 
     odom_timeout_ = declare_parameter<double>("odom_timeout", 0.30);
-
-    obstacle_points_topic_ = declare_parameter<std::string>(
-      "obstacle_points_topic", "/perception/obstacle_points");
-    avoidance_assist_enabled_ = declare_parameter<bool>("avoidance_assist_enabled", false);
-    assist_obstacle_timeout_ = declare_parameter<double>("assist_obstacle_timeout", 0.30);
-    assist_x_min_ = declare_parameter<double>("assist_x_min", 0.35);
-    assist_x_max_ = declare_parameter<double>("assist_x_max", 1.35);
-    assist_y_abs_ = declare_parameter<double>("assist_y_abs", 0.75);
-    assist_center_y_abs_ = declare_parameter<double>("assist_center_y_abs", 0.35);
-    assist_wz_ = declare_parameter<double>("assist_wz", 0.16);
-    assist_max_wz_ = declare_parameter<double>("assist_max_wz", 0.32);
-    assist_smoothing_ = declare_parameter<double>("assist_smoothing", 0.75);
-    assist_user_turn_override_ = declare_parameter<double>("assist_user_turn_override", 0.10);
 
     horizon_ = declare_parameter<double>("horizon", 1.5);
     dt_ = declare_parameter<double>("dt", 0.10);
@@ -195,10 +183,6 @@ public:
         car_info_topic_, 10,
         std::bind(&JoystickLocalPathNode::onCarInfo, this, std::placeholders::_1));
     }
-
-    obstacle_sub_ = create_subscription<PointCloud2>(
-      obstacle_points_topic_, 10,
-      std::bind(&JoystickLocalPathNode::onObstaclePoints, this, std::placeholders::_1));
 
     path_pub_ = create_publisher<Path>(intent_path_topic_, 1);
     if (footprint_publish_enable_) {
@@ -276,13 +260,6 @@ private:
     latest_odom_ = msg;
   }
 
-  void onObstaclePoints(const PointCloud2::SharedPtr msg)
-  {
-    std::lock_guard<std::mutex> lock(obstacle_mutex_);
-    latest_obstacles_ = msg;
-    latest_obstacles_stamp_ = now();
-  }
-
   void onTimer()
   {
     if (!action_client_->action_server_is_ready()) {
@@ -310,12 +287,23 @@ private:
     }
 
     Path path;
+    bool stick_idle = false;
     if (use_spatial_range_) {
-      if (!buildSpatialPath(odom, tnow, path)) {
+      if (!buildSpatialPath(odom, tnow, path, stick_idle)) {
+        if (stick_idle) {
+          if (!was_stick_idle_) {
+            scheduleMppiReset("stick center");
+            publishEmptyPath();
+            was_stick_idle_ = true;
+          }
+          return;
+        }
+        was_stick_idle_ = false;
         cancelActiveGoal();
         publishEmptyPath();
         return;
       }
+      was_stick_idle_ = false;
     } else {
       if (!buildVelocityPath(odom, tnow, path)) {
         cancelActiveGoal();
@@ -325,7 +313,16 @@ private:
     }
 
     path_pub_->publish(path);
-    sendGoalIfChanged(path);
+    if (!mppiResetQuietElapsed()) {
+      return;
+    }
+
+    if (resend_after_reset_) {
+      resend_after_reset_ = false;
+      sendGoal(path, true);
+    } else {
+      sendGoalIfChanged(path);
+    }
   }
 
   bool isOdomFresh(const Odometry::SharedPtr & odom, const rclcpp::Time & tnow) const
@@ -364,13 +361,16 @@ private:
       v_user = std::copysign(turn_assist_vx_, (v_user != 0.0) ? v_user : 1.0);
     }
 
-    // w_user = applyAvoidanceAssist(v_user, w_user, tnow);
     path = buildPathFromVelocity(*odom, v_user, w_user);
     return true;
   }
 
-  bool buildSpatialPath(const Odometry::SharedPtr & odom, const rclcpp::Time & tnow, Path & path)
+  bool buildSpatialPath(
+    const Odometry::SharedPtr & odom, const rclcpp::Time & tnow, Path & path,
+    bool & stick_idle)
   {
+    stick_idle = false;
+
     Joystick::SharedPtr joy;
     rclcpp::Time joy_stamp;
     {
@@ -388,6 +388,7 @@ private:
     const double rx = applyRockerDeadbandAxis(rx_raw);
     const double ry = applyRockerDeadbandAxis(ry_raw);
     if (std::abs(rx) < 1e-6 && std::abs(ry) < 1e-6) {
+      stick_idle = true;
       return false;
     }
 
@@ -395,8 +396,7 @@ private:
 
     double max_forward = 0.0;
     double max_back = 0.0;
-    double max_lateral_unused = 0.0;
-    gearRanges(max_forward, max_back, max_lateral_unused);
+    gearForwardBackMax(max_forward, max_back);
 
     const double norm_x = rx / 100.0;
     const double norm_y = ry / 100.0;
@@ -409,6 +409,8 @@ private:
       }
     }
 
+    const double stick_theta = std::atan2(norm_y, norm_x);
+
     // Pure lateral: no forward/back on stick -> spin in place (same xy, yaw only).
     if (std::abs(rx) < 1e-6) {
       const double wz = clampNorm(norm_y, -1.0, 1.0) * gearLateralWzMax(gear);
@@ -417,7 +419,6 @@ private:
     }
 
     const double stick_r = std::min(1.0, std::hypot(norm_x, norm_y));
-    const double stick_theta = std::atan2(norm_y, norm_x);
     if (stick_r < 1e-6) {
       return false;
     }
@@ -511,7 +512,7 @@ private:
       gear, padding * 100.0);
   }
 
-  void gearRanges(double & max_forward, double & max_back, double & max_lateral)
+  void gearForwardBackMax(double & max_forward, double & max_back)
   {
     int gear = gear_default_index_;
     {
@@ -520,10 +521,8 @@ private:
         gear = latest_gear_;
       }
     }
-
     max_forward = pickGearTable(gear_forward_range_m_, gear, gear_default_index_);
     max_back = pickGearTable(gear_back_range_m_, gear, gear_default_index_);
-    max_lateral = pickGearTable(gear_lateral_range_m_, gear, gear_default_index_);
   }
 
   Path buildPathToBodyOffset(
@@ -584,69 +583,6 @@ private:
     return path;
   }
 
-  // double applyAvoidanceAssist(double v_user, double w_user, const rclcpp::Time & tnow)
-  // {
-  //   if (!avoidance_assist_enabled_ || v_user <= lin_deadband_) {
-  //     assist_wz_state_ *= assist_smoothing_;
-  //     return w_user + assist_wz_state_;
-  //   }
-
-  //   if (std::abs(w_user) >= assist_user_turn_override_) {
-  //     assist_wz_state_ *= assist_smoothing_;
-  //     return w_user + assist_wz_state_;
-  //   }
-
-  //   PointCloud2::SharedPtr cloud;
-  //   rclcpp::Time stamp;
-  //   {
-  //     std::lock_guard<std::mutex> lock(obstacle_mutex_);
-  //     cloud = latest_obstacles_;
-  //     stamp = latest_obstacles_stamp_;
-  //   }
-
-  //   if (!cloud || (tnow - stamp).seconds() > assist_obstacle_timeout_) {
-  //     assist_wz_state_ *= assist_smoothing_;
-  //     return w_user + assist_wz_state_;
-  //   }
-
-  //   double center_score = 0.0;
-  //   double left_score = 0.0;
-  //   double right_score = 0.0;
-
-  //   sensor_msgs::PointCloud2ConstIterator<float> iter_x(*cloud, "x");
-  //   sensor_msgs::PointCloud2ConstIterator<float> iter_y(*cloud, "y");
-
-  //   for (; iter_x != iter_x.end(); ++iter_x, ++iter_y) {
-  //     const double x = *iter_x;
-  //     const double y = *iter_y;
-
-  //     if (x < assist_x_min_ || x > assist_x_max_ || std::abs(y) > assist_y_abs_) {
-  //       continue;
-  //     }
-
-  //     const double weight = 1.0 / std::max(0.20, x);
-
-  //     if (std::abs(y) <= assist_center_y_abs_) {
-  //       center_score += weight;
-  //     } else if (y > 0.0) {
-  //       left_score += weight;
-  //     } else {
-  //       right_score += weight;
-  //     }
-  //   }
-
-  //   double target_assist = 0.0;
-  //   if (center_score > 0.0) {
-  //     target_assist = (left_score <= right_score) ? assist_wz_ : -assist_wz_;
-  //   }
-
-  //   target_assist = std::clamp(target_assist, -assist_max_wz_, assist_max_wz_);
-  //   assist_wz_state_ =
-  //     assist_smoothing_ * assist_wz_state_ + (1.0 - assist_smoothing_) * target_assist;
-
-  //   return w_user + assist_wz_state_;
-  // }
-
   Path buildPathFromVelocity(const Odometry & odom, double v_user, double w_user) const
   {
     Path path;
@@ -706,6 +642,14 @@ private:
     if (!goalChangedEnough(path)) {
       return;
     }
+    sendGoal(path);
+  }
+
+  void sendGoal(const Path & path, bool cancel_active = false)
+  {
+    if (path.poses.empty()) {
+      return;
+    }
 
     const auto & goal = path.poses.back().pose;
     last_sent_goal_x_ = goal.position.x;
@@ -713,15 +657,10 @@ private:
     last_sent_goal_yaw_ = yawFromQuaternion(goal.orientation);
     have_last_sent_goal_ = true;
 
-    sendGoal(path);
-  }
-
-  void sendGoal(const Path & path)
-  {
-    auto goal = FollowPath::Goal();
-    goal.path = path;
-    goal.controller_id = controller_id_;
-    goal.goal_checker_id = goal_checker_id_;
+    auto goal_msg = FollowPath::Goal();
+    goal_msg.path = path;
+    goal_msg.controller_id = controller_id_;
+    goal_msg.goal_checker_id = goal_checker_id_;
 
     auto send_options = rclcpp_action::Client<FollowPath>::SendGoalOptions();
     send_options.goal_response_callback =
@@ -750,22 +689,59 @@ private:
 
     {
       std::lock_guard<std::mutex> lock(goal_mutex_);
-      current_goal_handle_.reset();
+      if (cancel_active) {
+        cancelAllFollowPathGoalsUnlocked();
+      }
     }
 
-    action_client_->async_send_goal(goal, send_options);
+    await_mppi_reset_before_send_ = false;
+    action_client_->async_send_goal(goal_msg, send_options);
+  }
+
+  void cancelAllFollowPathGoalsUnlocked()
+  {
+    if (current_goal_handle_) {
+      action_client_->async_cancel_goal(current_goal_handle_);
+      current_goal_handle_.reset();
+    } else {
+      action_client_->async_cancel_all_goals();
+    }
+  }
+
+  void cancelAllFollowPathGoals()
+  {
+    std::lock_guard<std::mutex> lock(goal_mutex_);
+    cancelAllFollowPathGoalsUnlocked();
+  }
+
+  void scheduleMppiReset(const char * reason)
+  {
+    have_last_sent_goal_ = false;
+    follow_path_cancel_time_ = now();
+    await_mppi_reset_before_send_ = true;
+    resend_after_reset_ = true;
+    cancelAllFollowPathGoals();
+    RCLCPP_INFO(
+      get_logger(), "FollowPath cancel (%s), wait %.2fs before resend", reason,
+      mppi_reset_quiet_sec_);
+  }
+
+  bool mppiResetQuietElapsed() const
+  {
+    if (!await_mppi_reset_before_send_) {
+      return true;
+    }
+    return (now() - follow_path_cancel_time_).seconds() >= mppi_reset_quiet_sec_;
   }
 
   void cancelActiveGoal()
   {
     have_last_sent_goal_ = false;
+    was_stick_idle_ = false;
+    await_mppi_reset_before_send_ = false;
+    resend_after_reset_ = false;
     drive_sector_ = DriveSector::Forward;
-    std::lock_guard<std::mutex> lock(goal_mutex_);
-    if (!current_goal_handle_) {
-      return;
-    }
-    action_client_->async_cancel_goal(current_goal_handle_);
-    current_goal_handle_.reset();
+    cancelAllFollowPathGoals();
   }
 
   void publishEmptyPath()
@@ -784,7 +760,6 @@ private:
   std::string car_info_topic_;
   std::string odom_topic_;
   std::string intent_path_topic_;
-  std::string obstacle_points_topic_;
   std::string action_name_;
   std::string global_frame_;
   std::string controller_id_;
@@ -798,7 +773,6 @@ private:
   double joystick_timeout_{0.30};
   std::vector<double> gear_forward_range_m_;
   std::vector<double> gear_back_range_m_;
-  std::vector<double> gear_lateral_range_m_;
   std::vector<double> gear_lateral_wz_max_;
   double forward_sector_deg_{300.0};
   double backward_sector_deg_{60.0};
@@ -806,22 +780,11 @@ private:
   int gear_default_index_{3};
   int path_interpolation_steps_{20};
   double min_goal_distance_m_{0.12};
-  double path_yaw_lateral_eps_m_{0.03};
   double goal_resend_xy_delta_m_{0.05};
   double goal_resend_yaw_delta_{0.08};
+  double mppi_reset_quiet_sec_{0.40};
   double odom_timeout_{0.30};
 
-  bool avoidance_assist_enabled_{false};
-  double assist_obstacle_timeout_{0.30};
-  double assist_x_min_{0.35};
-  double assist_x_max_{1.35};
-  double assist_y_abs_{0.75};
-  double assist_center_y_abs_{0.35};
-  double assist_wz_{0.16};
-  double assist_max_wz_{0.32};
-  double assist_smoothing_{0.75};
-  double assist_user_turn_override_{0.10};
-  double assist_wz_state_{0.0};
   double horizon_{1.5};
   double dt_{0.10};
   double send_rate_hz_{5.0};
@@ -835,6 +798,10 @@ private:
   bool have_published_footprint_{false};
 
   DriveSector drive_sector_{DriveSector::Forward};
+  bool was_stick_idle_{false};
+  bool await_mppi_reset_before_send_{false};
+  bool resend_after_reset_{false};
+  rclcpp::Time follow_path_cancel_time_{0, 0, RCL_ROS_TIME};
 
   bool have_last_sent_goal_{false};
   double last_sent_goal_x_{0.0};
@@ -845,7 +812,6 @@ private:
   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
   rclcpp::Subscription<CarInfo>::SharedPtr car_info_sub_;
   rclcpp::Subscription<Odometry>::SharedPtr odom_sub_;
-  rclcpp::Subscription<PointCloud2>::SharedPtr obstacle_sub_;
   rclcpp::Publisher<Path>::SharedPtr path_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Polygon>::SharedPtr footprint_pub_;
   rclcpp_action::Client<FollowPath>::SharedPtr action_client_;
@@ -865,10 +831,6 @@ private:
 
   std::mutex odom_mutex_;
   Odometry::SharedPtr latest_odom_;
-
-  std::mutex obstacle_mutex_;
-  PointCloud2::SharedPtr latest_obstacles_;
-  rclcpp::Time latest_obstacles_stamp_{0, 0, RCL_ROS_TIME};
 
   std::mutex goal_mutex_;
   GoalHandle::SharedPtr current_goal_handle_;
