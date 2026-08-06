@@ -43,8 +43,8 @@ controller_server:
       model_dt: 0.05
       # 须大于 MPPI 正常帧间隔（~0.18s@5Hz），小于回零 cancel→resend（~0.5s）。见 localmap 注释。
       reset_period: 0.35
-      time_steps: 56
-      batch_size: 800
+      time_steps: 40
+      batch_size: 600
       iteration_count: 1
 
       # 速度包络必须覆盖最高挡位（挡位），否则 MPPI / ConstraintCritic 会钳制从
@@ -128,7 +128,7 @@ controller_server:
         cost_power: 1
         cost_weight: 1.5
         max_path_occupancy_ratio: 0.06
-        trajectory_point_step: 4
+        trajectory_point_step: 8
         threshold_to_consider: 0.4
         offset_from_furthest: 6
         use_path_orientations: true
