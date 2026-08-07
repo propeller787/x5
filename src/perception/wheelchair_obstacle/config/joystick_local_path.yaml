@@ -20,7 +20,7 @@ joystick_local_path_node:
     # 前向 goal = stick_r * gear_forward_range_m * (cos,sin)(theta)，yaw 渐变到 stick_theta
     gear_forward_range_m: [0.60, 1.00, 1.50, 2.50]
     # 后向 60° 扇区（带 ±10° 回滞）：笛卡尔 goal，path yaw 保持当前 heading，MPPI 用 vx<0 倒车避障
-    gear_back_range_m: [0.20, 0.30, 0.40, 0.50]
+    gear_back_range_m: [0.60, 1.00, 1.50, 2.50]
     gear_lateral_range_m: [0.60, 0.80, 1.00, 1.50]
     # 纯左右（|rx| 死区）原地转：wz = (ry/100) * gear_lateral_wz_max
     gear_lateral_wz_max: [0.55, 0.75, 0.95, 1.15]

@@ -49,6 +49,8 @@ cmd_vel_safety_gate_node:
     intent_eps: 0.03
 
     wz_max: 1.30
+    # 倒车线速度上限 (m/s)，仅对 linear.x < 0 生效。
+    vx_reverse_max: 0.5
 
     # --- 按 obstacle_points 周边密度分三档限制角速度（带迟滞）---
     # 调试：/cmd_vel_safety_gate_node/wz_density_tier (0=OPEN, 1=MODERATE, 2=DENSE)

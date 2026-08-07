@@ -416,6 +416,21 @@ inline void setPathCostsIfNotSet(
 }
 
 /**
+ * @brief True when path goal lies behind the robot (+x forward) in body frame.
+ * Used to auto-enable reverse-friendly MPPI critics for backward joystick paths.
+ */
+inline bool isPathGoalBehindRobot(
+  const geometry_msgs::msg::Pose & pose,
+  float goal_x, float goal_y, float margin = 0.05f)
+{
+  const double yaw = tf2::getYaw(pose.orientation);
+  const double dx = goal_x - pose.position.x;
+  const double dy = goal_y - pose.position.y;
+  const double dx_body = std::cos(yaw) * dx + std::sin(yaw) * dy;
+  return dx_body < -margin;
+}
+
+/**
  * @brief evaluate angle from pose (have angle) to point (no angle)
  * @param pose pose
  * @param point_x Point to find angle relative to X axis

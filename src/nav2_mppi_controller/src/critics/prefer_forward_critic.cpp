@@ -39,6 +39,15 @@ void PreferForwardCritic::score(CriticData & data)
     return;
   }
 
+  if (data.path.x.shape(0) > 0) {
+    const auto last_idx = data.path.x.shape(0) - 1;
+    const float goal_x = xt::view(data.path.x, last_idx);
+    const float goal_y = xt::view(data.path.y, last_idx);
+    if (utils::isPathGoalBehindRobot(data.state.pose.pose, goal_x, goal_y, 0.05f)) {
+      return;
+    }
+  }
+
   auto backward_motion = xt::maximum(-data.state.vx, 0);
   data.costs += xt::pow(
     xt::sum(

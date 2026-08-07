@@ -74,8 +74,20 @@ void PathAngleCritic::score(CriticData & data)
   const float goal_x = xt::view(data.path.x, offseted_idx);
   const float goal_y = xt::view(data.path.y, offseted_idx);
 
+  bool forward_pref = forward_preference_;
+  if (data.path.x.shape(0) > 0) {
+    const auto last_idx = data.path.x.shape(0) - 1;
+    const float last_x = xt::view(data.path.x, last_idx);
+    const float last_y = xt::view(data.path.y, last_idx);
+    if (reversing_allowed_ &&
+      utils::isPathGoalBehindRobot(data.state.pose.pose, last_x, last_y, 0.05f))
+    {
+      forward_pref = false;
+    }
+  }
+
   if (utils::posePointAngle(
-      data.state.pose.pose, goal_x, goal_y, forward_preference_) < max_angle_to_furthest_)
+      data.state.pose.pose, goal_x, goal_y, forward_pref) < max_angle_to_furthest_)
   {
     return;
   }
@@ -87,7 +99,7 @@ void PathAngleCritic::score(CriticData & data)
   auto yaws =
     xt::abs(utils::shortest_angular_distance(data.trajectories.yaws, yaws_between_points));
 
-  if (reversing_allowed_ && !forward_preference_) {
+  if (reversing_allowed_ && !forward_pref) {
     const auto yaws_between_points_corrected = xt::where(
       yaws < M_PI_2, yaws_between_points, utils::normalize_angles(yaws_between_points + M_PI));
     const auto corrected_yaws = xt::abs(

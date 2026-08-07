@@ -109,6 +109,7 @@ public:
     proximity_speed_cap_ = declare_parameter<bool>("proximity_speed_cap", true);
 
     wz_max_ = declare_parameter<double>("wz_max", 1.00);
+    vx_reverse_max_ = declare_parameter<double>("vx_reverse_max", 0.5);
 
     wz_density_cap_enable_ = declare_parameter<bool>("wz_density_cap_enable", true);
     density_check_radius_ = declare_parameter<double>("density_check_radius", 1.2);
@@ -160,12 +161,14 @@ public:
     RCLCPP_INFO(
       get_logger(),
       "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s out=%s "
-      "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d wz_density_cap=%d",
+      "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
+      "vx_reverse_max=%.2f wz_density_cap=%d",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
       obstacle_topic_.c_str(), out_topic_.c_str(), input_type_.c_str(),
       cmd_timeout_, cmd_hold_timeout_, rocker_deadband_,
-      proximity_speed_cap_ ? 1 : 0, wz_density_cap_enable_ ? 1 : 0);
+      proximity_speed_cap_ ? 1 : 0, vx_reverse_max_,
+      wz_density_cap_enable_ ? 1 : 0);
   }
 
 private:
@@ -411,6 +414,9 @@ private:
     Twist out;
     if (!halted && input_ok) {
       out = target;
+      if (out.linear.x < 0.0) {
+        out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
+      }
       out.angular.z = clamp(out.angular.z, -effective_wz_max, effective_wz_max);
     } else {
       last_out_ = Twist();
@@ -477,6 +483,7 @@ private:
   double brake_decel_{1.2};
   bool proximity_speed_cap_{true};
   double wz_max_{1.00};
+  double vx_reverse_max_{0.5};
   bool wz_density_cap_enable_{true};
   double density_check_radius_{1.2};
   std::vector<double> wz_density_caps_rps_{1.30, 0.785, 0.524};
