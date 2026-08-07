@@ -56,7 +56,7 @@ controller_server:
       # 注意：1.1.20 的 ConstraintCritic 只强制速度界限，不强制加速度（ax/ay/az）。加速度
       # 整形在上游的 cmd_vel 安全门中完成。
       vx_max: 5.0
-      vx_min: -0.50
+      vx_min: -3.50
       vy_max: 0.0
       wz_max: 1.20
 
