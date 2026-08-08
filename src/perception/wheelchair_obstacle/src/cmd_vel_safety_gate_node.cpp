@@ -3,7 +3,8 @@
 // Always forwards MPPI output (with optional gate_enable bypass for testing).
 // Retained safety layers:
 //   - cmd_hold_timeout: hold last /cmd_vel when MPPI is slower than publish_rate_hz
-//   - joystick release / stale -> immediate stop (raw /sensor/joystick)
+//   - joystick release / stale -> stop (hard if obstacles nearby or cloud stale;
+//     soft ramp when clear within release_soft_stop_radius)
 //   - proximity speed cap from obstacle cloud + travel intent
 //   - tiered wz cap from nearby obstacle-point density
 
@@ -125,6 +126,12 @@ public:
       "obstacle_count_release_moderate", 28);
     wz_density_min_dwell_ = declare_parameter<double>("wz_density_min_dwell", 0.4);
 
+    release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", true);
+    release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 1.2);
+    release_soft_stop_decel_ = declare_parameter<double>("release_soft_stop_decel", 1.5);
+    release_soft_stop_wz_decel_ = declare_parameter<double>("release_soft_stop_wz_decel", 2.0);
+    release_soft_stop_vel_eps_ = declare_parameter<double>("release_soft_stop_vel_eps", 0.02);
+
     if (input_type_ == "twist") {
       twist_sub_ = create_subscription<Twist>(
         in_stamped_topic_, 10,
@@ -162,12 +169,13 @@ public:
       get_logger(),
       "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s out=%s "
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
-      "vx_reverse_max=%.2f wz_density_cap=%d",
+      "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
       obstacle_topic_.c_str(), out_topic_.c_str(), input_type_.c_str(),
       cmd_timeout_, cmd_hold_timeout_, rocker_deadband_,
       proximity_speed_cap_ ? 1 : 0, vx_reverse_max_,
+      release_soft_stop_enable_ ? 1 : 0, release_soft_stop_radius_,
       wz_density_cap_enable_ ? 1 : 0);
   }
 
@@ -226,9 +234,9 @@ private:
     have_cloud_ = true;
   }
 
-  int nearbyObstaclePointCount() const
+  int nearbyObstaclePointCountInRadius(double radius) const
   {
-    const double r2 = density_check_radius_ * density_check_radius_;
+    const double r2 = radius * radius;
     int count = 0;
     std::lock_guard<std::mutex> lock(cloud_mutex_);
     for (const auto & p : cloud_pts_) {
@@ -237,6 +245,65 @@ private:
       }
     }
     return count;
+  }
+
+  int nearbyObstaclePointCount() const
+  {
+    return nearbyObstaclePointCountInRadius(density_check_radius_);
+  }
+
+  void applySoftStopRamp(Twist & out, double dt)
+  {
+    const double lin_step = std::max(1e-6, release_soft_stop_decel_) * dt;
+    const double wz_step = std::max(1e-6, release_soft_stop_wz_decel_) * dt;
+
+    if (std::abs(soft_stop_vx_) <= release_soft_stop_vel_eps_) {
+      soft_stop_vx_ = 0.0;
+    } else if (soft_stop_vx_ > 0.0) {
+      soft_stop_vx_ = std::max(0.0, soft_stop_vx_ - lin_step);
+    } else {
+      soft_stop_vx_ = std::min(0.0, soft_stop_vx_ + lin_step);
+    }
+
+    if (std::abs(soft_stop_wz_) <= release_soft_stop_vel_eps_) {
+      soft_stop_wz_ = 0.0;
+    } else if (soft_stop_wz_ > 0.0) {
+      soft_stop_wz_ = std::max(0.0, soft_stop_wz_ - wz_step);
+    } else {
+      soft_stop_wz_ = std::min(0.0, soft_stop_wz_ + wz_step);
+    }
+
+    out.linear.x = soft_stop_vx_;
+    out.angular.z = soft_stop_wz_;
+    if (out.linear.x < 0.0) {
+      out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
+    }
+  }
+
+  bool canSoftStopOnRelease(bool cloud_ok) const
+  {
+    return release_soft_stop_enable_ && cloud_ok &&
+           nearbyObstaclePointCountInRadius(release_soft_stop_radius_) == 0;
+  }
+
+  void beginSoftStop()
+  {
+    if (!soft_stopping_) {
+      soft_stop_vx_ = last_out_.linear.x;
+      soft_stop_wz_ = last_out_.angular.z;
+      soft_stopping_ = true;
+      RCLCPP_INFO(
+        get_logger(),
+        "release soft-stop: v0=%.2f wz0=%.2f (clear within %.1fm)",
+        soft_stop_vx_, soft_stop_wz_, release_soft_stop_radius_);
+    }
+  }
+
+  void endSoftStop()
+  {
+    soft_stopping_ = false;
+    soft_stop_vx_ = 0.0;
+    soft_stop_wz_ = 0.0;
   }
 
   void updateWzDensityTier(int nearby_count, const rclcpp::Time & tnow)
@@ -321,6 +388,8 @@ private:
 
     bool halted = false;
     std::string reason;
+    bool rocker_released = false;
+    bool rocker_stale = false;
 
     Twist handle;
     bool handle_valid;
@@ -356,20 +425,32 @@ private:
       const auto rocker_age_ns =
         tnow.nanoseconds() -
         latest_rocker_stamp_ns_.load(std::memory_order_relaxed);
-      const bool rocker_stale = rocker_age_ns >
+      rocker_stale = rocker_age_ns >
         static_cast<int64_t>(rocker_timeout_ * 1e9);
+      rocker_released = !rocker_stale &&
+        rocker_at_origin_.load(std::memory_order_relaxed);
       if (rocker_stale) {
         halted = true;
         reason = "joystick stale";
-      } else if (rocker_at_origin_.load(std::memory_order_relaxed)) {
-        halted = true;
-        reason = "joystick released (rocker at origin)";
+        endSoftStop();
+      } else if (rocker_released) {
+        if (canSoftStopOnRelease(cloud_ok)) {
+          beginSoftStop();
+        } else {
+          halted = true;
+          endSoftStop();
+          reason = cloud_ok ?
+            "joystick released (obstacles nearby)" :
+            "joystick released (cloud stale)";
+        }
+      } else {
+        endSoftStop();
       }
     }
 
     Twist target;
     bool input_ok = false;
-    {
+    if (!soft_stopping_) {
       std::lock_guard<std::mutex> lock(input_mutex_);
       if (have_input_) {
         const double age = (tnow - latest_input_stamp_).seconds();
@@ -385,11 +466,24 @@ private:
         } else {
           halted = true;
           reason = "cmd_vel stale";
+          endSoftStop();
         }
       }
     }
 
-    if (proximity_speed_cap_ && input_ok && !halted && dir != 0 && std::isfinite(d)) {
+    if (soft_stopping_ && (!cloud_ok ||
+      nearbyObstaclePointCountInRadius(release_soft_stop_radius_) > 0))
+    {
+      halted = true;
+      endSoftStop();
+      reason = cloud_ok ?
+        "soft-stop aborted (obstacles appeared)" :
+        "soft-stop aborted (cloud stale)";
+    }
+
+    if (proximity_speed_cap_ && input_ok && !halted && !soft_stopping_ && dir != 0 &&
+      std::isfinite(d))
+    {
       const double clearance = d - overhang - standoff_;
       const double v_safe = (clearance <= 0.0)
         ? 0.0
@@ -402,7 +496,7 @@ private:
     }
 
     double effective_wz_max = wz_max_;
-    if (wz_density_cap_enable_ && input_ok && !halted) {
+    if (wz_density_cap_enable_ && input_ok && !halted && !soft_stopping_) {
       if (!cloud_ok) {
         current_wz_tier_ = WzDensityTier::DENSE;
       } else {
@@ -412,7 +506,10 @@ private:
     }
 
     Twist out;
-    if (!halted && input_ok) {
+    if (soft_stopping_ && !halted) {
+      const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+      applySoftStopRamp(out, dt);
+    } else if (!halted && input_ok) {
       out = target;
       if (out.linear.x < 0.0) {
         out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
@@ -492,6 +589,11 @@ private:
   int obstacle_count_engage_dense_{40};
   int obstacle_count_release_moderate_{28};
   double wz_density_min_dwell_{0.4};
+  bool release_soft_stop_enable_{true};
+  double release_soft_stop_radius_{1.2};
+  double release_soft_stop_decel_{1.5};
+  double release_soft_stop_wz_decel_{2.0};
+  double release_soft_stop_vel_eps_{0.02};
 
   rclcpp::Subscription<Twist>::SharedPtr twist_sub_;
   rclcpp::Subscription<TwistStamped>::SharedPtr twist_stamped_sub_;
@@ -525,6 +627,9 @@ private:
 
   Twist last_out_;
   rclcpp::Time last_pub_stamp_{0, 0, RCL_ROS_TIME};
+  bool soft_stopping_{false};
+  double soft_stop_vx_{0.0};
+  double soft_stop_wz_{0.0};
 };
 
 int main(int argc, char ** argv)

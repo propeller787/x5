@@ -11,9 +11,8 @@ cmd_vel_safety_gate_node:
     # 行进意图（proximity 限速方向）：来自固件已按挡位缩放的摇杆速度。
     handle_control_topic: "/handle/control"
     # 原始摇杆（CAN 0x226, interface/msg/Joystick, rocker_x/y in [-100, 100]）。
-    # 用来在用户松手的那一刻立刻触发停车：/handle/control 来自 ODrive 的
-    # top_input_vel (0x220)，固件内部有 ramp/滤波，会有 100~500 ms 滞后；
-    # 原始摇杆只过 CAN 总线，几乎即时反映用户意图。
+    # 松手时：周边 release_soft_stop_radius 内无障碍点云 → 软停车；否则急停。
+    # /handle/control 来自固件 ramp/滤波，有 100~500 ms 滞后；原始摇杆反映意图更快。
     rocker_topic: "/sensor/joystick"
     # |rocker_x|, |rocker_y| <= rocker_deadband 即视为回正（原始单位）。
     rocker_deadband: 5.0
@@ -51,6 +50,14 @@ cmd_vel_safety_gate_node:
     wz_max: 1.30
     # 倒车线速度上限 (m/s)，仅对 linear.x < 0 生效。
     vx_reverse_max: 0.5
+
+    # --- 松手软停车（周边无障碍时）---
+    release_soft_stop_enable: true
+    # base_link 下该半径(m)内无障碍点时，松手按减速度 ramp 至零；否则急停。
+    release_soft_stop_radius: 0.8
+    release_soft_stop_decel: 1.0
+    release_soft_stop_wz_decel: 2.0
+    release_soft_stop_vel_eps: 0.02
 
     # --- 按 obstacle_points 周边密度分三档限制角速度（带迟滞）---
     # 调试：/cmd_vel_safety_gate_node/wz_density_tier (0=OPEN, 1=MODERATE, 2=DENSE)
