@@ -26,7 +26,6 @@
   <depend>nav2_costmap_2d</depend>
   <depend>map_msgs</depend>
   <depend>pluginlib</depend>
-  <depend>nav2_mppi_controller</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
@@ -34,6 +33,5 @@
 
   <export>
     <build_type>ament_cmake</build_type>
-    <nav2_mppi_controller plugin="${prefix}/gate_centerline_critic.xml" />
   </export>
 </package>

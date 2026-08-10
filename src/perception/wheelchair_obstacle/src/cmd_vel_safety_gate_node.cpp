@@ -7,6 +7,7 @@
 //     soft ramp when clear within release_soft_stop_radius)
 //   - proximity speed cap from obstacle cloud + travel intent
 //   - tiered wz cap from nearby obstacle-point density
+//   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap only; stop on release
 
 #include <algorithm>
 #include <atomic>
@@ -24,6 +25,7 @@
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 #include <interface/msg/joystick.hpp>
 
@@ -61,6 +63,7 @@ public:
   using TwistStamped = geometry_msgs::msg::TwistStamped;
   using PointCloud2 = sensor_msgs::msg::PointCloud2;
   using UInt8 = std_msgs::msg::UInt8;
+  using Bool = std_msgs::msg::Bool;
   using Joystick = interface::msg::Joystick;
 
   enum class WzDensityTier : uint8_t { OPEN = 0, MODERATE = 1, DENSE = 2 };
@@ -132,6 +135,10 @@ public:
     release_soft_stop_wz_decel_ = declare_parameter<double>("release_soft_stop_wz_decel", 2.0);
     release_soft_stop_vel_eps_ = declare_parameter<double>("release_soft_stop_vel_eps", 0.02);
 
+    narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
+      "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
+    narrow_gate_vx_max_ = declare_parameter<double>("narrow_gate_vx_max", 0.20);
+
     if (input_type_ == "twist") {
       twist_sub_ = create_subscription<Twist>(
         in_stamped_topic_, 10,
@@ -154,6 +161,10 @@ public:
       obstacle_topic_, rclcpp::SensorDataQoS(),
       std::bind(&CmdVelSafetyGateNode::onCloud, this, std::placeholders::_1));
 
+    narrow_gate_pass_mode_sub_ = create_subscription<Bool>(
+      narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&CmdVelSafetyGateNode::onNarrowGatePassMode, this, std::placeholders::_1));
+
     out_pub_ = create_publisher<Twist>(out_topic_, 10);
     wz_tier_pub_ = create_publisher<UInt8>(
       std::string(get_name()) + "/wz_density_tier", 10);
@@ -169,17 +180,22 @@ public:
       get_logger(),
       "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s out=%s "
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
-      "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d",
+      "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d narrow_gate_vx_max=%.2f",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
       obstacle_topic_.c_str(), out_topic_.c_str(), input_type_.c_str(),
       cmd_timeout_, cmd_hold_timeout_, rocker_deadband_,
       proximity_speed_cap_ ? 1 : 0, vx_reverse_max_,
       release_soft_stop_enable_ ? 1 : 0, release_soft_stop_radius_,
-      wz_density_cap_enable_ ? 1 : 0);
+      wz_density_cap_enable_ ? 1 : 0, narrow_gate_vx_max_);
   }
 
 private:
+  void onNarrowGatePassMode(const Bool::SharedPtr msg)
+  {
+    narrow_gate_pass_active_.store(msg->data, std::memory_order_relaxed);
+  }
+
   void onTwist(const Twist::SharedPtr msg)
   {
     std::lock_guard<std::mutex> lock(input_mutex_);
@@ -407,6 +423,8 @@ private:
     }
 
     const double intent_vx = handle_valid ? handle.linear.x : 0.0;
+    const bool narrow_gate_pass =
+      narrow_gate_pass_active_.load(std::memory_order_relaxed);
 
     int dir = 0;
     double overhang = front_overhang_;
@@ -481,8 +499,8 @@ private:
         "soft-stop aborted (cloud stale)";
     }
 
-    if (proximity_speed_cap_ && input_ok && !halted && !soft_stopping_ && dir != 0 &&
-      std::isfinite(d))
+    if (proximity_speed_cap_ && !narrow_gate_pass && input_ok && !halted &&
+      !soft_stopping_ && dir != 0 && std::isfinite(d))
     {
       const double clearance = d - overhang - standoff_;
       const double v_safe = (clearance <= 0.0)
@@ -511,10 +529,19 @@ private:
       applySoftStopRamp(out, dt);
     } else if (!halted && input_ok) {
       out = target;
-      if (out.linear.x < 0.0) {
+      if (narrow_gate_pass) {
+        if (out.linear.x > 0.0) {
+          out.linear.x = std::min(out.linear.x, narrow_gate_vx_max_);
+        } else if (out.linear.x < 0.0) {
+          out.linear.x = std::max(out.linear.x, -narrow_gate_vx_max_);
+        }
+      }
+      if (!halted && out.linear.x < 0.0) {
         out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
       }
-      out.angular.z = clamp(out.angular.z, -effective_wz_max, effective_wz_max);
+      if (!halted) {
+        out.angular.z = clamp(out.angular.z, -effective_wz_max, effective_wz_max);
+      }
     } else {
       last_out_ = Twist();
       if (!reason.empty()) {
@@ -595,11 +622,16 @@ private:
   double release_soft_stop_wz_decel_{2.0};
   double release_soft_stop_vel_eps_{0.02};
 
+  std::string narrow_gate_pass_mode_topic_;
+  double narrow_gate_vx_max_{0.20};
+  std::atomic<bool> narrow_gate_pass_active_{false};
+
   rclcpp::Subscription<Twist>::SharedPtr twist_sub_;
   rclcpp::Subscription<TwistStamped>::SharedPtr twist_stamped_sub_;
   rclcpp::Subscription<Twist>::SharedPtr handle_sub_;
   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr cloud_sub_;
+  rclcpp::Subscription<Bool>::SharedPtr narrow_gate_pass_mode_sub_;
   rclcpp::Publisher<Twist>::SharedPtr out_pub_;
   rclcpp::Publisher<UInt8>::SharedPtr wz_tier_pub_;
   rclcpp::TimerBase::SharedPtr timer_;

@@ -49,6 +49,67 @@ joystick_local_path_node:
     footprint_base: "[[-0.2, 0.32], [0.685, 0.34], [0.935, 0.28], [0.935, -0.28], [0.685, -0.34], [-0.2, -0.32]]"
     gear_footprint_padding_m: [0.01, 0.02, 0.03, 0.04]
 
+    # 窄门仅在极低速/停车时检测（蠕行脱困），不影响正常行驶。
+    gate_path_enable: true
+    obstacle_points_topic: "/perception/obstacle_points"
+    gate_local_radius_m: 1.20
+    gate_width_min_m: 0.75
+    gate_width_max_m: 1.00
+    gate_scan_dist_min_m: 0.25
+    gate_pillar_mode_enable: true
+    gate_min_side_boundary_m: 0.38   # pillar_mode 下不生效
+    gate_min_side_points: 1
+    gate_stick_forward_min: 0.20
+    gate_center_y_deadband_m: 0.18
+    gate_stick_lateral_min: 0.08
+    gate_intent_lateral_ratio_min: 0.20
+    gate_intent_cross_slack_m: 0.18
+    gate_intent_angle_delta_max: 0.45
+    gate_opening_depth_m: 0.25
+    # 低速/停车（|v|<=gate_creep_speed_max_mps）+ 持续前推意图：看趋势/范围，不苛求射线精确穿过
+    gate_creep_speed_max_mps: 0.20
+    gate_creep_stick_forward_min: 0.08
+    gate_creep_stick_min: 0.10
+    gate_creep_intent_angle_max: 0.95
+    gate_creep_intent_cross_slack_m: 0.35
+    gate_creep_intent_angle_delta_max: 0.95
+    gate_creep_scan_body_forward: true
+    gate_hold_sec: 0.25
+    gate_confirm_sec: 0.50
+    gate_confirmed_hold_sec: 0.60
+    gate_memory_commit_frames: 50
+    gate_memory_max_count: 5   # 满则 FIFO 淘汰最旧
+    # 同一物理门（含正/反向进出）在 odom 下 merge_r 内视为同一窄门，只保留一条记忆
+    gate_memory_merge_radius_m: 2.00
+
+    # 过窄门模式：匹配窄门且车头中心距门中心 <= gate_pass_mode_enter_m 时激活。
+    # gate_pass_front_center_x_m 为 base_link 下前向参考点（约车头中心）。
+    # 零 footprint padding、pass_mode 下关闭 costmap inflation、强制 confirmed 中心线路径。
+    # /mppi/narrow_gate_pass_mode 通知 safety_gate：vx<=0.2m/s；停车条件与全局相同（松手等）。
+    # pass_mode 内不因 odom 超速退出；进入仍要求 |v|<=gate_creep_speed_max_mps。
+    # 门中心 x <= gate_pass_mode_body_clear_x_m（身后）即车身已通过，立即退出。
+    gate_pass_mode_enter_m: 0.80
+    gate_pass_front_center_x_m: 0.85
+    gate_pass_mode_exit_m: 0.95
+    gate_pass_mode_body_clear_x_m: -0.22
+    gate_pass_mode_hold_sec: 0.25
+    gate_pass_inflation_disable_enable: true
+    # Nav2 Costmap2DROS inside controller_server (NOT a standalone local_costmap node).
+    costmap_inflation_nodes:
+      - "/local_costmap/local_costmap"
+      - "/local_costmap"
+    costmap_inflation_layer_prefix: "inflation_layer"
+    gate_pass_inflation_restore_radius: 6.8
+    gate_pass_inflation_restore_scaling: 12.0
+    # localmap 模式：膨胀在 occupymap_node，不在 costmap inflation_layer。
+    gate_pass_occupymap_inflation_enable: true
+    occupymap_inflation_node: "/occupymap_node"
+    gate_pass_occupymap_inflation_restore_radius: 0.55
+    gate_pass_occupymap_inflation_restore_scaling: 10.0
+    gate_pass_inflation_retry_sec: 0.50
+    gate_pass_inflation_param_timeout_sec: 0.50
+    narrow_gate_pass_mode_topic: "/mppi/narrow_gate_pass_mode"
+
     # velocity_integration 模式专用
     control_topic: "/handle/control"
     lin_deadband: 0.02

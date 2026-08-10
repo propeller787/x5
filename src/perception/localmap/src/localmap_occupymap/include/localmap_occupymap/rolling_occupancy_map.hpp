@@ -71,6 +71,9 @@ public:
   bool hasOdometry() const;
   bool isRobotStationary() const;
   std::string mapFrame() const { return params_.map_frame; }
+  double inflationRadiusM() const { return params_.inflation_radius_m; }
+  double costScalingFactor() const { return params_.cost_scaling_factor; }
+  void setInflationParams(double inflation_radius_m, double cost_scaling_factor);
 
 private:
   void updateRollingOrigin();

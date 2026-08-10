@@ -2,13 +2,13 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-def _launch_setup(context, *args, **kwargs):
+def generate_launch_description():
     package_share = get_package_share_directory('wheelchair_obstacle')
 
     default_params = os.path.join(package_share, 'config', 'mppi_controller_server.yaml')
@@ -20,8 +20,6 @@ def _launch_setup(context, *args, **kwargs):
     joystick_params_file = LaunchConfiguration('joystick_params_file')
     safety_params_file = LaunchConfiguration('safety_params_file')
     enable_safety_gate = LaunchConfiguration('enable_safety_gate')
-    gate_centerline_enable = LaunchConfiguration('gate_centerline_enable').perform(context).lower() in (
-        'true', '1', 'yes')
 
     controller_server = Node(
         package='nav2_controller',
@@ -31,13 +29,6 @@ def _launch_setup(context, *args, **kwargs):
         parameters=[
             params_file,
             {'use_sim_time': use_sim_time},
-            {
-                'FollowPath': {
-                    'GateCenterlineCritic': {
-                        'enabled': gate_centerline_enable,
-                    }
-                }
-            },
         ],
         remappings=[
             ('/odom', '/odom/fused'),
@@ -73,24 +64,6 @@ def _launch_setup(context, *args, **kwargs):
         condition=IfCondition(enable_safety_gate),
     )
 
-    return [
-        controller_server,
-        lifecycle_manager,
-        joystick_local_path,
-        cmd_vel_safety_gate,
-    ]
-
-
-def generate_launch_description():
-    package_share = get_package_share_directory('wheelchair_obstacle')
-
-    default_params = os.path.join(package_share, 'config', 'mppi_controller_server.yaml')
-    default_joystick_params = os.path.join(package_share, 'config', 'joystick_local_path.yaml')
-    default_safety_params = os.path.join(package_share, 'config', 'cmd_vel_safety_gate.yaml')
-
-    use_sim_time = LaunchConfiguration('use_sim_time')
-    enable_safety_gate = LaunchConfiguration('enable_safety_gate')
-
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_sim_time',
@@ -112,9 +85,8 @@ def generate_launch_description():
             'enable_safety_gate',
             default_value='true',
             description='Launch cmd_vel_safety_gate_node between /cmd_vel and /nav/control'),
-        DeclareLaunchArgument(
-            'gate_centerline_enable',
-            default_value='true',
-            description='Enable GateCenterlineCritic (narrow gate centerline guidance)'),
-        OpaqueFunction(function=_launch_setup),
+        controller_server,
+        lifecycle_manager,
+        joystick_local_path,
+        cmd_vel_safety_gate,
     ])

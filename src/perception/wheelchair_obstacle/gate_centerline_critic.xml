@@ -1,9 +1,0 @@
-<library path="gate_centerline_critic">
-  <class
-    type="mppi::critics::GateCenterlineCritic"
-    base_class_type="mppi::critics::CriticFunction">
-    <description>
-      试验版窄门/窄道中心线引导 MPPI critic。
-    </description>
-  </class>
-</library>

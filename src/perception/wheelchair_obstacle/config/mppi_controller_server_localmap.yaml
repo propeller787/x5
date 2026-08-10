@@ -66,9 +66,6 @@ controller_server:
       critics:
         - "ConstraintCritic"
         - "CostCritic"
-        # ==== 窄门中心线引导 cost 试验版 BEGIN ====
-        - "GateCenterlineCritic"
-        # ==== 窄门中心线引导 cost 试验版 END ====
         - "GoalCritic"
         - "GoalAngleCritic"
         - "PathAlignCritic"
@@ -92,49 +89,6 @@ controller_server:
         near_goal_distance: 0.5
         # 膨胀已在 occupymap 内完成，无 Nav2 inflation_layer
         inflation_layer_name: ""
-
-      # ==== 窄门中心线引导 cost 试验版 BEGIN ====
-      GateCenterlineCritic:
-        # 一键开关：true=启用窄门中心线引导，false=完全关闭（也可 launch 传 gate_centerline_enable:=false）
-        enabled: true
-        cost_power: 1
-        critic_weight: 20.0
-        center_weight: 3.0
-        heading_weight: 0.3
-        gate_width_min_m: 0.80
-        gate_width_max_m: 1.50
-        gate_min_distance_m: 0.35
-        gate_max_distance_m: 1.60
-        scan_y_abs_m: 1.60
-        scan_x_step_m: 0.05
-        scan_y_step_m: 0.05
-        center_clear_half_width_m: 0.16
-        center_clear_x_margin_m: 0.12
-        active_x_band_m: 0.45
-        active_hold_s: 0.30
-        stage_prepare_ratio: 0.35
-        stage_turn_ratio: 0.20
-        stage_exit_ratio: 0.45
-        stage_far_center_scale: 0.35
-        stage_prepare_center_scale: 0.95
-        stage_turn_center_scale: 2.10
-        stage_exit_center_scale: 0.90
-        stage_far_heading_scale: 0.55
-        stage_prepare_heading_scale: 1.05
-        stage_turn_heading_scale: 1.70
-        stage_exit_heading_scale: 0.95
-        stage_weight_gain: 1.80
-        critical_mix_ratio: 0.45
-        stick_forward_min: 0.15
-        stick_lateral_min: 0.08
-        gate_center_y_deadband_m: 0.18
-        intent_lateral_ratio_min: 0.20
-        obstacle_cost_threshold: 200
-        trajectory_point_step: 4
-        joystick_topic: "/sensor/joystick"
-        debug_topic: "/mppi/gate_centerline_critic/debug"
-        debug_publish_period_s: 0.10
-      # ==== 窄门中心线引导 cost 试验版 END ====
 
       GoalCritic:
         enabled: true

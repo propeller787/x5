@@ -52,7 +52,6 @@ def _launch_setup(context, *args, **kwargs):
     start_localization = LaunchConfiguration('start_localization')
     start_control = LaunchConfiguration('start_control')
     enable_safety_gate = LaunchConfiguration('enable_safety_gate')
-    gate_centerline_enable = LaunchConfiguration('gate_centerline_enable')
     start_rviz = LaunchConfiguration('start_rviz')
     rviz_config = LaunchConfiguration('rviz_config')
     start_bag_record = LaunchConfiguration('start_bag_record')
@@ -121,7 +120,6 @@ def _launch_setup(context, *args, **kwargs):
             launch_arguments={
                 'use_sim_time': use_sim_time,
                 'enable_safety_gate': enable_safety_gate,
-                'gate_centerline_enable': gate_centerline_enable,
                 'params_file': controller_params,
             }.items(),
         ),
@@ -172,9 +170,6 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'enable_safety_gate', default_value='true',
             description='Launch cmd_vel_safety_gate_node between /cmd_vel and /nav/control'),
-        DeclareLaunchArgument(
-            'gate_centerline_enable', default_value='true',
-            description='Enable GateCenterlineCritic (narrow gate centerline guidance)'),
         DeclareLaunchArgument(
             'start_rviz', default_value='false',
             description='Open RViz2 with the navigation debug config'),

@@ -55,6 +55,9 @@ OccupymapNode::OccupymapNode(const rclcpp::NodeOptions & options)
     output_update_topic_.c_str(), params.map_frame.c_str(), params.map_extent_forward_m, params.map_extent_backward_m,
     params.map_extent_left_m, params.map_extent_right_m, params.resolution_m,
     params.stationary_retention_sec);
+
+  param_cb_handle_ = add_on_set_parameters_callback(
+    std::bind(&OccupymapNode::onSetParameters, this, std::placeholders::_1));
 }
 
 OccupymapParams OccupymapNode::loadParams()
@@ -95,6 +98,35 @@ OccupymapParams OccupymapNode::loadParams()
     declare_parameter<double>("blind_zone_retention_sec", 10.0);
   params.track_unknown_space = declare_parameter<bool>("track_unknown_space", false);
   return params;
+}
+
+rcl_interfaces::msg::SetParametersResult OccupymapNode::onSetParameters(
+  const std::vector<rclcpp::Parameter> & parameters)
+{
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+  double radius = -1.0;
+  double scaling = -1.0;
+  for (const auto & p : parameters) {
+    if (p.get_name() == "inflation_radius_m") {
+      radius = p.as_double();
+    } else if (p.get_name() == "cost_scaling_factor") {
+      scaling = p.as_double();
+    }
+  }
+  if (radius >= 0.0 || scaling >= 0.0) {
+    if (radius < 0.0) {
+      radius = map_->inflationRadiusM();
+    }
+    if (scaling < 0.0) {
+      scaling = map_->costScalingFactor();
+    }
+    map_->setInflationParams(radius, scaling);
+    RCLCPP_INFO(
+      get_logger(), "occupymap inflation updated: radius=%.3f scale=%.1f",
+      radius, scaling);
+  }
+  return result;
 }
 
 void OccupymapNode::onOdometry(const nav_msgs::msg::Odometry::SharedPtr msg)

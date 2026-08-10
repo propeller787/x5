@@ -70,3 +70,8 @@ cmd_vel_safety_gate_node:
     obstacle_count_engage_dense: 40
     obstacle_count_release_moderate: 28
     wz_density_min_dwell: 0.4
+
+    # --- 过窄门模式（订阅 /mppi/narrow_gate_pass_mode）---
+    # 仅 vx 限速；停车条件与全局相同（松手 / stale 等）
+    narrow_gate_pass_mode_topic: "/mppi/narrow_gate_pass_mode"
+    narrow_gate_vx_max: 0.20

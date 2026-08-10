@@ -24,7 +24,6 @@ find_package(std_msgs REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
 find_package(map_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
-find_package(nav2_mppi_controller REQUIRED)
 
 add_definitions(${PCL_DEFINITIONS})
 
@@ -134,33 +133,6 @@ ament_target_dependencies(external_occupymap_layer
 
 pluginlib_export_plugin_description_file(nav2_costmap_2d external_occupymap_layer.xml)
 
-# ==== 窄门中心线引导 cost 试验版 BEGIN ====
-# 自定义 MPPI critic：识别窄门/窄道入口后，给候选轨迹增加中心线引导软代价。
-add_library(gate_centerline_critic SHARED
-  src/gate_centerline_critic.cpp
-)
-
-target_include_directories(gate_centerline_critic PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_compile_features(gate_centerline_critic PUBLIC cxx_std_17)
-
-ament_target_dependencies(gate_centerline_critic
-  rclcpp
-  geometry_msgs
-  interface
-  nav2_costmap_2d
-  nav2_mppi_controller
-  pluginlib
-  std_msgs
-  tf2
-)
-
-pluginlib_export_plugin_description_file(nav2_mppi_controller gate_centerline_critic.xml)
-# ==== 窄门中心线引导 cost 试验版 END ====
-
 install(TARGETS
   obstacle_cloud_filter_node
   joystick_local_path_node
@@ -168,13 +140,13 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(TARGETS rebuild_obstacle_layer external_occupymap_layer gate_centerline_critic
+install(TARGETS rebuild_obstacle_layer external_occupymap_layer
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
-install(FILES rebuild_obstacle_layer.xml external_occupymap_layer.xml gate_centerline_critic.xml
+install(FILES rebuild_obstacle_layer.xml external_occupymap_layer.xml
   DESTINATION share/${PROJECT_NAME}
 )
 

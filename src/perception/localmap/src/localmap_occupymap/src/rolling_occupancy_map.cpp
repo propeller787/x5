@@ -197,4 +197,12 @@ bool RollingOccupancyMap::isRobotStationary() const
   return robot_stationary_;
 }
 
+void RollingOccupancyMap::setInflationParams(
+  double inflation_radius_m, double cost_scaling_factor)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  params_.inflation_radius_m = inflation_radius_m;
+  params_.cost_scaling_factor = cost_scaling_factor;
+}
+
 }  // namespace localmap_occupymap

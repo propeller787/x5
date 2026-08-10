@@ -11,6 +11,7 @@
 #include "map_msgs/msg/occupancy_grid_update.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav2_msgs/msg/costmap.hpp"
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "tf2_ros/buffer.h"
@@ -33,6 +34,8 @@ private:
     sensor_msgs::msg::PointCloud2 & output);
 
   OccupymapParams loadParams();
+  rcl_interfaces::msg::SetParametersResult onSetParameters(
+    const std::vector<rclcpp::Parameter> & parameters);
 
   std::unique_ptr<RollingOccupancyMap> map_;
   nav_msgs::msg::Odometry::SharedPtr latest_odom_;
@@ -50,6 +53,7 @@ private:
   std::string output_topic_;
   std::string output_raw_topic_;
   std::string output_update_topic_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
 };
 
 }  // namespace localmap_occupymap

@@ -12,7 +12,6 @@
 /localmap/occupymap
 /localmap/occupymap_raw
 /mppi/local_intent_path
-/mppi/gate_centerline_critic/debug
 /trajectories
 /controller_server/transformed_global_plan
 /cmd_vel_safety_gate_node/mode
