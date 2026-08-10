@@ -22,7 +22,6 @@ find_package(nav2_msgs REQUIRED)
 find_package(interface REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
-find_package(map_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 
 add_definitions(${PCL_DEFINITIONS})
@@ -67,6 +66,8 @@ ament_target_dependencies(joystick_local_path_node
   nav_msgs
   geometry_msgs
   sensor_msgs
+  std_msgs
+  visualization_msgs
   nav2_msgs
   nav2_costmap_2d
   interface
@@ -112,27 +113,6 @@ ament_target_dependencies(rebuild_obstacle_layer
 # 向 nav2_costmap_2d 导出插件描述，使其能被 pluginlib 发现。
 pluginlib_export_plugin_description_file(nav2_costmap_2d rebuild_obstacle_layer.xml)
 
-add_library(external_occupymap_layer SHARED
-  src/external_occupymap_layer.cpp
-)
-
-target_include_directories(external_occupymap_layer PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-
-target_compile_features(external_occupymap_layer PUBLIC cxx_std_17)
-
-ament_target_dependencies(external_occupymap_layer
-  rclcpp
-  nav2_costmap_2d
-  nav2_msgs
-  map_msgs
-  pluginlib
-)
-
-pluginlib_export_plugin_description_file(nav2_costmap_2d external_occupymap_layer.xml)
-
 install(TARGETS
   obstacle_cloud_filter_node
   joystick_local_path_node
@@ -140,13 +120,13 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(TARGETS rebuild_obstacle_layer external_occupymap_layer
+install(TARGETS rebuild_obstacle_layer
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
-install(FILES rebuild_obstacle_layer.xml external_occupymap_layer.xml
+install(FILES rebuild_obstacle_layer.xml
   DESTINATION share/${PROJECT_NAME}
 )
 

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -12,6 +13,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <tf2/LinearMath/Transform.h>
 #include <tf2/LinearMath/Vector3.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -73,13 +75,55 @@ public:
       input_cloud_topic_, rclcpp::SensorDataQoS(),
       std::bind(&ObstacleCloudFilterNode::onCloud, this, std::placeholders::_1));
 
+    narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
+      "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
+    narrow_gate_pass_mode_sub_ = create_subscription<std_msgs::msg::Bool>(
+      narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&ObstacleCloudFilterNode::onNarrowGatePassMode, this, std::placeholders::_1));
+
     RCLCPP_INFO(
       get_logger(),
-      "obstacle_cloud_filter started: in=%s out=%s frame=%s",
-      input_cloud_topic_.c_str(), output_cloud_topic_.c_str(), target_frame_.c_str());
+      "obstacle_cloud_filter started: in=%s out=%s frame=%s pass_mode=%s",
+      input_cloud_topic_.c_str(), output_cloud_topic_.c_str(), target_frame_.c_str(),
+      narrow_gate_pass_mode_topic_.c_str());
   }
 
 private:
+  void onNarrowGatePassMode(const std_msgs::msg::Bool::SharedPtr msg)
+  {
+    setPassModeProfile(msg->data);
+  }
+
+  void setPassModeProfile(bool pass_mode)
+  {
+    if (pass_mode == narrow_gate_pass_active_) {
+      return;
+    }
+    narrow_gate_pass_active_ = pass_mode;
+    if (pass_mode) {
+      range_ = normal_range_;
+      range_.range_max = pass_range_max_m_;
+      roi_.x_min = pass_body_rear_x_m_ - pass_obstacle_margin_m_;
+      roi_.x_max = pass_body_front_x_m_ + pass_obstacle_margin_m_;
+      roi_.y_min = -(pass_body_half_width_m_ + pass_obstacle_margin_m_);
+      roi_.y_max = pass_body_half_width_m_ + pass_obstacle_margin_m_;
+      isolation_ = normal_isolation_;
+      isolation_.grid_resolution = pass_resolution_m_;
+      voxel_ = normal_voxel_;
+      voxel_.voxel_size_xy = pass_resolution_m_;
+      RCLCPP_INFO(
+        get_logger(),
+        "pass_mode filter: res=%.2fm roi x=[%.2f,%.2f] y=[%.2f,%.2f]",
+        pass_resolution_m_, roi_.x_min, roi_.x_max, roi_.y_min, roi_.y_max);
+    } else {
+      range_ = normal_range_;
+      roi_ = normal_roi_;
+      isolation_ = normal_isolation_;
+      voxel_ = normal_voxel_;
+      RCLCPP_INFO(get_logger(), "pass_mode filter restored to normal profile");
+    }
+    configureCore();
+  }
   void loadParameters()
   {
     input_cloud_topic_ = declare_parameter<std::string>(
@@ -150,6 +194,21 @@ private:
 
     publish_markers_ = declare_parameter<bool>("debug.publish_markers", true);
     marker_period_sec_ = declare_parameter<double>("debug.marker_period_sec", 1.0);
+
+    normal_range_ = range_;
+    normal_roi_ = roi_;
+    normal_isolation_ = isolation_;
+    normal_voxel_ = voxel_;
+
+    pass_resolution_m_ = declare_parameter<double>("gate_pass_resolution_m", 0.02);
+    pass_obstacle_margin_m_ = declare_parameter<double>("gate_pass_obstacle_margin_m", 1.00);
+    pass_body_front_x_m_ = declare_parameter<double>("gate_pass_body_front_x_m", 0.935);
+    pass_body_rear_x_m_ = declare_parameter<double>("gate_pass_body_rear_x_m", -0.20);
+    pass_body_half_width_m_ = declare_parameter<double>("gate_pass_body_half_width_m", 0.34);
+    const double fwd = pass_body_front_x_m_ + pass_obstacle_margin_m_;
+    const double back = -pass_body_rear_x_m_ + pass_obstacle_margin_m_;
+    const double side = pass_body_half_width_m_ + pass_obstacle_margin_m_;
+    pass_range_max_m_ = std::hypot(std::max(fwd, back), side) + 0.10;
   }
 
   // Declare an array parameter that may legitimately be empty. An empty "[]" in
@@ -457,6 +516,10 @@ private:
   RoiConfig roi_;
   IsolationConfig isolation_;
   VoxelConfig voxel_;
+  RangeConfig normal_range_;
+  RoiConfig normal_roi_;
+  IsolationConfig normal_isolation_;
+  VoxelConfig normal_voxel_;
   bool self_mask_enabled_ = true;
   bool isolation_enabled_ = true;
   bool voxel_enabled_ = true;
@@ -465,9 +528,19 @@ private:
   bool publish_markers_ = true;
   double marker_period_sec_ = 1.0;
 
+  std::string narrow_gate_pass_mode_topic_;
+  bool narrow_gate_pass_active_{false};
+  double pass_resolution_m_{0.02};
+  double pass_obstacle_margin_m_{1.00};
+  double pass_body_front_x_m_{0.935};
+  double pass_body_rear_x_m_{-0.20};
+  double pass_body_half_width_m_{0.34};
+  double pass_range_max_m_{2.50};
+
   ObstacleCloudFilterCore core_;
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr narrow_gate_pass_mode_sub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr output_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr self_mask_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr roi_marker_pub_;

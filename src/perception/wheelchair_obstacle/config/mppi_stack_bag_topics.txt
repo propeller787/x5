@@ -12,6 +12,8 @@
 /perception/lidar_fusion/points
 /perception/obstacle_points
 /mppi/local_intent_path
+/mppi/narrow_gate_pass_mode
+/mppi/gate_markers
 # MPPI 输出（需 FollowPath.visualize:=true）：最优 rollout + 候选轨迹
 /trajectories
 # MPPI 正在跟踪的局部参考路径

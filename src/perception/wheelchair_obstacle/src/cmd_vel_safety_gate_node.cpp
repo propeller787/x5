@@ -7,7 +7,8 @@
 //     soft ramp when clear within release_soft_stop_radius)
 //   - proximity speed cap from obstacle cloud + travel intent
 //   - tiered wz cap from nearby obstacle-point density
-//   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap only; stop on release
+//   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
+//     (forward -> no reverse, backward -> no forward; lateral -> no opposite turn); stop on release
 
 #include <algorithm>
 #include <atomic>
@@ -138,6 +139,12 @@ public:
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
     narrow_gate_vx_max_ = declare_parameter<double>("narrow_gate_vx_max", 0.20);
+    narrow_gate_rocker_intent_filter_enable_ = declare_parameter<bool>(
+      "narrow_gate_rocker_intent_filter_enable", true);
+    narrow_gate_rocker_forward_min_ = declare_parameter<double>(
+      "narrow_gate_rocker_forward_min", 5.0);
+    narrow_gate_rocker_lateral_min_ = declare_parameter<double>(
+      "narrow_gate_rocker_lateral_min", 5.0);
 
     if (input_type_ == "twist") {
       twist_sub_ = create_subscription<Twist>(
@@ -223,12 +230,64 @@ private:
 
   void onJoystick(const Joystick::SharedPtr msg)
   {
-    const bool at_origin =
-      (std::abs(msg->rocker_x) <= rocker_deadband_) &&
-      (std::abs(msg->rocker_y) <= rocker_deadband_);
+    const double rx = applyRockerDeadbandAxis(static_cast<double>(msg->rocker_x));
+    const double ry = applyRockerDeadbandAxis(static_cast<double>(msg->rocker_y));
+    latest_rocker_x_.store(static_cast<int16_t>(std::lround(rx)), std::memory_order_relaxed);
+    latest_rocker_y_.store(static_cast<int16_t>(std::lround(ry)), std::memory_order_relaxed);
+    const bool at_origin = (std::abs(rx) <= 1e-6) && (std::abs(ry) <= 1e-6);
     rocker_at_origin_.store(at_origin, std::memory_order_relaxed);
     latest_rocker_stamp_ns_.store(now().nanoseconds(), std::memory_order_relaxed);
     have_rocker_.store(true, std::memory_order_relaxed);
+  }
+
+  double applyRockerDeadbandAxis(double axis) const
+  {
+    return (std::abs(axis) <= rocker_deadband_) ? 0.0 : axis;
+  }
+
+  bool rockerFresh(const rclcpp::Time & tnow) const
+  {
+    if (!have_rocker_.load(std::memory_order_relaxed)) {
+      return false;
+    }
+    const auto age_ns = tnow.nanoseconds() -
+      latest_rocker_stamp_ns_.load(std::memory_order_relaxed);
+    return age_ns <= static_cast<int64_t>(rocker_timeout_ * 1e9);
+  }
+
+  void applyNarrowGateRockerIntentFilter(Twist & out, const rclcpp::Time & tnow) const
+  {
+    if (!narrow_gate_rocker_intent_filter_enable_ ||
+      !narrow_gate_pass_active_.load(std::memory_order_relaxed) ||
+      !rockerFresh(tnow))
+    {
+      return;
+    }
+
+    const double rx = static_cast<double>(
+      latest_rocker_x_.load(std::memory_order_relaxed));
+    const double ry = static_cast<double>(
+      latest_rocker_y_.load(std::memory_order_relaxed));
+
+    if (rx > narrow_gate_rocker_forward_min_) {
+      if (out.linear.x < 0.0) {
+        out.linear.x = 0.0;
+      }
+    } else if (rx < -narrow_gate_rocker_forward_min_) {
+      if (out.linear.x > 0.0) {
+        out.linear.x = 0.0;
+      }
+    }
+
+    if (ry > narrow_gate_rocker_lateral_min_) {
+      if (out.angular.z < 0.0) {
+        out.angular.z = 0.0;
+      }
+    } else if (ry < -narrow_gate_rocker_lateral_min_) {
+      if (out.angular.z > 0.0) {
+        out.angular.z = 0.0;
+      }
+    }
   }
 
   void onCloud(const PointCloud2::SharedPtr msg)
@@ -542,6 +601,7 @@ private:
       if (!halted) {
         out.angular.z = clamp(out.angular.z, -effective_wz_max, effective_wz_max);
       }
+      applyNarrowGateRockerIntentFilter(out, tnow);
     } else {
       last_out_ = Twist();
       if (!reason.empty()) {
@@ -624,6 +684,9 @@ private:
 
   std::string narrow_gate_pass_mode_topic_;
   double narrow_gate_vx_max_{0.20};
+  bool narrow_gate_rocker_intent_filter_enable_{true};
+  double narrow_gate_rocker_forward_min_{5.0};
+  double narrow_gate_rocker_lateral_min_{5.0};
   std::atomic<bool> narrow_gate_pass_active_{false};
 
   rclcpp::Subscription<Twist>::SharedPtr twist_sub_;
@@ -646,6 +709,8 @@ private:
   bool have_handle_{false};
 
   std::atomic<bool> rocker_at_origin_{true};
+  std::atomic<int16_t> latest_rocker_x_{0};
+  std::atomic<int16_t> latest_rocker_y_{0};
   std::atomic<int64_t> latest_rocker_stamp_ns_{0};
   std::atomic<bool> have_rocker_{false};
 

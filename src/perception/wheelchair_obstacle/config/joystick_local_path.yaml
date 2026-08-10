@@ -101,14 +101,16 @@ joystick_local_path_node:
     costmap_inflation_layer_prefix: "inflation_layer"
     gate_pass_inflation_restore_radius: 6.8
     gate_pass_inflation_restore_scaling: 12.0
-    # localmap 模式：膨胀在 occupymap_node，不在 costmap inflation_layer。
-    gate_pass_occupymap_inflation_enable: true
-    occupymap_inflation_node: "/occupymap_node"
-    gate_pass_occupymap_inflation_restore_radius: 0.55
-    gate_pass_occupymap_inflation_restore_scaling: 10.0
     gate_pass_inflation_retry_sec: 0.50
     gate_pass_inflation_param_timeout_sec: 0.50
+    # pass_mode：点云 filter 切 2cm/1m ROI（见 obstacle_cloud_filter.yaml）；legacy costmap 尝试切 2cm
+    gate_pass_obstacle_reconfig_enable: true
+    gate_pass_resolution_m: 0.02
+    gate_pass_costmap_resolution_enable: true
     narrow_gate_pass_mode_topic: "/mppi/narrow_gate_pass_mode"
+    # RViz：当前窄门（黄/绿/紫）+ 记忆门（蓝球，odom 坐标）
+    gate_marker_enable: true
+    gate_marker_topic: "/mppi/gate_markers"
 
     # velocity_integration 模式专用
     control_topic: "/handle/control"

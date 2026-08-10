@@ -6,14 +6,11 @@
 #
 # Layers started here (toggle each with the matching argument):
 #   perception   : horizontal_lidar_fusion -> obstacle_cloud_filter
-#                  (+ localmap_occupymap when use_localmap_costmap:=true)
 #   localization : odom_fusion_node (/odom/fused)
 #   control      : controller_server (MPPI) + lifecycle_manager + joystick_local_path
 #                  + cmd_vel_safety_gate  (via mppi_wheelchair_controller.launch.py)
 #
-# Costmap sources (use_localmap_costmap):
-#   true  : occupymap_node + ExternalOccupymapLayer (mppi_controller_server_localmap.yaml)
-#   false : RebuildObstacleLayer + InflationLayer (mppi_controller_server.yaml)
+# Costmap: Nav2 RebuildObstacleLayer + InflationLayer (mppi_controller_server.yaml)
 #
 # Expected external inputs (from the skipped sensor / lidar layer):
 #   /scan/left /scan/right /scan/back   (horizontal lidars)
@@ -58,12 +55,9 @@ def _launch_setup(context, *args, **kwargs):
     bag_record_interval_sec = LaunchConfiguration('bag_record_interval_sec')
     bag_record_max_count = LaunchConfiguration('bag_record_max_count')
     bag_record_output_dir = LaunchConfiguration('bag_record_output_dir')
-    occupymap_params_file = LaunchConfiguration('occupymap_params_file')
 
     pkg_share = get_package_share_directory('wheelchair_obstacle')
     default_controller_params = os.path.join(
-        pkg_share, 'config', 'mppi_controller_server_localmap.yaml')
-    default_legacy_controller_params = os.path.join(
         pkg_share, 'config', 'mppi_controller_server.yaml')
     localization_params = os.path.join(
         get_package_share_directory('localization'), 'config', 'odom_fusion_params.yaml')
@@ -71,36 +65,16 @@ def _launch_setup(context, *args, **kwargs):
     default_bag_qos = os.path.join(pkg_share, 'config', 'mppi_stack_bag_qos.yaml')
     default_bag_topics = os.path.join(pkg_share, 'config', 'mppi_stack_bag_topics.txt')
 
-    use_local = LaunchConfiguration('use_localmap_costmap').perform(context).lower() in (
-        'true', '1', 'yes')
     params_override = LaunchConfiguration('controller_params_file').perform(context)
-    if params_override:
-        controller_params = params_override
-    else:
-        controller_params = (
-            default_controller_params if use_local else default_legacy_controller_params)
+    controller_params = params_override if params_override else default_controller_params
 
-    actions = [
+    return [
         _include(
             'lidar_fusion', 'horizontal_lidar_fusion.launch.py', start_perception,
             {'use_sim_time': use_sim_time}),
         _include(
             'wheelchair_obstacle', 'obstacle_cloud_filter.launch.py', start_perception,
             {'use_sim_time': use_sim_time}),
-    ]
-
-    if use_local:
-        actions.append(IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(
-                get_package_share_directory('localmap_occupymap'),
-                'launch', 'occupymap.launch.py')),
-            launch_arguments={
-                'use_sim_time': use_sim_time,
-                'params_file': occupymap_params_file,
-            }.items(),
-        ))
-
-    actions.extend([
         Node(
             package='localization',
             executable='odom_fusion_node',
@@ -144,15 +118,13 @@ def _launch_setup(context, *args, **kwargs):
             output='screen',
             condition=IfCondition(start_bag_record),
         ),
-    ])
-
-    return actions
+    ]
 
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('wheelchair_obstacle')
-    default_occupymap_params = os.path.join(
-        pkg_share, 'config', 'occupymap_wheelchair.param.yaml')
+    default_controller_params = os.path.join(
+        pkg_share, 'config', 'mppi_controller_server.yaml')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -191,13 +163,7 @@ def generate_launch_description():
             default_value=os.path.join(os.path.expanduser('~'), 'bags', 'mppi_stack_cyclic'),
             description='Directory for cyclic rosbag segments (bag_YYYYMMDD_HHMMSS/)'),
         DeclareLaunchArgument(
-            'use_localmap_costmap', default_value='true',
-            description='Use localmap_occupymap + ExternalOccupymapLayer for MPPI costmap'),
-        DeclareLaunchArgument(
-            'controller_params_file', default_value='',
-            description='Override controller_server params yaml (empty = auto by use_localmap_costmap)'),
-        DeclareLaunchArgument(
-            'occupymap_params_file', default_value=default_occupymap_params,
-            description='occupymap_node params when use_localmap_costmap is true'),
+            'controller_params_file', default_value=default_controller_params,
+            description='controller_server + local_costmap params yaml'),
         OpaqueFunction(function=_launch_setup),
     ])

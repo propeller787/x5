@@ -18,7 +18,7 @@ controller_server:
     min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
 
-    # progress_checker：PoseProgressChecker 同时看 xy 与 yaw，见 localmap 配置注释。
+    # progress_checker：PoseProgressChecker 同时看 xy 与 yaw。
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["general_goal_checker"]
 
@@ -41,7 +41,7 @@ controller_server:
 
       # 20 Hz 控制器 -> model_dt 必须 >= 控制周期；此处取相等。
       model_dt: 0.05
-      # 须大于 MPPI 正常帧间隔（~0.18s@5Hz），小于回零 cancel→resend（~0.5s）。见 localmap 注释。
+      # 须大于 MPPI 正常帧间隔（~0.18s@5Hz），小于回零 cancel→resend（~0.5s）。
       reset_period: 0.35
       time_steps: 40
       batch_size: 600

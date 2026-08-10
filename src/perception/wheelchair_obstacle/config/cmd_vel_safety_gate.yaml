@@ -72,6 +72,9 @@ cmd_vel_safety_gate_node:
     wz_density_min_dwell: 0.4
 
     # --- 过窄门模式（订阅 /mppi/narrow_gate_pass_mode）---
-    # 仅 vx 限速；停车条件与全局相同（松手 / stale 等）
+    # vx 限速；更信任原始摇杆：前推禁倒退、后拉禁前进，左右推禁反向转向
     narrow_gate_pass_mode_topic: "/mppi/narrow_gate_pass_mode"
     narrow_gate_vx_max: 0.20
+    narrow_gate_rocker_intent_filter_enable: true
+    narrow_gate_rocker_forward_min: 5.0   # |rocker_x| 超过此值视为前/后意图（原始单位）
+    narrow_gate_rocker_lateral_min: 5.0   # |rocker_y| 超过此值视为左右意图；+y=左转

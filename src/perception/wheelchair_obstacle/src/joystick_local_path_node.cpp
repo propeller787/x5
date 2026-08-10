@@ -8,7 +8,7 @@
 //   Forward + narrow gate: ONLY when |odom|<=gate_creep_speed_max (creep/stop) for detection.
 //     Blocked + stick intent -> gate path + pass mode; pass mode keeps until body clear /
 //     intent timeout / front_to_gate exit (not odom overspeed). In pass mode: zero footprint
-//     padding + disable inflation on controller_server costmap and/or occupymap_node.
+//     padding + disable inflation on controller_server costmap.
 //
 // MPPI warm-start reset (stick enters dead zone only):
 //   1. cancel FollowPath (handle or cancel_all_goals)
@@ -40,6 +40,8 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 
@@ -270,6 +272,9 @@ public:
     gate_pass_mode_hold_sec_ = declare_parameter<double>("gate_pass_mode_hold_sec", 0.25);
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
+    gate_marker_enable_ = declare_parameter<bool>("gate_marker_enable", true);
+    gate_marker_topic_ = declare_parameter<std::string>(
+      "gate_marker_topic", "/mppi/gate_markers");
     gate_pass_inflation_disable_enable_ = declare_parameter<bool>(
       "gate_pass_inflation_disable_enable", true);
     costmap_inflation_node_candidates_ = declare_parameter<std::vector<std::string>>(
@@ -281,18 +286,15 @@ public:
       "gate_pass_inflation_restore_radius", 6.8);
     gate_pass_inflation_restore_scaling_ = declare_parameter<double>(
       "gate_pass_inflation_restore_scaling", 12.0);
-    gate_pass_occupymap_inflation_enable_ = declare_parameter<bool>(
-      "gate_pass_occupymap_inflation_enable", true);
-    occupymap_inflation_node_ = declare_parameter<std::string>(
-      "occupymap_inflation_node", "/occupymap_node");
-    gate_pass_occupymap_inflation_restore_radius_ = declare_parameter<double>(
-      "gate_pass_occupymap_inflation_restore_radius", 0.55);
-    gate_pass_occupymap_inflation_restore_scaling_ = declare_parameter<double>(
-      "gate_pass_occupymap_inflation_restore_scaling", 10.0);
     gate_pass_inflation_retry_sec_ = declare_parameter<double>(
       "gate_pass_inflation_retry_sec", 0.50);
     gate_pass_inflation_param_timeout_sec_ = declare_parameter<double>(
       "gate_pass_inflation_param_timeout_sec", 0.50);
+    gate_pass_obstacle_reconfig_enable_ = declare_parameter<bool>(
+      "gate_pass_obstacle_reconfig_enable", true);
+    gate_pass_resolution_m_ = declare_parameter<double>("gate_pass_resolution_m", 0.02);
+    gate_pass_costmap_resolution_enable_ = declare_parameter<bool>(
+      "gate_pass_costmap_resolution_enable", true);
 
     use_spatial_range_ = (path_generation_mode_ == "spatial_range");
 
@@ -324,6 +326,10 @@ public:
     path_pub_ = create_publisher<Path>(intent_path_topic_, 1);
     narrow_gate_pass_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
       narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local());
+    if (gate_marker_enable_ && gate_path_enable_) {
+      gate_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+        gate_marker_topic_, rclcpp::QoS(1).transient_local());
+    }
     if (footprint_publish_enable_) {
       if (!nav2_costmap_2d::makeFootprintFromString(footprint_base_, footprint_base_pts_)) {
         RCLCPP_ERROR(get_logger(), "Invalid footprint_base: %s", footprint_base_.c_str());
@@ -467,11 +473,14 @@ private:
     have_published_footprint_ = false;
     if (active) {
       resetPassModeInflationState();
+      resetPassModeMappingState();
       inflation_disable_pending_ = gate_pass_inflation_disable_enable_;
       last_inflation_retry_stamp_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
       tryDisablePassModeInflation(tnow);
+      tryApplyPassModeMapping();
     } else {
       restorePassModeInflation();
+      restorePassModeMapping();
       inflation_disable_pending_ = false;
     }
 
@@ -487,24 +496,102 @@ private:
   void resetPassModeInflationState()
   {
     costmap_inflation_client_.reset();
-    occupymap_inflation_client_.reset();
     resolved_costmap_inflation_node_.clear();
-    resolved_occupymap_inflation_node_.clear();
     costmap_inflation_applicable_ = true;
-    occupymap_inflation_applicable_ = true;
     costmap_inflation_disabled_ = false;
-    occupymap_inflation_disabled_ = false;
     costmap_inflation_restore_valid_ = false;
-    occupymap_inflation_restore_valid_ = false;
     inflation_disabled_by_pass_mode_ = false;
+  }
+
+  void resetPassModeMappingState()
+  {
+    costmap_resolution_restore_valid_ = false;
+    costmap_resolution_applied_ = false;
+  }
+
+  bool trySaveCostmapResolutionBaseline()
+  {
+    if (costmap_resolution_restore_valid_ || !gate_pass_costmap_resolution_enable_) {
+      return costmap_resolution_restore_valid_;
+    }
+    auto client = resolveParamClient(
+      costmap_inflation_node_candidates_, resolved_costmap_inflation_node_,
+      costmap_inflation_client_);
+    if (!client) {
+      return false;
+    }
+    std::vector<rclcpp::Parameter> params;
+    if (!loadRemoteParams(client, {"resolution"}, &params) || params.empty()) {
+      costmap_inflation_applicable_ = false;
+      return false;
+    }
+    saved_costmap_resolution_ = params[0].as_double();
+    costmap_resolution_restore_valid_ = true;
+    return true;
+  }
+
+  bool tryApplyPassModeCostmapResolution()
+  {
+    if (!gate_pass_costmap_resolution_enable_ || costmap_resolution_applied_) {
+      return true;
+    }
+    if (!trySaveCostmapResolutionBaseline()) {
+      return false;
+    }
+    if (std::abs(saved_costmap_resolution_ - gate_pass_resolution_m_) < 1e-6) {
+      costmap_resolution_applied_ = true;
+      return true;
+    }
+    if (setRemoteParams(costmap_inflation_client_, resolved_costmap_inflation_node_, {
+        rclcpp::Parameter("resolution", gate_pass_resolution_m_),
+      }))
+    {
+      costmap_resolution_applied_ = true;
+      RCLCPP_INFO(
+        get_logger(), "pass_mode: %s costmap resolution -> %.2fm",
+        resolved_costmap_inflation_node_.c_str(), gate_pass_resolution_m_);
+      return true;
+    }
+    return false;
+  }
+
+  void restorePassModeCostmapResolution()
+  {
+    if (!costmap_resolution_restore_valid_ || !costmap_resolution_applied_ ||
+      !costmap_inflation_client_)
+    {
+      costmap_resolution_applied_ = false;
+      costmap_resolution_restore_valid_ = false;
+      return;
+    }
+    if (setRemoteParams(costmap_inflation_client_, resolved_costmap_inflation_node_, {
+        rclcpp::Parameter("resolution", saved_costmap_resolution_),
+      }))
+    {
+      RCLCPP_INFO(
+        get_logger(), "pass_mode: %s costmap resolution restored %.2fm",
+        resolved_costmap_inflation_node_.c_str(), saved_costmap_resolution_);
+    }
+    costmap_resolution_applied_ = false;
+    costmap_resolution_restore_valid_ = false;
+  }
+
+  void tryApplyPassModeMapping()
+  {
+    if (!gate_pass_obstacle_reconfig_enable_) {
+      return;
+    }
+    tryApplyPassModeCostmapResolution();
+  }
+
+  void restorePassModeMapping()
+  {
+    restorePassModeCostmapResolution();
   }
 
   bool passModeInflationFullyHandled() const
   {
-    const bool costmap_ok = !costmap_inflation_applicable_ || costmap_inflation_disabled_;
-    const bool occupymap_ok = !gate_pass_occupymap_inflation_enable_ ||
-      !occupymap_inflation_applicable_ || occupymap_inflation_disabled_;
-    return costmap_ok && occupymap_ok;
+    return !costmap_inflation_applicable_ || costmap_inflation_disabled_;
   }
 
   std::chrono::nanoseconds inflationParamTimeout() const
@@ -649,63 +736,6 @@ private:
     return true;
   }
 
-  bool tryDisableOccupymapInflation()
-  {
-    if (!gate_pass_occupymap_inflation_enable_ || !occupymap_inflation_applicable_ ||
-      occupymap_inflation_disabled_)
-    {
-      return true;
-    }
-
-    const std::vector<std::string> candidates = {occupymap_inflation_node_};
-    auto client = resolveParamClient(
-      candidates, resolved_occupymap_inflation_node_, occupymap_inflation_client_);
-    if (!client) {
-      return false;
-    }
-
-    if (!occupymap_inflation_restore_valid_) {
-      std::vector<rclcpp::Parameter> current;
-      if (!loadRemoteParams(
-          client, {"inflation_radius_m", "cost_scaling_factor"}, &current))
-      {
-        RCLCPP_INFO(
-          get_logger(),
-          "pass_mode: %s has no occupymap inflation params; skipping",
-          resolved_occupymap_inflation_node_.c_str());
-        occupymap_inflation_applicable_ = false;
-        return true;
-      }
-
-      saved_occupymap_inflation_radius_ = gate_pass_occupymap_inflation_restore_radius_;
-      saved_occupymap_inflation_scaling_ = gate_pass_occupymap_inflation_restore_scaling_;
-      for (const auto & p : current) {
-        if (p.get_name() == "inflation_radius_m") {
-          saved_occupymap_inflation_radius_ = p.as_double();
-        } else if (p.get_name() == "cost_scaling_factor") {
-          saved_occupymap_inflation_scaling_ = p.as_double();
-        }
-      }
-      occupymap_inflation_restore_valid_ = true;
-    }
-
-    if (!setRemoteParams(client, resolved_occupymap_inflation_node_, {
-        rclcpp::Parameter("inflation_radius_m", 0.0),
-        rclcpp::Parameter("cost_scaling_factor", 0.0),
-      }))
-    {
-      return false;
-    }
-
-    occupymap_inflation_disabled_ = true;
-    RCLCPP_INFO(
-      get_logger(),
-      "pass_mode: %s occupymap inflation disabled (restore r=%.2f scale=%.1f)",
-      resolved_occupymap_inflation_node_.c_str(),
-      saved_occupymap_inflation_radius_, saved_occupymap_inflation_scaling_);
-    return true;
-  }
-
   bool tryDisablePassModeInflation(const rclcpp::Time & tnow)
   {
     if (!gate_pass_inflation_disable_enable_ || !narrow_gate_pass_active_ ||
@@ -717,15 +747,12 @@ private:
     }
 
     const bool costmap_ok = tryDisableCostmapInflationLayer();
-    const bool occupymap_ok = tryDisableOccupymapInflation();
     last_inflation_retry_stamp_ = tnow;
 
-    if (!costmap_ok || !occupymap_ok) {
+    if (!costmap_ok) {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 2000,
-        "pass_mode: waiting to disable inflation (costmap=%s occupymap=%s)",
-        costmap_ok ? "ok" : "retry",
-        occupymap_ok ? "ok" : "retry");
+        "pass_mode: waiting to disable inflation (costmap=retry)");
       return false;
     }
 
@@ -777,40 +804,9 @@ private:
     costmap_inflation_restore_valid_ = false;
   }
 
-  void restoreOccupymapInflation()
-  {
-    if (!gate_pass_occupymap_inflation_enable_ || !occupymap_inflation_applicable_ ||
-      !occupymap_inflation_disabled_ || !occupymap_inflation_restore_valid_ ||
-      !occupymap_inflation_client_)
-    {
-      occupymap_inflation_disabled_ = false;
-      occupymap_inflation_restore_valid_ = false;
-      return;
-    }
-
-    if (setRemoteParams(occupymap_inflation_client_, resolved_occupymap_inflation_node_, {
-        rclcpp::Parameter("inflation_radius_m", saved_occupymap_inflation_radius_),
-        rclcpp::Parameter("cost_scaling_factor", saved_occupymap_inflation_scaling_),
-      }))
-    {
-      RCLCPP_INFO(
-        get_logger(),
-        "pass_mode: %s occupymap inflation restored r=%.2f scale=%.1f",
-        resolved_occupymap_inflation_node_.c_str(),
-        saved_occupymap_inflation_radius_, saved_occupymap_inflation_scaling_);
-    } else {
-      RCLCPP_WARN(
-        get_logger(), "pass_mode: failed to restore %s occupymap inflation",
-        resolved_occupymap_inflation_node_.c_str());
-    }
-    occupymap_inflation_disabled_ = false;
-    occupymap_inflation_restore_valid_ = false;
-  }
-
   void restorePassModeInflation()
   {
     restoreCostmapInflationLayer();
-    restoreOccupymapInflation();
     inflation_disabled_by_pass_mode_ = false;
   }
 
@@ -819,6 +815,174 @@ private:
     std_msgs::msg::Bool msg;
     msg.data = narrow_gate_pass_active_;
     narrow_gate_pass_mode_pub_->publish(msg);
+  }
+
+  void publishGateMarkers(const Odometry & odom)
+  {
+    if (!gate_marker_pub_) {
+      return;
+    }
+
+    const rclcpp::Time stamp = now();
+    const double marker_lifetime_sec =
+      std::max(0.4, 2.0 / std::max(0.1, send_rate_hz_));
+    visualization_msgs::msg::MarkerArray markers;
+
+    auto makeDelete = [&](const std::string & ns, int id) {
+      visualization_msgs::msg::Marker del;
+      del.header.frame_id = global_frame_;
+      del.header.stamp = stamp;
+      del.ns = ns;
+      del.id = id;
+      del.action = visualization_msgs::msg::Marker::DELETE;
+      return del;
+    };
+
+    std::lock_guard<std::mutex> lock(gate_mutex_);
+
+    for (size_t i = 0; i < memorized_gates_.size(); ++i) {
+      const auto & stored = memorized_gates_[i];
+      visualization_msgs::msg::Marker mem;
+      mem.header.frame_id = global_frame_;
+      mem.header.stamp = stamp;
+      mem.ns = "gate_memory";
+      mem.id = static_cast<int>(i);
+      mem.type = visualization_msgs::msg::Marker::SPHERE;
+      mem.action = visualization_msgs::msg::Marker::ADD;
+      mem.pose.position.x = stored.center_x_odom;
+      mem.pose.position.y = stored.center_y_odom;
+      mem.pose.position.z = 0.08;
+      mem.pose.orientation.w = 1.0;
+      mem.scale.x = std::max(0.12, stored.width_m);
+      mem.scale.y = std::max(0.12, stored.width_m);
+      mem.scale.z = 0.12;
+      mem.color.r = 0.25F;
+      mem.color.g = 0.65F;
+      mem.color.b = 1.0F;
+      mem.color.a = 0.55F;
+      mem.lifetime = rclcpp::Duration::from_seconds(marker_lifetime_sec);
+      markers.markers.push_back(mem);
+
+      visualization_msgs::msg::Marker label;
+      label.header = mem.header;
+      label.ns = "gate_memory_label";
+      label.id = static_cast<int>(i);
+      label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+      label.action = visualization_msgs::msg::Marker::ADD;
+      label.pose.position = mem.pose.position;
+      label.pose.position.z = 0.35;
+      label.scale.z = 0.18;
+      label.color.r = 0.8F;
+      label.color.g = 0.9F;
+      label.color.b = 1.0F;
+      label.color.a = 0.9F;
+      label.text = "M" + std::to_string(i + 1) + " w=" +
+        std::to_string(static_cast<int>(stored.width_m * 100.0)) + "cm";
+      label.lifetime = mem.lifetime;
+      markers.markers.push_back(label);
+    }
+
+    for (int i = static_cast<int>(memorized_gates_.size());
+      i < gate_memory_max_count_; ++i)
+    {
+      markers.markers.push_back(makeDelete("gate_memory", i));
+      markers.markers.push_back(makeDelete("gate_memory_label", i));
+    }
+
+    if (have_last_gate_) {
+      const double half_w = 0.5 * last_gate_.width_m;
+      double ax_o = 0.0;
+      double ay_o = 0.0;
+      double bx_o = 0.0;
+      double by_o = 0.0;
+      double cx_o = 0.0;
+      double cy_o = 0.0;
+      bodyCenterToOdom(
+        odom, last_gate_.distance_m, last_gate_.center_y_m - half_w, ax_o, ay_o);
+      bodyCenterToOdom(
+        odom, last_gate_.distance_m, last_gate_.center_y_m + half_w, bx_o, by_o);
+      bodyCenterToOdom(
+        odom, last_gate_.distance_m, last_gate_.center_y_m, cx_o, cy_o);
+
+      visualization_msgs::msg::Marker line;
+      line.header.frame_id = global_frame_;
+      line.header.stamp = stamp;
+      line.ns = "gate_active";
+      line.id = 0;
+      line.type = visualization_msgs::msg::Marker::LINE_LIST;
+      line.action = visualization_msgs::msg::Marker::ADD;
+      line.scale.x = narrow_gate_pass_active_ ? 0.06 : 0.04;
+      if (narrow_gate_pass_active_) {
+        line.color.r = 1.0F;
+        line.color.g = 0.15F;
+        line.color.b = 1.0F;
+      } else if (last_gate_.confirmed) {
+        line.color.r = 0.1F;
+        line.color.g = 1.0F;
+        line.color.b = 0.2F;
+      } else {
+        line.color.r = 1.0F;
+        line.color.g = 0.85F;
+        line.color.b = 0.0F;
+      }
+      line.color.a = 0.95F;
+      line.lifetime = rclcpp::Duration::from_seconds(marker_lifetime_sec);
+
+      geometry_msgs::msg::Point pa;
+      pa.x = ax_o;
+      pa.y = ay_o;
+      pa.z = 0.10;
+      geometry_msgs::msg::Point pb;
+      pb.x = bx_o;
+      pb.y = by_o;
+      pb.z = 0.10;
+      line.points.push_back(pa);
+      line.points.push_back(pb);
+      markers.markers.push_back(line);
+
+      visualization_msgs::msg::Marker center;
+      center.header = line.header;
+      center.ns = "gate_active";
+      center.id = 1;
+      center.type = visualization_msgs::msg::Marker::SPHERE;
+      center.action = visualization_msgs::msg::Marker::ADD;
+      center.pose.position.x = cx_o;
+      center.pose.position.y = cy_o;
+      center.pose.position.z = 0.10;
+      center.pose.orientation.w = 1.0;
+      center.scale.x = 0.10;
+      center.scale.y = 0.10;
+      center.scale.z = 0.10;
+      center.color = line.color;
+      center.color.a = 0.85F;
+      center.lifetime = line.lifetime;
+      markers.markers.push_back(center);
+
+      visualization_msgs::msg::Marker label;
+      label.header = line.header;
+      label.ns = "gate_active";
+      label.id = 2;
+      label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+      label.action = visualization_msgs::msg::Marker::ADD;
+      label.pose.position.x = cx_o;
+      label.pose.position.y = cy_o;
+      label.pose.position.z = 0.35;
+      label.scale.z = 0.18;
+      label.color = line.color;
+      label.color.a = 0.95F;
+      label.text = std::string(narrow_gate_pass_active_ ? "PASS " : "") +
+        (last_gate_.confirmed ? "confirmed " : "track ") +
+        "x=" + std::to_string(static_cast<int>(last_gate_.distance_m * 100.0)) + "cm " +
+        "y=" + std::to_string(static_cast<int>(last_gate_.center_y_m * 100.0)) + "cm";
+      label.lifetime = line.lifetime;
+      markers.markers.push_back(label);
+    } else {
+      markers.markers.push_back(makeDelete("gate_active", 0));
+      markers.markers.push_back(makeDelete("gate_active", 1));
+      markers.markers.push_back(makeDelete("gate_active", 2));
+    }
+
+    gate_marker_pub_->publish(markers);
   }
 
   double gateFrontCenterToGateM(const NarrowGateInfo & gate) const
@@ -926,11 +1090,13 @@ private:
           }
           resetGateTracking();
           clearNarrowGatePassMode(tnow);
+          publishGateMarkers(*odom);
           return;
         }
         was_stick_idle_ = false;
         cancelActiveGoal();
         publishEmptyPath();
+        publishGateMarkers(*odom);
         return;
       }
       was_stick_idle_ = false;
@@ -938,11 +1104,15 @@ private:
       if (!buildVelocityPath(odom, tnow, path)) {
         cancelActiveGoal();
         publishEmptyPath();
+        publishGateMarkers(*odom);
         return;
       }
     }
 
     path_pub_->publish(path);
+    if (gate_marker_pub_) {
+      publishGateMarkers(*odom);
+    }
     if (use_spatial_range_ && gate_path_enable_) {
       publishNarrowGatePassModeState();
       if (narrow_gate_pass_active_) {
@@ -2423,31 +2593,28 @@ private:
   std::string costmap_inflation_layer_prefix_;
   double gate_pass_inflation_restore_radius_{6.8};
   double gate_pass_inflation_restore_scaling_{12.0};
-  bool gate_pass_occupymap_inflation_enable_{true};
-  std::string occupymap_inflation_node_;
-  double gate_pass_occupymap_inflation_restore_radius_{0.55};
-  double gate_pass_occupymap_inflation_restore_scaling_{10.0};
   double gate_pass_inflation_retry_sec_{0.50};
   double gate_pass_inflation_param_timeout_sec_{0.50};
+  bool gate_pass_obstacle_reconfig_enable_{true};
+  double gate_pass_resolution_m_{0.02};
+  bool gate_pass_costmap_resolution_enable_{true};
+  bool costmap_resolution_restore_valid_{false};
+  bool costmap_resolution_applied_{false};
+  double saved_costmap_resolution_{0.05};
   std::string resolved_costmap_inflation_node_;
-  std::string resolved_occupymap_inflation_node_;
   std::shared_ptr<rclcpp::AsyncParametersClient> costmap_inflation_client_;
-  std::shared_ptr<rclcpp::AsyncParametersClient> occupymap_inflation_client_;
   bool costmap_inflation_applicable_{true};
-  bool occupymap_inflation_applicable_{true};
   bool costmap_inflation_disabled_{false};
-  bool occupymap_inflation_disabled_{false};
   bool costmap_inflation_restore_valid_{false};
-  bool occupymap_inflation_restore_valid_{false};
   double saved_costmap_inflation_radius_{6.8};
   double saved_costmap_inflation_scaling_{12.0};
   bool saved_costmap_inflation_enabled_{true};
-  double saved_occupymap_inflation_radius_{0.55};
-  double saved_occupymap_inflation_scaling_{10.0};
   bool inflation_disabled_by_pass_mode_{false};
   bool inflation_disable_pending_{false};
   rclcpp::Time last_inflation_retry_stamp_{0, 0, RCL_ROS_TIME};
   std::string narrow_gate_pass_mode_topic_;
+  bool gate_marker_enable_{true};
+  std::string gate_marker_topic_;
   bool narrow_gate_pass_active_{false};
   rclcpp::Time narrow_gate_pass_last_intent_stamp_{0, 0, RCL_ROS_TIME};
 
@@ -2495,6 +2662,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Publisher<Path>::SharedPtr path_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_pass_mode_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_marker_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Polygon>::SharedPtr footprint_pub_;
   rclcpp_action::Client<FollowPath>::SharedPtr action_client_;
   rclcpp::TimerBase::SharedPtr timer_;

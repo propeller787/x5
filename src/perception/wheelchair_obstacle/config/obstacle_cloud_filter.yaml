@@ -45,3 +45,11 @@ obstacle_cloud_filter:
     debug:
       publish_markers: true
       marker_period_sec: 1.0
+
+    # 窄门 pass_mode（/mppi/narrow_gate_pass_mode）：2cm 体素 + 车身外 1m ROI
+    narrow_gate_pass_mode_topic: "/mppi/narrow_gate_pass_mode"
+    gate_pass_resolution_m: 0.02
+    gate_pass_obstacle_margin_m: 1.00
+    gate_pass_body_front_x_m: 0.935
+    gate_pass_body_rear_x_m: -0.20
+    gate_pass_body_half_width_m: 0.34

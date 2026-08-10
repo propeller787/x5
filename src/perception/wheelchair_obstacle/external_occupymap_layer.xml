@@ -1,8 +1,0 @@
-<library path="external_occupymap_layer">
-  <class type="wheelchair_obstacle::ExternalOccupymapLayer" base_class_type="nav2_costmap_2d::Layer">
-    <description>
-      Subscribes to localmap_occupymap raw costmap topics and copies them into Nav2
-      local_costmap for MPPI (in-process Costmap2DROS).
-    </description>
-  </class>
-</library>

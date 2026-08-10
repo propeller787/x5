@@ -9,9 +9,9 @@
 /local_costmap/costmap
 /local_costmap/costmap_updates
 /local_costmap/published_footprint
-/localmap/occupymap
-/localmap/occupymap_raw
 /mppi/local_intent_path
+/mppi/narrow_gate_pass_mode
+/mppi/gate_markers
 /trajectories
 /controller_server/transformed_global_plan
 /cmd_vel_safety_gate_node/mode
