@@ -112,6 +112,25 @@ ament_target_dependencies(rebuild_obstacle_layer
 
 # 向 nav2_costmap_2d 导出插件描述，使其能被 pluginlib 发现。
 pluginlib_export_plugin_description_file(nav2_costmap_2d rebuild_obstacle_layer.xml)
+pluginlib_export_plugin_description_file(nav2_costmap_2d pass_mode_inflation_layer.xml)
+
+add_library(pass_mode_inflation_layer SHARED
+  src/pass_mode_inflation_layer.cpp
+)
+
+target_include_directories(pass_mode_inflation_layer PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+target_compile_features(pass_mode_inflation_layer PUBLIC cxx_std_17)
+
+ament_target_dependencies(pass_mode_inflation_layer
+  rclcpp
+  nav2_costmap_2d
+  pluginlib
+  std_msgs
+)
 
 install(TARGETS
   obstacle_cloud_filter_node
@@ -120,13 +139,13 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(TARGETS rebuild_obstacle_layer
+install(TARGETS rebuild_obstacle_layer pass_mode_inflation_layer
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
-install(FILES rebuild_obstacle_layer.xml
+install(FILES rebuild_obstacle_layer.xml pass_mode_inflation_layer.xml
   DESTINATION share/${PROJECT_NAME}
 )
 

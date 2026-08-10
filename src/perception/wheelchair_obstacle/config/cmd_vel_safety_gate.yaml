@@ -78,3 +78,7 @@ cmd_vel_safety_gate_node:
     narrow_gate_rocker_intent_filter_enable: true
     narrow_gate_rocker_forward_min: 5.0   # |rocker_x| 超过此值视为前/后意图（原始单位）
     narrow_gate_rocker_lateral_min: 5.0   # |rocker_y| 超过此值视为左右意图；+y=左转
+    # 退出窄门 pass_mode 后线性放开 vx 上限，避免突然加速（仅限制前进 vx>0）
+    narrow_gate_exit_ramp_enable: true
+    narrow_gate_exit_ramp_sec: 2.0          # 从 narrow_gate_vx_max 爬升到 target 的时长
+    narrow_gate_exit_ramp_vx_target: 1.50   # 爬升结束时的 vx 上限；之后不再额外限速

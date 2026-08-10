@@ -9,6 +9,7 @@
 //   - tiered wz cap from nearby obstacle-point density
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
 //     (forward -> no reverse, backward -> no forward; lateral -> no opposite turn); stop on release
+//   - after narrow gate exit: linear vx ramp-up to avoid sudden acceleration
 
 #include <algorithm>
 #include <atomic>
@@ -145,6 +146,19 @@ public:
       "narrow_gate_rocker_forward_min", 5.0);
     narrow_gate_rocker_lateral_min_ = declare_parameter<double>(
       "narrow_gate_rocker_lateral_min", 5.0);
+    narrow_gate_exit_ramp_enable_ = declare_parameter<bool>(
+      "narrow_gate_exit_ramp_enable", true);
+    narrow_gate_exit_ramp_sec_ = declare_parameter<double>(
+      "narrow_gate_exit_ramp_sec", 2.0);
+    narrow_gate_exit_ramp_vx_target_ = declare_parameter<double>(
+      "narrow_gate_exit_ramp_vx_target", 1.50);
+
+    if (narrow_gate_exit_ramp_sec_ < 0.05) {
+      narrow_gate_exit_ramp_sec_ = 0.05;
+    }
+    if (narrow_gate_exit_ramp_vx_target_ < narrow_gate_vx_max_) {
+      narrow_gate_exit_ramp_vx_target_ = narrow_gate_vx_max_;
+    }
 
     if (input_type_ == "twist") {
       twist_sub_ = create_subscription<Twist>(
@@ -187,14 +201,17 @@ public:
       get_logger(),
       "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s out=%s "
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
-      "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d narrow_gate_vx_max=%.2f",
+      "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d narrow_gate_vx_max=%.2f "
+      "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s)",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
       obstacle_topic_.c_str(), out_topic_.c_str(), input_type_.c_str(),
       cmd_timeout_, cmd_hold_timeout_, rocker_deadband_,
       proximity_speed_cap_ ? 1 : 0, vx_reverse_max_,
       release_soft_stop_enable_ ? 1 : 0, release_soft_stop_radius_,
-      wz_density_cap_enable_ ? 1 : 0, narrow_gate_vx_max_);
+      wz_density_cap_enable_ ? 1 : 0, narrow_gate_vx_max_,
+      narrow_gate_exit_ramp_enable_ ? 1 : 0,
+      narrow_gate_exit_ramp_sec_, narrow_gate_exit_ramp_vx_target_);
   }
 
 private:
@@ -325,6 +342,57 @@ private:
   int nearbyObstaclePointCount() const
   {
     return nearbyObstaclePointCountInRadius(density_check_radius_);
+  }
+
+  void beginNarrowGateExitRamp(const rclcpp::Time & tnow)
+  {
+    if (!narrow_gate_exit_ramp_enable_) {
+      return;
+    }
+    narrow_gate_exit_ramp_active_ = true;
+    narrow_gate_exit_ramp_start_ = tnow;
+    RCLCPP_INFO(
+      get_logger(),
+      "narrow gate exit: vx ramp %.2f -> %.2f m/s over %.1fs",
+      narrow_gate_vx_max_, narrow_gate_exit_ramp_vx_target_,
+      narrow_gate_exit_ramp_sec_);
+  }
+
+  void endNarrowGateExitRamp()
+  {
+    narrow_gate_exit_ramp_active_ = false;
+  }
+
+  double narrowGateExitVxCap(const rclcpp::Time & tnow) const
+  {
+    if (!narrow_gate_exit_ramp_active_) {
+      return std::numeric_limits<double>::infinity();
+    }
+    const double elapsed = (tnow - narrow_gate_exit_ramp_start_).seconds();
+    if (elapsed >= narrow_gate_exit_ramp_sec_) {
+      return std::numeric_limits<double>::infinity();
+    }
+    const double t = elapsed / narrow_gate_exit_ramp_sec_;
+    return narrow_gate_vx_max_ +
+      t * (narrow_gate_exit_ramp_vx_target_ - narrow_gate_vx_max_);
+  }
+
+  void applyNarrowGateExitVxRamp(Twist & out, const rclcpp::Time & tnow)
+  {
+    if (!narrow_gate_exit_ramp_active_) {
+      return;
+    }
+    const double cap = narrowGateExitVxCap(tnow);
+    if (!std::isfinite(cap)) {
+      endNarrowGateExitRamp();
+      return;
+    }
+    if (out.linear.x > cap) {
+      out.linear.x = cap;
+    }
+    if ((tnow - narrow_gate_exit_ramp_start_).seconds() >= narrow_gate_exit_ramp_sec_) {
+      endNarrowGateExitRamp();
+    }
   }
 
   void applySoftStopRamp(Twist & out, double dt)
@@ -484,6 +552,12 @@ private:
     const double intent_vx = handle_valid ? handle.linear.x : 0.0;
     const bool narrow_gate_pass =
       narrow_gate_pass_active_.load(std::memory_order_relaxed);
+    if (narrow_gate_pass_prev_ && !narrow_gate_pass) {
+      beginNarrowGateExitRamp(tnow);
+    } else if (narrow_gate_pass) {
+      endNarrowGateExitRamp();
+    }
+    narrow_gate_pass_prev_ = narrow_gate_pass;
 
     int dir = 0;
     double overhang = front_overhang_;
@@ -594,6 +668,8 @@ private:
         } else if (out.linear.x < 0.0) {
           out.linear.x = std::max(out.linear.x, -narrow_gate_vx_max_);
         }
+      } else {
+        applyNarrowGateExitVxRamp(out, tnow);
       }
       if (!halted && out.linear.x < 0.0) {
         out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
@@ -687,7 +763,13 @@ private:
   bool narrow_gate_rocker_intent_filter_enable_{true};
   double narrow_gate_rocker_forward_min_{5.0};
   double narrow_gate_rocker_lateral_min_{5.0};
+  bool narrow_gate_exit_ramp_enable_{true};
+  double narrow_gate_exit_ramp_sec_{2.0};
+  double narrow_gate_exit_ramp_vx_target_{1.50};
   std::atomic<bool> narrow_gate_pass_active_{false};
+  bool narrow_gate_pass_prev_{false};
+  bool narrow_gate_exit_ramp_active_{false};
+  rclcpp::Time narrow_gate_exit_ramp_start_{0, 0, RCL_ROS_TIME};
 
   rclcpp::Subscription<Twist>::SharedPtr twist_sub_;
   rclcpp::Subscription<TwistStamped>::SharedPtr twist_stamped_sub_;

@@ -46,7 +46,7 @@ joystick_local_path_node:
     # costmap 侧 footprint_padding 须为 0，避免重复膨胀。
     footprint_publish_enable: true
     footprint_topic: "/local_costmap/footprint"
-    footprint_base: "[[-0.2, 0.32], [0.685, 0.34], [0.935, 0.28], [0.935, -0.28], [0.685, -0.34], [-0.2, -0.32]]"
+    footprint_base: "[[-0.2, 0.33], [0.685, 0.34], [0.935, 0.18], [0.935, -0.18], [0.685, -0.34], [-0.2, -0.33]]"
     gear_footprint_padding_m: [0.01, 0.02, 0.03, 0.04]
 
     # 窄门仅在极低速/停车时检测（蠕行脱困），不影响正常行驶。
@@ -78,35 +78,22 @@ joystick_local_path_node:
     gate_confirm_sec: 0.50
     gate_confirmed_hold_sec: 0.60
     gate_memory_commit_frames: 50
-    gate_memory_max_count: 5   # 满则 FIFO 淘汰最旧
+    gate_memory_max_count: 1   # 只保留 1 个窄门记忆，避免多门误召回
     # 同一物理门（含正/反向进出）在 odom 下 merge_r 内视为同一窄门，只保留一条记忆
     gate_memory_merge_radius_m: 2.00
 
     # 过窄门模式：匹配窄门且车头中心距门中心 <= gate_pass_mode_enter_m 时激活。
     # gate_pass_front_center_x_m 为 base_link 下前向参考点（约车头中心）。
-    # 零 footprint padding、pass_mode 下关闭 costmap inflation、强制 confirmed 中心线路径。
+    # 零 footprint padding；costmap inflation/resolution 由 PassModeInflationLayer 处理。
     # /mppi/narrow_gate_pass_mode 通知 safety_gate：vx<=0.2m/s；停车条件与全局相同（松手等）。
     # pass_mode 内不因 odom 超速退出；进入仍要求 |v|<=gate_creep_speed_max_mps。
-    # 门中心 x <= gate_pass_mode_body_clear_x_m（身后）即车身已通过，立即退出。
+    # pass_mode 内用 odom 锚点持续更新 gate 距离；门中心 x <= body_clear 时自动退出。
+    # body_clear 须明显小于后悬 -0.2m，等整车进入门洞后再退（当前 -0.45 ≈ 后缘后再 25cm）。
     gate_pass_mode_enter_m: 0.80
     gate_pass_front_center_x_m: 0.85
     gate_pass_mode_exit_m: 0.95
-    gate_pass_mode_body_clear_x_m: -0.22
+    gate_pass_mode_body_clear_x_m: -0.45
     gate_pass_mode_hold_sec: 0.25
-    gate_pass_inflation_disable_enable: true
-    # Nav2 Costmap2DROS inside controller_server (NOT a standalone local_costmap node).
-    costmap_inflation_nodes:
-      - "/local_costmap/local_costmap"
-      - "/local_costmap"
-    costmap_inflation_layer_prefix: "inflation_layer"
-    gate_pass_inflation_restore_radius: 6.8
-    gate_pass_inflation_restore_scaling: 12.0
-    gate_pass_inflation_retry_sec: 0.50
-    gate_pass_inflation_param_timeout_sec: 0.50
-    # pass_mode：点云 filter 切 2cm/1m ROI（见 obstacle_cloud_filter.yaml）；legacy costmap 尝试切 2cm
-    gate_pass_obstacle_reconfig_enable: true
-    gate_pass_resolution_m: 0.02
-    gate_pass_costmap_resolution_enable: true
     narrow_gate_pass_mode_topic: "/mppi/narrow_gate_pass_mode"
     # RViz：当前窄门（黄/绿/紫）+ 记忆门（蓝球，odom 坐标）
     gate_marker_enable: true
