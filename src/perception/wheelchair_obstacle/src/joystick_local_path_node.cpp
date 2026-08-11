@@ -222,10 +222,10 @@ public:
       "obstacle_points_topic", "/perception/obstacle_points");
     obstacle_timeout_ = declare_parameter<double>("obstacle_timeout", 0.50);
     gate_width_min_m_ = declare_parameter<double>("gate_width_min_m", 0.75);
-    gate_width_max_m_ = declare_parameter<double>("gate_width_max_m", 1.00);
-    gate_local_radius_m_ = declare_parameter<double>("gate_local_radius_m", 1.20);
+    gate_width_max_m_ = declare_parameter<double>("gate_width_max_m", 1.30);
+    gate_local_radius_m_ = declare_parameter<double>("gate_local_radius_m", 1.40);
     gate_detect_mode_ = declare_parameter<std::string>("gate_detect_mode", "bilateral");
-    gate_scan_dist_min_m_ = declare_parameter<double>("gate_scan_dist_min_m", 0.25);
+    gate_scan_dist_min_m_ = declare_parameter<double>("gate_scan_dist_min_m", 0.15);
     gate_scan_dist_step_m_ = declare_parameter<double>("gate_scan_dist_step_m", 0.05);
     gate_slice_half_width_m_ = declare_parameter<double>("gate_slice_half_width_m", 0.06);
     gate_opening_depth_m_ = declare_parameter<double>("gate_opening_depth_m", 0.25);
@@ -234,11 +234,15 @@ public:
     gate_min_side_points_ = declare_parameter<int>("gate_min_side_points", 1);
     gate_center_clear_half_width_m_ = declare_parameter<double>(
       "gate_center_clear_half_width_m", 0.12);
+    gate_lateral_stick_forward_min_ = declare_parameter<double>(
+      "gate_lateral_stick_forward_min", 0.08);
     gate_stick_forward_min_ = declare_parameter<double>("gate_stick_forward_min", 0.20);
     gate_center_y_deadband_m_ = declare_parameter<double>("gate_center_y_deadband_m", 0.18);
     gate_stick_lateral_min_ = declare_parameter<double>("gate_stick_lateral_min", 0.08);
     gate_intent_lateral_ratio_min_ = declare_parameter<double>(
       "gate_intent_lateral_ratio_min", 0.20);
+    gate_stick_wedge_half_deg_ = declare_parameter<double>(
+      "gate_stick_wedge_half_deg", 55.0);
     gate_intent_cross_slack_m_ = declare_parameter<double>("gate_intent_cross_slack_m", 0.18);
     gate_intent_angle_delta_max_ = declare_parameter<double>(
       "gate_intent_angle_delta_max", 0.45);
@@ -1065,6 +1069,38 @@ private:
     return local;
   }
 
+  bool isStickLateralIntent(double norm_x, double norm_y) const
+  {
+    return std::abs(norm_y) / std::max(std::abs(norm_x), 1e-3) >=
+           gate_intent_lateral_ratio_min_;
+  }
+
+  std::vector<std::pair<float, float>> filterLocalCloudPointsForGate(
+    const std::vector<std::pair<float, float>> & pts,
+    double norm_x, double norm_y) const
+  {
+    const auto local = filterLocalCloudPoints(pts);
+    if (!isStickLateralIntent(norm_x, norm_y)) {
+      return local;
+    }
+
+    const double stick_theta = std::atan2(norm_y, norm_x);
+    const double half_wedge = gate_stick_wedge_half_deg_ * M_PI / 180.0;
+    std::vector<std::pair<float, float>> wedge;
+    wedge.reserve(local.size());
+    for (const auto & p : local) {
+      if (static_cast<double>(p.first) < gate_scan_dist_min_m_ - 0.05) {
+        continue;
+      }
+      const double pt_theta = std::atan2(
+        static_cast<double>(p.second), static_cast<double>(p.first));
+      if (std::abs(normalizeAngle(pt_theta - stick_theta)) <= half_wedge) {
+        wedge.push_back(p);
+      }
+    }
+    return wedge.empty() ? local : wedge;
+  }
+
   double vehiclePlanarSpeedMps(const Odometry & odom) const
   {
     const double vx = odom.twist.twist.linear.x;
@@ -1087,9 +1123,20 @@ private:
     return isVehicleCreepOrStopped(odom);
   }
 
-  double effectiveStickForwardMin(const Odometry & odom) const
+  double effectiveStickForwardMin(double norm_x, double norm_y, const Odometry & odom) const
   {
+    if (isStickLateralIntent(norm_x, norm_y)) {
+      return isGateCreepSpeed(odom) ?
+        std::min(gate_creep_stick_forward_min_, gate_lateral_stick_forward_min_) :
+        gate_lateral_stick_forward_min_;
+    }
     return isGateCreepSpeed(odom) ? gate_creep_stick_forward_min_ : gate_stick_forward_min_;
+  }
+
+  double intentStickForwardMin(double norm_x, double norm_y) const
+  {
+    return isStickLateralIntent(norm_x, norm_y) ?
+      gate_lateral_stick_forward_min_ : gate_stick_forward_min_;
   }
 
   bool intentTrendTowardOpening(
@@ -1131,7 +1178,7 @@ private:
     const NarrowGateInfo & gate, double norm_x, double norm_y,
     const Odometry & odom) const
   {
-    if (isGateCreepSpeed(odom)) {
+    if (isGateCreepSpeed(odom) && !isStickLateralIntent(norm_x, norm_y)) {
       return intentTrendTowardOpening(gate, norm_x, norm_y);
     }
     return intentCrossesOpening(gate, norm_x, norm_y);
@@ -1338,32 +1385,35 @@ private:
     double norm_x, double norm_y, const Odometry & odom,
     bool always_try_body_forward) const
   {
-    if (gate_detect_mode_ == "bilateral") {
-      return scanOpeningBilateral(local_pts, norm_x, norm_y, odom);
-    }
-
     const double stick_theta = std::atan2(norm_y, norm_x);
     std::optional<NarrowGateInfo> best;
     double best_score = std::numeric_limits<double>::infinity();
 
-    auto try_theta = [&](double theta) {
-      if (const auto gate = scanOpeningAlongRay(local_pts, theta, norm_x, norm_y, odom)) {
-        const double score = openingIntentScore(
-          gate->distance_m, gate->center_y_m, norm_x, norm_y);
-        if (score < best_score) {
-          best_score = score;
-          best = gate;
-        }
+    auto consider = [&](const std::optional<NarrowGateInfo> & gate) {
+      if (!gate) {
+        return;
+      }
+      const double score = openingIntentScore(
+        gate->distance_m, gate->center_y_m, norm_x, norm_y);
+      if (score < best_score) {
+        best_score = score;
+        best = gate;
       }
     };
 
-    try_theta(stick_theta);
-    if (always_try_body_forward) {
-      try_theta(0.0);
-    } else if (gate_creep_scan_body_forward_ && isGateCreepSpeed(odom) &&
-      std::abs(normalizeAngle(stick_theta)) > 0.05)
+    if (gate_detect_mode_ == "bilateral") {
+      consider(scanOpeningBilateral(local_pts, norm_x, norm_y, odom));
+    }
+
+    consider(scanOpeningAlongRay(local_pts, stick_theta, norm_x, norm_y, odom));
+
+    const bool lateral = isStickLateralIntent(norm_x, norm_y);
+    if (always_try_body_forward ||
+      (gate_creep_scan_body_forward_ &&
+        (isGateCreepSpeed(odom) || lateral) &&
+        std::abs(normalizeAngle(stick_theta)) > 0.05))
     {
-      try_theta(0.0);
+      consider(scanOpeningAlongRay(local_pts, 0.0, norm_x, norm_y, odom));
     }
     return best;
   }
@@ -1371,7 +1421,7 @@ private:
   bool intentCrossesOpening(
     const NarrowGateInfo & gate, double norm_x, double norm_y) const
   {
-    if (norm_x < gate_stick_forward_min_) {
+    if (norm_x < intentStickForwardMin(norm_x, norm_y)) {
       return false;
     }
     const double stick_r = std::hypot(norm_x, norm_y);
@@ -1773,7 +1823,7 @@ private:
     const rclcpp::Time & tnow, const Odometry & odom,
     double norm_x, double norm_y) const
   {
-    if (norm_x < effectiveStickForwardMin(odom)) {
+    if (norm_x < effectiveStickForwardMin(norm_x, norm_y, odom)) {
       return std::nullopt;
     }
     const double stick_r = std::hypot(norm_x, norm_y);
@@ -1795,7 +1845,7 @@ private:
       return std::nullopt;
     }
 
-    const auto local_pts = filterLocalCloudPoints(pts);
+    const auto local_pts = filterLocalCloudPointsForGate(pts, norm_x, norm_y);
     if (local_pts.empty()) {
       return std::nullopt;
     }
@@ -1829,7 +1879,7 @@ private:
       return std::nullopt;
     }
 
-    const auto local_pts = filterLocalCloudPoints(pts);
+    const auto local_pts = filterLocalCloudPointsForGate(pts, norm_x, norm_y);
     if (local_pts.empty()) {
       return std::nullopt;
     }
@@ -1896,7 +1946,7 @@ private:
   std::optional<NarrowGateInfo> detectNarrowGate(
     const rclcpp::Time & tnow, const Odometry & odom, double norm_x, double norm_y)
   {
-    if (norm_x < effectiveStickForwardMin(odom)) {
+    if (norm_x < effectiveStickForwardMin(norm_x, norm_y, odom)) {
       resetGateTracking();
       return std::nullopt;
     }
@@ -2420,10 +2470,10 @@ private:
   std::string obstacle_points_topic_;
   double obstacle_timeout_{0.50};
   double gate_width_min_m_{0.75};
-  double gate_width_max_m_{1.00};
-  double gate_local_radius_m_{1.20};
+  double gate_width_max_m_{1.30};
+  double gate_local_radius_m_{1.40};
   std::string gate_detect_mode_{"bilateral"};
-  double gate_scan_dist_min_m_{0.25};
+  double gate_scan_dist_min_m_{0.15};
   double gate_scan_dist_step_m_{0.05};
   double gate_slice_half_width_m_{0.06};
   double gate_opening_depth_m_{0.25};
@@ -2432,9 +2482,11 @@ private:
   int gate_min_side_points_{1};
   double gate_center_clear_half_width_m_{0.12};
   double gate_stick_forward_min_{0.20};
+  double gate_lateral_stick_forward_min_{0.08};
   double gate_center_y_deadband_m_{0.18};
   double gate_stick_lateral_min_{0.08};
   double gate_intent_lateral_ratio_min_{0.20};
+  double gate_stick_wedge_half_deg_{55.0};
   double gate_intent_cross_slack_m_{0.18};
   double gate_intent_angle_delta_max_{0.45};
   double gate_creep_speed_max_mps_{0.20};

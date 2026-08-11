@@ -88,3 +88,7 @@ cmd_vel_safety_gate_node:
     narrow_gate_exit_ramp_enable: true
     narrow_gate_exit_ramp_sec: 2.0          # 从 narrow_gate_vx_max 爬升到 target 的时长
     narrow_gate_exit_ramp_vx_target: 1.50   # 爬升结束时的 vx 上限；之后不再额外限速
+
+    # --- 线速度加速限制（仅限制加速；减速/急停/软停车逻辑不变）---
+    vx_accel_limit_enable: true
+    vx_accel_max_mps2: 1.0

@@ -50,20 +50,21 @@ joystick_local_path_node:
     footprint_base: "[[-0.2, 0.33], [0.685, 0.34], [0.935, 0.20], [0.935, -0.20], [0.685, -0.34], [-0.2, -0.33]]"
     gear_footprint_padding_m: [0.01, 0.02, 0.03, 0.04]
 
-    # 窄门仅在极低速/停车时检测（蠕行脱困），不影响正常行驶。
+    # 窄门 detect/track（含侧面转弯入门）；pass_mode 进入仍须 creep。
     gate_path_enable: true
     obstacle_points_topic: "/perception/obstacle_points"
-    gate_local_radius_m: 1.00
-    # bilateral: body-x bins, left/right inner boundary pairing (default)
-    # ray_slice: legacy stick/body-forward ray slice scan
+    gate_local_radius_m: 1.40
+    # bilateral + stick/body ray_slice；侧面转弯进窄门时按 stick 楔形裁 ROI
     gate_detect_mode: "bilateral"
     gate_width_min_m: 0.75
-    gate_width_max_m: 1.00
-    gate_scan_dist_min_m: 0.25
+    gate_width_max_m: 1.30
+    gate_stick_wedge_half_deg: 55.0   # |ry|/|rx|>=intent_lateral_ratio 时，保留 stick±此角内点
+    gate_scan_dist_min_m: 0.15        # 允许 x≈0.20m 贴脸门框
     gate_pillar_mode_enable: true
     gate_min_side_boundary_m: 0.38   # pillar_mode 下不生效
     gate_min_side_points: 1
     gate_stick_forward_min: 0.20
+    gate_lateral_stick_forward_min: 0.08   # 侧向进门前 rx 可更小
     gate_center_y_deadband_m: 0.18
     gate_stick_lateral_min: 0.08
     gate_intent_lateral_ratio_min: 0.20

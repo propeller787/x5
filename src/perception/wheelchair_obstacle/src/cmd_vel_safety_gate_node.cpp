@@ -11,6 +11,7 @@
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
 //     (forward -> no reverse, backward -> no forward; lateral -> no opposite turn); stop on release
 //   - after narrow gate exit: linear vx ramp-up to avoid sudden acceleration
+//   - vx accel limit: max 1 m/s^2 when speeding up forward/reverse; decel/brake unchanged
 
 #include <algorithm>
 #include <atomic>
@@ -177,6 +178,12 @@ public:
       narrow_gate_exit_ramp_vx_target_ = narrow_gate_vx_max_;
     }
 
+    vx_accel_limit_enable_ = declare_parameter<bool>("vx_accel_limit_enable", true);
+    vx_accel_max_mps2_ = declare_parameter<double>("vx_accel_max_mps2", 1.0);
+    if (vx_accel_max_mps2_ < 0.05) {
+      vx_accel_max_mps2_ = 0.05;
+    }
+
     if (input_type_ == "twist") {
       twist_sub_ = create_subscription<Twist>(
         in_stamped_topic_, 10,
@@ -225,7 +232,7 @@ public:
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
       "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d gear_vx_cap=%d "
       "gear_vx_kph=[%.0f,%.0f,%.0f,%.0f] narrow_gate_vx_max=%.2f "
-      "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s)",
+      "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s) vx_accel_limit=%d(%.1fm/s^2)",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
       obstacle_topic_.c_str(), car_info_topic_.c_str(), out_topic_.c_str(),
@@ -240,7 +247,8 @@ public:
       gear_vx_max_mps_.size() > 3 ? gear_vx_max_mps_[3] * 3.6 : 0.0,
       narrow_gate_vx_max_,
       narrow_gate_exit_ramp_enable_ ? 1 : 0,
-      narrow_gate_exit_ramp_sec_, narrow_gate_exit_ramp_vx_target_);
+      narrow_gate_exit_ramp_sec_, narrow_gate_exit_ramp_vx_target_,
+      vx_accel_limit_enable_ ? 1 : 0, vx_accel_max_mps2_);
   }
 
 private:
@@ -497,6 +505,31 @@ private:
     out.angular.z = soft_stop_wz_;
     if (out.linear.x < 0.0) {
       out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
+    }
+  }
+
+  void applyVxAccelLimit(Twist & out, double dt) const
+  {
+    if (!vx_accel_limit_enable_ || dt <= 0.0) {
+      return;
+    }
+
+    const double prev_vx = last_out_.linear.x;
+    const double desired_vx = out.linear.x;
+    const double max_step = vx_accel_max_mps2_ * dt;
+    constexpr double eps = 1e-4;
+
+    const bool same_sign_forward = prev_vx >= -eps && desired_vx >= -eps;
+    const bool same_sign_reverse = prev_vx <= eps && desired_vx <= eps;
+    const bool accelerating_forward =
+      same_sign_forward && desired_vx > prev_vx + eps;
+    const bool accelerating_reverse =
+      same_sign_reverse && desired_vx < prev_vx - eps;
+
+    if (accelerating_forward) {
+      out.linear.x = std::min(desired_vx, prev_vx + max_step);
+    } else if (accelerating_reverse) {
+      out.linear.x = std::max(desired_vx, prev_vx - max_step);
     }
   }
 
@@ -757,6 +790,10 @@ private:
         out.angular.z = clamp(out.angular.z, -effective_wz_max, effective_wz_max);
       }
       applyNarrowGateRockerIntentFilter(out, tnow);
+      if (!soft_stopping_) {
+        const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+        applyVxAccelLimit(out, dt);
+      }
     } else {
       last_out_ = Twist();
       if (!reason.empty()) {
@@ -849,6 +886,8 @@ private:
   bool narrow_gate_exit_ramp_enable_{true};
   double narrow_gate_exit_ramp_sec_{2.0};
   double narrow_gate_exit_ramp_vx_target_{1.50};
+  bool vx_accel_limit_enable_{true};
+  double vx_accel_max_mps2_{1.0};
   std::atomic<bool> narrow_gate_pass_active_{false};
   bool narrow_gate_pass_prev_{false};
   bool narrow_gate_exit_ramp_active_{false};
