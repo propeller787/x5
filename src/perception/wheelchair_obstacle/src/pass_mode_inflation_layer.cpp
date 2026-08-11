@@ -12,6 +12,7 @@ void PassModeInflationLayer::onInitialize()
   declareParameter("pass_mode_topic", rclcpp::ParameterValue(pass_mode_topic_));
   declareParameter("pass_mode_resolution_enable", rclcpp::ParameterValue(true));
   declareParameter("pass_mode_resolution", rclcpp::ParameterValue(0.02));
+  declareParameter("pass_mode_inflation_radius", rclcpp::ParameterValue(0.02));
 
   nav2_costmap_2d::InflationLayer::onInitialize();
 
@@ -23,6 +24,10 @@ void PassModeInflationLayer::onInitialize()
   node->get_parameter(getFullName("pass_mode_topic"), pass_mode_topic_);
   node->get_parameter(getFullName("pass_mode_resolution_enable"), pass_mode_resolution_enable_);
   node->get_parameter(getFullName("pass_mode_resolution"), pass_mode_resolution_m_);
+  node->get_parameter(getFullName("pass_mode_inflation_radius"), pass_mode_inflation_radius_m_);
+  if (pass_mode_inflation_radius_m_ < 0.0) {
+    pass_mode_inflation_radius_m_ = 0.0;
+  }
 
   pass_mode_sub_ = node->create_subscription<std_msgs::msg::Bool>(
     pass_mode_topic_, rclcpp::QoS(1).transient_local(),
@@ -30,8 +35,10 @@ void PassModeInflationLayer::onInitialize()
 
   RCLCPP_INFO(
     logger_,
-    "PassModeInflationLayer: topic=%s resolution_enable=%d resolution=%.2fm",
-    pass_mode_topic_.c_str(), pass_mode_resolution_enable_, pass_mode_resolution_m_);
+    "PassModeInflationLayer: topic=%s resolution_enable=%d resolution=%.2fm "
+    "pass_inflation=%.2fm",
+    pass_mode_topic_.c_str(), pass_mode_resolution_enable_, pass_mode_resolution_m_,
+    pass_mode_inflation_radius_m_);
 }
 
 void PassModeInflationLayer::onPassMode(const std_msgs::msg::Bool::SharedPtr msg)
@@ -57,16 +64,17 @@ void PassModeInflationLayer::applyPassModeInflation(bool active)
       saved_inflation_valid_ = true;
     }
 
-    inflation_radius_ = 0.0;
-    cost_scaling_factor_ = 0.0;
-    enabled_ = false;
-    cell_inflation_radius_ = 0;
+    inflation_radius_ = pass_mode_inflation_radius_m_;
+    enabled_ = true;
+    cell_inflation_radius_ = cellDistance(inflation_radius_);
     need_reinflation_ = true;
+    computeCaches();
 
     RCLCPP_INFO(
       logger_,
-      "pass_mode: inflation_layer disabled (restore enabled=%d r=%.2f scale=%.1f)",
-      saved_inflation_enabled_, saved_inflation_radius_, saved_cost_scaling_factor_);
+      "pass_mode: inflation r=%.2fm scale=%.1f (restore r=%.2f scale=%.1f)",
+      inflation_radius_, cost_scaling_factor_,
+      saved_inflation_radius_, saved_cost_scaling_factor_);
     return;
   }
 

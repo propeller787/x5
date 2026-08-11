@@ -1,7 +1,7 @@
 <library path="pass_mode_inflation_layer">
   <class type="wheelchair_obstacle::PassModeInflationLayer" base_class_type="nav2_costmap_2d::Layer">
     <description>
-      InflationLayer that disables inflation and optionally switches costmap resolution
+      InflationLayer that shrinks inflation and optionally switches costmap resolution
       while /mppi/narrow_gate_pass_mode is active.
     </description>
   </class>

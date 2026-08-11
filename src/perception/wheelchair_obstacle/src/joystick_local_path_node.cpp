@@ -6,8 +6,9 @@
 //   path yaw fixed at current heading -> MPPI drives vx<0 (reverse avoid, no U-turn).
 //   Pure lateral (|rx| deadbanded) -> in-place turn.
 //   Forward + narrow gate: ONLY when |odom|<=gate_creep_speed_max (creep/stop) for detection.
-//     Blocked + stick intent -> gate path + pass mode; pass mode keeps until body clear /
-//     intent timeout / front_to_gate / body_clear exit (not odom overspeed). In pass_mode:
+//     Blocked + stick intent -> gate path + pass mode; pass_mode enters ONLY when
+//     |odom|<=gate_creep_speed_max; once active, keeps until body clear / intent
+//     timeout / front_to_gate (not odom overspeed). In pass_mode:
 //     gate distance refreshed from odom anchor + cloud; zero footprint padding;
 //
 // MPPI warm-start reset (stick enters dead zone only):
@@ -957,6 +958,7 @@ private:
           }
         } else {
           resetGateTracking();
+          clearNarrowGatePassMode(tnow);
         }
       } else if (gate_path_enable_) {
         clearNarrowGatePassMode(tnow);
@@ -1060,11 +1062,16 @@ private:
     return local;
   }
 
-  bool isVehicleCreepOrStopped(const Odometry & odom) const
+  double vehiclePlanarSpeedMps(const Odometry & odom) const
   {
     const double vx = odom.twist.twist.linear.x;
     const double vy = odom.twist.twist.linear.y;
-    return std::hypot(vx, vy) <= gate_creep_speed_max_mps_;
+    return std::hypot(vx, vy);
+  }
+
+  bool isVehicleCreepOrStopped(const Odometry & odom) const
+  {
+    return vehiclePlanarSpeedMps(odom) <= gate_creep_speed_max_mps_;
   }
 
   bool isGateCreepSpeed(const Odometry & odom) const

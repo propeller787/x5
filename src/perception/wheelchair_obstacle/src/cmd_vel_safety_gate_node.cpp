@@ -7,6 +7,7 @@
 //     soft ramp when clear within release_soft_stop_radius)
 //   - proximity speed cap from obstacle cloud + travel intent
 //   - tiered wz cap from nearby obstacle-point density
+//   - gear vx cap from /vlago/car/info (1-4 gear -> configurable kph limits)
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
 //     (forward -> no reverse, backward -> no forward; lateral -> no opposite turn); stop on release
 //   - after narrow gate exit: linear vx ramp-up to avoid sudden acceleration
@@ -30,6 +31,7 @@
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 #include <interface/msg/joystick.hpp>
+#include <interface/msg/car_info.hpp>
 
 namespace
 {
@@ -67,6 +69,7 @@ public:
   using UInt8 = std_msgs::msg::UInt8;
   using Bool = std_msgs::msg::Bool;
   using Joystick = interface::msg::Joystick;
+  using CarInfo = interface::msg::CarInfo;
 
   enum class WzDensityTier : uint8_t { OPEN = 0, MODERATE = 1, DENSE = 2 };
 
@@ -116,6 +119,20 @@ public:
 
     wz_max_ = declare_parameter<double>("wz_max", 1.00);
     vx_reverse_max_ = declare_parameter<double>("vx_reverse_max", 0.5);
+
+    car_info_topic_ = declare_parameter<std::string>("car_info_topic", "/vlago/car/info");
+    gear_vx_cap_enable_ = declare_parameter<bool>("gear_vx_cap_enable", true);
+    gear_default_index_ = declare_parameter<int>("gear_default_index", 3);
+    const auto gear_vx_max_kph = declare_parameter<std::vector<double>>(
+      "gear_vx_max_kph", std::vector<double>{2.0, 3.0, 4.0, 6.0});
+    gear_vx_max_mps_.clear();
+    gear_vx_max_mps_.reserve(gear_vx_max_kph.size());
+    for (const double kph : gear_vx_max_kph) {
+      gear_vx_max_mps_.push_back(std::max(0.0, kph) / 3.6);
+    }
+    if (gear_vx_max_mps_.empty()) {
+      gear_vx_max_mps_ = {2.0 / 3.6, 3.0 / 3.6, 4.0 / 3.6, 6.0 / 3.6};
+    }
 
     wz_density_cap_enable_ = declare_parameter<bool>("wz_density_cap_enable", true);
     density_check_radius_ = declare_parameter<double>("density_check_radius", 1.2);
@@ -178,6 +195,10 @@ public:
       rocker_topic_, rclcpp::SensorDataQoS(),
       std::bind(&CmdVelSafetyGateNode::onJoystick, this, std::placeholders::_1));
 
+    car_info_sub_ = create_subscription<CarInfo>(
+      car_info_topic_, 10,
+      std::bind(&CmdVelSafetyGateNode::onCarInfo, this, std::placeholders::_1));
+
     cloud_sub_ = create_subscription<PointCloud2>(
       obstacle_topic_, rclcpp::SensorDataQoS(),
       std::bind(&CmdVelSafetyGateNode::onCloud, this, std::placeholders::_1));
@@ -199,17 +220,25 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s out=%s "
+      "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s "
+      "car_info=%s out=%s "
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
-      "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d narrow_gate_vx_max=%.2f "
+      "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d gear_vx_cap=%d "
+      "gear_vx_kph=[%.0f,%.0f,%.0f,%.0f] narrow_gate_vx_max=%.2f "
       "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s)",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
-      obstacle_topic_.c_str(), out_topic_.c_str(), input_type_.c_str(),
+      obstacle_topic_.c_str(), car_info_topic_.c_str(), out_topic_.c_str(),
+      input_type_.c_str(),
       cmd_timeout_, cmd_hold_timeout_, rocker_deadband_,
       proximity_speed_cap_ ? 1 : 0, vx_reverse_max_,
       release_soft_stop_enable_ ? 1 : 0, release_soft_stop_radius_,
-      wz_density_cap_enable_ ? 1 : 0, narrow_gate_vx_max_,
+      wz_density_cap_enable_ ? 1 : 0, gear_vx_cap_enable_ ? 1 : 0,
+      gear_vx_max_mps_.size() > 0 ? gear_vx_max_mps_[0] * 3.6 : 0.0,
+      gear_vx_max_mps_.size() > 1 ? gear_vx_max_mps_[1] * 3.6 : 0.0,
+      gear_vx_max_mps_.size() > 2 ? gear_vx_max_mps_[2] * 3.6 : 0.0,
+      gear_vx_max_mps_.size() > 3 ? gear_vx_max_mps_[3] * 3.6 : 0.0,
+      narrow_gate_vx_max_,
       narrow_gate_exit_ramp_enable_ ? 1 : 0,
       narrow_gate_exit_ramp_sec_, narrow_gate_exit_ramp_vx_target_);
   }
@@ -255,6 +284,54 @@ private:
     rocker_at_origin_.store(at_origin, std::memory_order_relaxed);
     latest_rocker_stamp_ns_.store(now().nanoseconds(), std::memory_order_relaxed);
     have_rocker_.store(true, std::memory_order_relaxed);
+  }
+
+  void onCarInfo(const CarInfo::SharedPtr msg)
+  {
+    std::lock_guard<std::mutex> lock(gear_mutex_);
+    latest_gear_ = static_cast<int>(msg->gear);
+    have_gear_ = true;
+  }
+
+  static double pickGearTable(
+    const std::vector<double> & table, int gear, int fallback_g)
+  {
+    if (table.empty()) {
+      return 0.0;
+    }
+    if (gear >= 1 && gear <= static_cast<int>(table.size())) {
+      return table[static_cast<size_t>(gear - 1)];
+    }
+    const int fb = std::max(1, std::min(fallback_g, static_cast<int>(table.size())));
+    return table[static_cast<size_t>(fb - 1)];
+  }
+
+  double gearVxMaxMps() const
+  {
+    int gear = gear_default_index_;
+    {
+      std::lock_guard<std::mutex> lock(gear_mutex_);
+      if (have_gear_ && latest_gear_ >= 1) {
+        gear = latest_gear_;
+      }
+    }
+    return pickGearTable(gear_vx_max_mps_, gear, gear_default_index_);
+  }
+
+  void applyGearVxCap(Twist & out) const
+  {
+    if (!gear_vx_cap_enable_) {
+      return;
+    }
+    const double cap = gearVxMaxMps();
+    if (cap <= 0.0) {
+      return;
+    }
+    if (out.linear.x > 0.0) {
+      out.linear.x = std::min(out.linear.x, cap);
+    } else if (out.linear.x < 0.0) {
+      out.linear.x = std::max(out.linear.x, -cap);
+    }
   }
 
   double applyRockerDeadbandAxis(double axis) const
@@ -660,6 +737,7 @@ private:
     if (soft_stopping_ && !halted) {
       const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
       applySoftStopRamp(out, dt);
+      applyGearVxCap(out);
     } else if (!halted && input_ok) {
       out = target;
       if (narrow_gate_pass) {
@@ -671,6 +749,7 @@ private:
       } else {
         applyNarrowGateExitVxRamp(out, tnow);
       }
+      applyGearVxCap(out);
       if (!halted && out.linear.x < 0.0) {
         out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
       }
@@ -744,6 +823,10 @@ private:
   bool proximity_speed_cap_{true};
   double wz_max_{1.00};
   double vx_reverse_max_{0.5};
+  std::string car_info_topic_;
+  bool gear_vx_cap_enable_{true};
+  int gear_default_index_{3};
+  std::vector<double> gear_vx_max_mps_;
   bool wz_density_cap_enable_{true};
   double density_check_radius_{1.2};
   std::vector<double> wz_density_caps_rps_{1.30, 0.785, 0.524};
@@ -775,6 +858,7 @@ private:
   rclcpp::Subscription<TwistStamped>::SharedPtr twist_stamped_sub_;
   rclcpp::Subscription<Twist>::SharedPtr handle_sub_;
   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
+  rclcpp::Subscription<CarInfo>::SharedPtr car_info_sub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_pass_mode_sub_;
   rclcpp::Publisher<Twist>::SharedPtr out_pub_;
@@ -789,6 +873,10 @@ private:
   std::mutex handle_mutex_;
   Twist latest_handle_;
   bool have_handle_{false};
+
+  mutable std::mutex gear_mutex_;
+  int latest_gear_{3};
+  bool have_gear_{false};
 
   std::atomic<bool> rocker_at_origin_{true};
   std::atomic<int16_t> latest_rocker_x_{0};

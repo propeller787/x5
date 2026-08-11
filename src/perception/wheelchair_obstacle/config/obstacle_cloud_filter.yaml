@@ -46,7 +46,7 @@ obstacle_cloud_filter:
       publish_markers: true
       marker_period_sec: 1.0
 
-    # 窄门 pass_mode（/mppi/narrow_gate_pass_mode）：2cm 体素 + 车身外 1m ROI
+    # 窄门 pass_mode（/mppi/narrow_gate_pass_mode）：2cm 体素 + 车身外 1m ROI + self_mask 关闭
     narrow_gate_pass_mode_topic: "/mppi/narrow_gate_pass_mode"
     gate_pass_resolution_m: 0.02
     gate_pass_obstacle_margin_m: 1.00

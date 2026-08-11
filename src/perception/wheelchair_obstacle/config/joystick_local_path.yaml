@@ -18,9 +18,10 @@ joystick_local_path_node:
 
     # 极坐标同心圆（前向 300° 扇区）：stick_r=|rocker|/100，stick_theta=atan2(ry,rx)
     # 前向 goal = stick_r * gear_forward_range_m * (cos,sin)(theta)，yaw 渐变到 stick_theta
-    gear_forward_range_m: [0.60, 1.00, 1.50, 2.50]
+    # gear_forward_range_m: [0.60, 1.00, 1.50, 2.50]
+    gear_forward_range_m: [1.60, 2.00, 2.50, 3.50]
     # 后向 60° 扇区（带 ±10° 回滞）：笛卡尔 goal，path yaw 保持当前 heading，MPPI 用 vx<0 倒车避障
-    gear_back_range_m: [0.60, 1.00, 1.50, 2.50]
+    gear_back_range_m: [1.60, 2.00, 2.50, 3.50]
     gear_lateral_range_m: [0.60, 0.80, 1.00, 1.50]
     # 纯左右（|rx| 死区）原地转：wz = (ry/100) * gear_lateral_wz_max
     gear_lateral_wz_max: [0.55, 0.75, 0.95, 1.15]
@@ -46,7 +47,7 @@ joystick_local_path_node:
     # costmap 侧 footprint_padding 须为 0，避免重复膨胀。
     footprint_publish_enable: true
     footprint_topic: "/local_costmap/footprint"
-    footprint_base: "[[-0.2, 0.33], [0.685, 0.34], [0.935, 0.18], [0.935, -0.18], [0.685, -0.34], [-0.2, -0.33]]"
+    footprint_base: "[[-0.2, 0.33], [0.685, 0.34], [0.935, 0.20], [0.935, -0.20], [0.685, -0.34], [-0.2, -0.33]]"
     gear_footprint_padding_m: [0.01, 0.02, 0.03, 0.04]
 
     # 窄门仅在极低速/停车时检测（蠕行脱困），不影响正常行驶。
@@ -68,17 +69,17 @@ joystick_local_path_node:
     gate_opening_depth_m: 0.25
     # 低速/停车（|v|<=gate_creep_speed_max_mps）+ 持续前推意图：看趋势/范围，不苛求射线精确穿过
     gate_creep_speed_max_mps: 0.20
-    gate_creep_stick_forward_min: 0.08
+    gate_creep_stick_forward_min: 0.01
     gate_creep_stick_min: 0.10
     gate_creep_intent_angle_max: 0.95
     gate_creep_intent_cross_slack_m: 0.35
     gate_creep_intent_angle_delta_max: 0.95
     gate_creep_scan_body_forward: true
     gate_hold_sec: 0.25
-    gate_confirm_sec: 0.50
+    gate_confirm_sec: 1.50
     gate_confirmed_hold_sec: 0.60
-    gate_memory_commit_frames: 50
-    gate_memory_max_count: 1   # 只保留 1 个窄门记忆，避免多门误召回
+    gate_memory_commit_frames: 30
+    gate_memory_max_count: 2   # 只保留 1 个窄门记忆，避免多门误召回
     # 同一物理门（含正/反向进出）在 odom 下 merge_r 内视为同一窄门，只保留一条记忆
     gate_memory_merge_radius_m: 2.00
 

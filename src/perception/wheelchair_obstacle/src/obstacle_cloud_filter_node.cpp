@@ -111,16 +111,20 @@ private:
       isolation_.grid_resolution = pass_resolution_m_;
       voxel_ = normal_voxel_;
       voxel_.voxel_size_xy = pass_resolution_m_;
+      self_mask_enabled_ = false;
       RCLCPP_INFO(
         get_logger(),
-        "pass_mode filter: res=%.2fm roi x=[%.2f,%.2f] y=[%.2f,%.2f]",
+        "pass_mode filter: res=%.2fm roi x=[%.2f,%.2f] y=[%.2f,%.2f] self_mask=off",
         pass_resolution_m_, roi_.x_min, roi_.x_max, roi_.y_min, roi_.y_max);
     } else {
       range_ = normal_range_;
       roi_ = normal_roi_;
       isolation_ = normal_isolation_;
       voxel_ = normal_voxel_;
-      RCLCPP_INFO(get_logger(), "pass_mode filter restored to normal profile");
+      self_mask_enabled_ = normal_self_mask_enabled_;
+      RCLCPP_INFO(
+        get_logger(), "pass_mode filter restored (self_mask=%s)",
+        self_mask_enabled_ ? "on" : "off");
     }
     configureCore();
   }
@@ -199,6 +203,7 @@ private:
     normal_roi_ = roi_;
     normal_isolation_ = isolation_;
     normal_voxel_ = voxel_;
+    normal_self_mask_enabled_ = self_mask_enabled_;
 
     pass_resolution_m_ = declare_parameter<double>("gate_pass_resolution_m", 0.02);
     pass_obstacle_margin_m_ = declare_parameter<double>("gate_pass_obstacle_margin_m", 1.00);
@@ -521,6 +526,7 @@ private:
   IsolationConfig normal_isolation_;
   VoxelConfig normal_voxel_;
   bool self_mask_enabled_ = true;
+  bool normal_self_mask_enabled_ = true;
   bool isolation_enabled_ = true;
   bool voxel_enabled_ = true;
   std::optional<std::vector<PolygonMask>> custom_masks_;

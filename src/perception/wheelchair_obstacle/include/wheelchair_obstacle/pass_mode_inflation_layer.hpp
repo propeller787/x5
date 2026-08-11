@@ -11,8 +11,8 @@ namespace wheelchair_obstacle
 {
 
 // Nav2 InflationLayer variant that reacts to /mppi/narrow_gate_pass_mode in-process.
-// Disables inflation and optionally switches costmap resolution during pass_mode,
-// avoiding unreliable cross-node parameter clients before the costmap is ready.
+// Shrinks inflation (default 2 cm) and optionally switches costmap resolution during
+// pass_mode, avoiding unreliable cross-node parameter clients before the costmap is ready.
 class PassModeInflationLayer : public nav2_costmap_2d::InflationLayer
 {
 public:
@@ -27,6 +27,7 @@ private:
   std::string pass_mode_topic_{"/mppi/narrow_gate_pass_mode"};
   bool pass_mode_resolution_enable_{true};
   double pass_mode_resolution_m_{0.02};
+  double pass_mode_inflation_radius_m_{0.02};
 
   bool pass_mode_active_{false};
   bool saved_inflation_valid_{false};

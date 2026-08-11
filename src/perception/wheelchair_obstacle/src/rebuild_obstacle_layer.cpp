@@ -1,11 +1,55 @@
 #include "wheelchair_obstacle/rebuild_obstacle_layer.hpp"
 
 #include <algorithm>
+#include <functional>
 
 #include "pluginlib/class_list_macros.hpp"
+#include "std_msgs/msg/bool.hpp"
 
 namespace wheelchair_obstacle
 {
+
+void RebuildObstacleLayer::onInitialize()
+{
+  declareParameter("pass_mode_topic", rclcpp::ParameterValue(pass_mode_topic_));
+
+  nav2_costmap_2d::ObstacleLayer::onInitialize();
+
+  auto node = node_.lock();
+  if (!node) {
+    throw std::runtime_error("RebuildObstacleLayer: failed to lock node");
+  }
+
+  node->get_parameter(getFullName("pass_mode_topic"), pass_mode_topic_);
+  normal_footprint_clearing_enabled_ = footprint_clearing_enabled_;
+
+  pass_mode_sub_ = node->create_subscription<std_msgs::msg::Bool>(
+    pass_mode_topic_, rclcpp::QoS(1).transient_local(),
+    std::bind(&RebuildObstacleLayer::onPassMode, this, std::placeholders::_1));
+
+  RCLCPP_INFO(
+    logger_,
+    "RebuildObstacleLayer: pass_mode_topic=%s footprint_clearing=%d",
+    pass_mode_topic_.c_str(), normal_footprint_clearing_enabled_ ? 1 : 0);
+}
+
+void RebuildObstacleLayer::onPassMode(const std_msgs::msg::Bool::SharedPtr msg)
+{
+  if (!msg || msg->data == pass_mode_active_) {
+    return;
+  }
+  pass_mode_active_ = msg->data;
+  applyPassModeFootprintClearing(pass_mode_active_);
+}
+
+void RebuildObstacleLayer::applyPassModeFootprintClearing(bool active)
+{
+  footprint_clearing_enabled_ = active ?
+    false : normal_footprint_clearing_enabled_;
+  RCLCPP_INFO(
+    logger_, "pass_mode: footprint_clearing -> %s",
+    footprint_clearing_enabled_ ? "on" : "off");
+}
 
 void RebuildObstacleLayer::updateBounds(
   double robot_x, double robot_y, double robot_yaw,

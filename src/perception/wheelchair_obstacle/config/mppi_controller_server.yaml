@@ -204,6 +204,7 @@ local_costmap:
         plugin: "wheelchair_obstacle::RebuildObstacleLayer"
         enabled: true
         footprint_clearing_enabled: true
+        pass_mode_topic: "/mppi/narrow_gate_pass_mode"
         combination_method: 1              # 1 = 取最大值
         observation_sources: obstacle_cloud
         obstacle_cloud:
@@ -229,6 +230,7 @@ local_costmap:
         pass_mode_topic: "/mppi/narrow_gate_pass_mode"
         pass_mode_resolution_enable: true
         pass_mode_resolution: 0.02
+        pass_mode_inflation_radius: 0.005
         # 由 footprint 自动推导的内切半径现在约为 0.20 m（受较短的后悬伸 r=0.2 限制）；
         # inflation_radius 必须 >= 该值。
         inflation_radius: 6.8
