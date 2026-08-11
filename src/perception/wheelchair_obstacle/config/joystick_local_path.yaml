@@ -53,7 +53,10 @@ joystick_local_path_node:
     # 窄门仅在极低速/停车时检测（蠕行脱困），不影响正常行驶。
     gate_path_enable: true
     obstacle_points_topic: "/perception/obstacle_points"
-    gate_local_radius_m: 1.20
+    gate_local_radius_m: 1.00
+    # bilateral: body-x bins, left/right inner boundary pairing (default)
+    # ray_slice: legacy stick/body-forward ray slice scan
+    gate_detect_mode: "bilateral"
     gate_width_min_m: 0.75
     gate_width_max_m: 1.00
     gate_scan_dist_min_m: 0.25
@@ -67,7 +70,11 @@ joystick_local_path_node:
     gate_intent_cross_slack_m: 0.18
     gate_intent_angle_delta_max: 0.45
     gate_opening_depth_m: 0.25
-    # 低速/停车（|v|<=gate_creep_speed_max_mps）+ 持续前推意图：看趋势/范围，不苛求射线精确穿过
+    # detect/track：接近门槛时可稍高速识别（车身可能已部分入门）；pass_mode 进入仍须 creep。
+    gate_detect_speed_max_mps: 0.55
+    gate_detect_confirm_sec: 0.80
+    gate_detect_hold_sec: 0.60
+    # pass_mode 进入/保持：|v|<=gate_creep_speed_max_mps（蠕行脱困）
     gate_creep_speed_max_mps: 0.20
     gate_creep_stick_forward_min: 0.01
     gate_creep_stick_min: 0.10
@@ -87,7 +94,7 @@ joystick_local_path_node:
     # gate_pass_front_center_x_m 为 base_link 下前向参考点（约车头中心）。
     # 零 footprint padding；costmap inflation/resolution 由 PassModeInflationLayer 处理。
     # /mppi/narrow_gate_pass_mode 通知 safety_gate：vx<=0.2m/s；停车条件与全局相同（松手等）。
-    # pass_mode 内不因 odom 超速退出；进入仍要求 |v|<=gate_creep_speed_max_mps。
+    # pass_mode 内不因 odom 超速退出；进入仍要求 |v|<=gate_creep_speed_max_mps（detect 可更快）。
     # pass_mode 内用 odom 锚点持续更新 gate 距离；门中心 x <= body_clear 时自动退出。
     # body_clear 须明显小于后悬 -0.2m，等整车进入门洞后再退（当前 -0.45 ≈ 后缘后再 25cm）。
     gate_pass_mode_enter_m: 0.80
