@@ -12,6 +12,8 @@
 /mppi/local_intent_path
 /mppi/narrow_gate_pass_mode
 /mppi/gate_markers
+/mppi/gate_memory
+/mppi/gate_memory/state
 /trajectories
 /controller_server/transformed_global_plan
 /cmd_vel_safety_gate_node/mode

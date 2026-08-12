@@ -86,18 +86,28 @@ joystick_local_path_node:
     gate_hold_sec: 0.25
     gate_confirm_sec: 1.50
     gate_confirmed_hold_sec: 0.60
-    gate_memory_commit_frames: 30
-    gate_memory_max_count: 2   # 只保留 1 个窄门记忆，避免多门误召回
-    # 同一物理门（含正/反向进出）在 odom 下 merge_r 内视为同一窄门，只保留一条记忆
-    gate_memory_merge_radius_m: 2.00
+    # 窄门记忆：车身全长两侧 lateral_band 外有点云 + |v|>min_speed + confirm_frames 帧
+    gate_memory_max_count: 5
+    gate_memory_merge_radius_m: 1.00
+    gate_memory_lateral_band_m: 0.20
+    gate_memory_min_speed_mps: 0.30
+    gate_memory_confirm_frames: 5
+    # body_x / half_width <= 0 时从 footprint 自动推导
+    gate_memory_body_x_min_m: -1.0
+    gate_memory_body_x_max_m: -1.0
+    gate_memory_half_width_m: -1.0
+    gate_memory_min_side_points: 1
+    gate_memory_rearm_frames: 3
+    # 每次通过后加权更新门框/中心：0=按 1/pass_count（第2次0.5，第3次0.33…），>0=固定新样本权重
+    gate_memory_update_alpha: 0.0
 
     # 过窄门模式：匹配窄门且车头中心距门中心 <= gate_pass_mode_enter_m 时激活。
     # gate_pass_front_center_x_m 为 base_link 下前向参考点（约车头中心）。
     # 零 footprint padding；costmap inflation/resolution 由 PassModeInflationLayer 处理。
     # /mppi/narrow_gate_pass_mode 通知 safety_gate：vx<=0.2m/s；停车条件与全局相同（松手等）。
     # pass_mode 内不因 odom 超速退出；进入仍要求 |v|<=gate_creep_speed_max_mps（detect 可更快）。
-    # pass_mode 内用 odom 锚点持续更新 gate 距离；门中心 x <= body_clear 时自动退出。
-    # body_clear 须明显小于后悬 -0.2m，等整车进入门洞后再退（当前 -0.45 ≈ 后缘后再 25cm）。
+    # pass_mode 内用 odom 锚点持续更新 gate 距离；门中心 body_x <= body_clear 时自动退出。
+    # body_clear 须明显小于后悬 -0.2m，等整车进入门洞后再退（-0.45 ≈ 后缘后再 25cm）。
     gate_pass_mode_enter_m: 0.80
     gate_pass_front_center_x_m: 0.85
     gate_pass_mode_exit_m: 0.95
@@ -107,6 +117,9 @@ joystick_local_path_node:
     # RViz：当前窄门（黄/绿/紫）+ 记忆门（蓝球，odom 坐标）
     gate_marker_enable: true
     gate_marker_topic: "/mppi/gate_markers"
+    gate_memory_publish_enable: true
+    gate_memory_topic: "/mppi/gate_memory"
+    gate_memory_state_topic: "/mppi/gate_memory/state"
 
     # velocity_integration 模式专用
     control_topic: "/handle/control"

@@ -67,11 +67,11 @@ ament_target_dependencies(joystick_local_path_node
   geometry_msgs
   sensor_msgs
   std_msgs
-  visualization_msgs
   nav2_msgs
   nav2_costmap_2d
   interface
   tf2
+  visualization_msgs
 )
 
 target_link_libraries(joystick_local_path_node

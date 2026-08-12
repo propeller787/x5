@@ -21,10 +21,12 @@
 #include <chrono>
 #include <cmath>
 #include <future>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -39,6 +41,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <tf2/LinearMath/Quaternion.h>
@@ -129,11 +132,15 @@ struct NarrowGateInfo
   bool confirmed{false};
 };
 
-struct MemorizedGateCenter
+struct GateMemoryEntry
 {
   double center_x_odom{0.0};
   double center_y_odom{0.0};
-  double width_m{0.95};
+  double left_x_odom{0.0};
+  double left_y_odom{0.0};
+  double right_x_odom{0.0};
+  double right_y_odom{0.0};
+  int pass_count{0};
 };
 
 enum class DriveSector
@@ -268,10 +275,18 @@ public:
     gate_ema_alpha_ = declare_parameter<double>("gate_ema_alpha", 0.35);
     gate_lock_distance_delta_m_ = declare_parameter<double>("gate_lock_distance_delta_m", 0.18);
     gate_lock_center_y_delta_m_ = declare_parameter<double>("gate_lock_center_y_delta_m", 0.15);
-    gate_memory_commit_frames_ = declare_parameter<int>("gate_memory_commit_frames", 50);
-    gate_memory_max_count_ = declare_parameter<int>("gate_memory_max_count", 1);
+    gate_memory_max_count_ = declare_parameter<int>("gate_memory_max_count", 5);
     gate_memory_max_count_ = std::max(1, gate_memory_max_count_);
-    gate_memory_merge_radius_m_ = declare_parameter<double>("gate_memory_merge_radius_m", 2.00);
+    gate_memory_merge_radius_m_ = declare_parameter<double>("gate_memory_merge_radius_m", 1.00);
+    gate_memory_lateral_band_m_ = declare_parameter<double>("gate_memory_lateral_band_m", 0.20);
+    gate_memory_min_speed_mps_ = declare_parameter<double>("gate_memory_min_speed_mps", 0.30);
+    gate_memory_confirm_frames_ = declare_parameter<int>("gate_memory_confirm_frames", 5);
+    gate_memory_body_x_min_m_ = declare_parameter<double>("gate_memory_body_x_min_m", -1.0);
+    gate_memory_body_x_max_m_ = declare_parameter<double>("gate_memory_body_x_max_m", -1.0);
+    gate_memory_half_width_m_ = declare_parameter<double>("gate_memory_half_width_m", -1.0);
+    gate_memory_min_side_points_ = declare_parameter<int>("gate_memory_min_side_points", 1);
+    gate_memory_rearm_frames_ = declare_parameter<int>("gate_memory_rearm_frames", 3);
+    gate_memory_update_alpha_ = declare_parameter<double>("gate_memory_update_alpha", 0.0);
     gate_pass_mode_enter_m_ = declare_parameter<double>("gate_pass_mode_enter_m", 0.80);
     gate_pass_front_center_x_m_ = declare_parameter<double>("gate_pass_front_center_x_m", 0.85);
     gate_pass_mode_exit_m_ = declare_parameter<double>("gate_pass_mode_exit_m", 0.95);
@@ -283,6 +298,11 @@ public:
     gate_marker_enable_ = declare_parameter<bool>("gate_marker_enable", true);
     gate_marker_topic_ = declare_parameter<std::string>(
       "gate_marker_topic", "/mppi/gate_markers");
+    gate_memory_publish_enable_ = declare_parameter<bool>("gate_memory_publish_enable", true);
+    gate_memory_topic_ = declare_parameter<std::string>(
+      "gate_memory_topic", "/mppi/gate_memory");
+    gate_memory_state_topic_ = declare_parameter<std::string>(
+      "gate_memory_state_topic", "/mppi/gate_memory/state");
     use_spatial_range_ = (path_generation_mode_ == "spatial_range");
 
     odom_sub_ = create_subscription<Odometry>(
@@ -317,6 +337,13 @@ public:
       gate_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
         gate_marker_topic_, rclcpp::QoS(1).transient_local());
     }
+    if (gate_memory_publish_enable_ && gate_path_enable_) {
+      const auto bag_qos = rclcpp::QoS(10).reliable();
+      gate_memory_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+        gate_memory_topic_, bag_qos);
+      gate_memory_state_pub_ = create_publisher<std_msgs::msg::String>(
+        gate_memory_state_topic_, bag_qos);
+    }
     if (footprint_publish_enable_) {
       if (!nav2_costmap_2d::makeFootprintFromString(footprint_base_, footprint_base_pts_)) {
         RCLCPP_ERROR(get_logger(), "Invalid footprint_base: %s", footprint_base_.c_str());
@@ -326,6 +353,7 @@ public:
         publishFootprintForGear(gear_default_index_);
       }
     }
+    initGateMemoryBodyBoundsFromFootprint();
     std_msgs::msg::Bool pass_mode_init;
     pass_mode_init.data = false;
     narrow_gate_pass_mode_pub_->publish(pass_mode_init);
@@ -358,7 +386,17 @@ public:
           obstacle_points_topic_.c_str(), gate_detect_mode_.c_str(),
           gate_local_radius_m_, gate_detect_speed_max_mps_, gate_creep_speed_max_mps_,
           gate_width_min_m_, gate_width_max_m_, gate_memory_max_count_,
-          gate_memory_merge_radius_m_, gate_memory_commit_frames_);
+          gate_memory_merge_radius_m_, gate_memory_confirm_frames_);
+      }
+      if (gate_memory_publish_enable_ && gate_path_enable_) {
+        RCLCPP_INFO(
+          get_logger(),
+          "gate_memory: body_x=[%.3f, %.3f] half_w=%.3f band=%.2fm speed>%.2f confirm=%d "
+          "max=%d merge_r=%.2f",
+          gate_memory_body_x_min_m_, gate_memory_body_x_max_m_, gate_memory_half_width_m_,
+          gate_memory_lateral_band_m_, gate_memory_min_speed_mps_,
+          gate_memory_confirm_frames_, gate_memory_max_count_,
+          gate_memory_merge_radius_m_);
       }
     }
     if (footprint_publish_enable_) {
@@ -501,9 +539,33 @@ private:
 
     for (size_t i = 0; i < memorized_gates_.size(); ++i) {
       const auto & stored = memorized_gates_[i];
+      visualization_msgs::msg::Marker line;
+      line.header.frame_id = global_frame_;
+      line.header.stamp = stamp;
+      line.ns = "gate_memory_frame";
+      line.id = static_cast<int>(i);
+      line.type = visualization_msgs::msg::Marker::LINE_LIST;
+      line.action = visualization_msgs::msg::Marker::ADD;
+      line.scale.x = 0.04;
+      line.color.r = 0.25F;
+      line.color.g = 0.65F;
+      line.color.b = 1.0F;
+      line.color.a = 0.75F;
+      line.lifetime = marker_lifetime;
+      geometry_msgs::msg::Point pl;
+      pl.x = stored.left_x_odom;
+      pl.y = stored.left_y_odom;
+      pl.z = 0.08;
+      geometry_msgs::msg::Point pr;
+      pr.x = stored.right_x_odom;
+      pr.y = stored.right_y_odom;
+      pr.z = 0.08;
+      line.points.push_back(pl);
+      line.points.push_back(pr);
+      markers.markers.push_back(line);
+
       visualization_msgs::msg::Marker mem;
-      mem.header.frame_id = global_frame_;
-      mem.header.stamp = stamp;
+      mem.header = line.header;
       mem.ns = "gate_memory";
       mem.id = static_cast<int>(i);
       mem.type = visualization_msgs::msg::Marker::SPHERE;
@@ -512,8 +574,8 @@ private:
       mem.pose.position.y = stored.center_y_odom;
       mem.pose.position.z = 0.08;
       mem.pose.orientation.w = 1.0;
-      mem.scale.x = std::max(0.12, stored.width_m);
-      mem.scale.y = std::max(0.12, stored.width_m);
+      mem.scale.x = 0.12;
+      mem.scale.y = 0.12;
       mem.scale.z = 0.12;
       mem.color.r = 0.25F;
       mem.color.g = 0.65F;
@@ -535,8 +597,8 @@ private:
       label.color.g = 0.9F;
       label.color.b = 1.0F;
       label.color.a = 0.9F;
-      label.text = "M" + std::to_string(i + 1) + " w=" +
-        std::to_string(static_cast<int>(stored.width_m * 100.0)) + "cm";
+      label.text = "M" + std::to_string(i + 1) + " n=" +
+        std::to_string(stored.pass_count);
       label.lifetime = mem.lifetime;
       markers.markers.push_back(label);
     }
@@ -544,6 +606,7 @@ private:
     for (int i = static_cast<int>(memorized_gates_.size());
       i < gate_memory_max_count_; ++i)
     {
+      markers.markers.push_back(makeDelete("gate_memory_frame", i));
       markers.markers.push_back(makeDelete("gate_memory", i));
       markers.markers.push_back(makeDelete("gate_memory_label", i));
     }
@@ -642,6 +705,137 @@ private:
     }
 
     gate_marker_pub_->publish(markers);
+  }
+
+  void publishGateMemorySnapshotUnlocked(const rclcpp::Time & stamp)
+  {
+    if (!gate_memory_pub_ && !gate_memory_state_pub_) {
+      return;
+    }
+
+    const rclcpp::Duration marker_lifetime(0, 0);
+    visualization_msgs::msg::MarkerArray markers;
+
+    auto makeDelete = [&](const std::string & ns, int id) {
+      visualization_msgs::msg::Marker del;
+      del.header.frame_id = global_frame_;
+      del.header.stamp = stamp;
+      del.ns = ns;
+      del.id = id;
+      del.action = visualization_msgs::msg::Marker::DELETE;
+      return del;
+    };
+
+    std::ostringstream json;
+    json << std::fixed << std::setprecision(3);
+    json << "{\"frame_id\":\"" << global_frame_ << "\","
+         << "\"stamp_sec\":" << stamp.seconds() << ",\"gates\":[";
+
+    for (size_t i = 0; i < memorized_gates_.size(); ++i) {
+      const auto & stored = memorized_gates_[i];
+      if (i > 0) {
+        json << ',';
+      }
+      json << "{\"id\":" << i
+           << ",\"center\":{\"x\":" << stored.center_x_odom
+           << ",\"y\":" << stored.center_y_odom << "}"
+           << ",\"left\":{\"x\":" << stored.left_x_odom
+           << ",\"y\":" << stored.left_y_odom << "}"
+           << ",\"right\":{\"x\":" << stored.right_x_odom
+           << ",\"y\":" << stored.right_y_odom << "}"
+           << ",\"pass_count\":" << stored.pass_count << "}";
+
+      visualization_msgs::msg::Marker line;
+      line.header.frame_id = global_frame_;
+      line.header.stamp = stamp;
+      line.ns = "gate_memory_frame";
+      line.id = static_cast<int>(i);
+      line.type = visualization_msgs::msg::Marker::LINE_LIST;
+      line.action = visualization_msgs::msg::Marker::ADD;
+      line.scale.x = 0.05;
+      line.color.r = 0.25F;
+      line.color.g = 0.65F;
+      line.color.b = 1.0F;
+      line.color.a = 0.9F;
+      line.lifetime = marker_lifetime;
+      geometry_msgs::msg::Point pl;
+      pl.x = stored.left_x_odom;
+      pl.y = stored.left_y_odom;
+      pl.z = 0.08;
+      geometry_msgs::msg::Point pr;
+      pr.x = stored.right_x_odom;
+      pr.y = stored.right_y_odom;
+      pr.z = 0.08;
+      line.points.push_back(pl);
+      line.points.push_back(pr);
+      markers.markers.push_back(line);
+
+      visualization_msgs::msg::Marker mem;
+      mem.header = line.header;
+      mem.ns = "gate_memory";
+      mem.id = static_cast<int>(i);
+      mem.type = visualization_msgs::msg::Marker::SPHERE;
+      mem.action = visualization_msgs::msg::Marker::ADD;
+      mem.pose.position.x = stored.center_x_odom;
+      mem.pose.position.y = stored.center_y_odom;
+      mem.pose.position.z = 0.10;
+      mem.pose.orientation.w = 1.0;
+      mem.scale.x = 0.12;
+      mem.scale.y = 0.12;
+      mem.scale.z = 0.12;
+      mem.color.r = 0.25F;
+      mem.color.g = 0.65F;
+      mem.color.b = 1.0F;
+      mem.color.a = 0.85F;
+      mem.lifetime = marker_lifetime;
+      markers.markers.push_back(mem);
+
+      visualization_msgs::msg::Marker label;
+      label.header = mem.header;
+      label.ns = "gate_memory_label";
+      label.id = static_cast<int>(i);
+      label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+      label.action = visualization_msgs::msg::Marker::ADD;
+      label.pose.position = mem.pose.position;
+      label.pose.position.z = 0.35;
+      label.scale.z = 0.18;
+      label.color.r = 0.8F;
+      label.color.g = 0.9F;
+      label.color.b = 1.0F;
+      label.color.a = 0.9F;
+      label.text = "M" + std::to_string(i + 1) + " n=" +
+        std::to_string(stored.pass_count);
+      label.lifetime = mem.lifetime;
+      markers.markers.push_back(label);
+    }
+    json << "]}";
+
+    for (int i = static_cast<int>(memorized_gates_.size());
+      i < gate_memory_max_count_; ++i)
+    {
+      markers.markers.push_back(makeDelete("gate_memory_frame", i));
+      markers.markers.push_back(makeDelete("gate_memory", i));
+      markers.markers.push_back(makeDelete("gate_memory_label", i));
+    }
+
+    if (gate_memory_pub_) {
+      gate_memory_pub_->publish(markers);
+    }
+    if (gate_memory_state_pub_) {
+      std_msgs::msg::String state;
+      state.data = json.str();
+      gate_memory_state_pub_->publish(state);
+    }
+  }
+
+  void publishGateMemorySnapshot()
+  {
+    if (!gate_memory_pub_ && !gate_memory_state_pub_) {
+      return;
+    }
+    const rclcpp::Time stamp = now();
+    std::lock_guard<std::mutex> lock(gate_mutex_);
+    publishGateMemorySnapshotUnlocked(stamp);
   }
 
   double gateFrontCenterToGateM(const NarrowGateInfo & gate) const
@@ -778,8 +972,10 @@ private:
     }
 
     path_pub_->publish(path);
-    if (gate_marker_pub_) {
-      publishGateMarkers(*odom);
+    publishGateMarkers(*odom);
+    publishGateMemorySnapshot();
+    if (gate_path_enable_) {
+      updateGateMemory(*odom, tnow);
     }
     if (use_spatial_range_ && gate_path_enable_) {
       publishNarrowGatePassModeState();
@@ -1551,7 +1747,93 @@ private:
     center_y_body = -sin_y * dx + cos_y * dy;
   }
 
-  int findMemorizedGateNearOdomUnlocked(double ox, double oy) const
+  void initGateMemoryBodyBoundsFromFootprint()
+  {
+    if (footprint_base_pts_.empty()) {
+      if (gate_memory_body_x_min_m_ < 0.0) {
+        gate_memory_body_x_min_m_ = -0.2;
+      }
+      if (gate_memory_body_x_max_m_ < 0.0) {
+        gate_memory_body_x_max_m_ = 0.935;
+      }
+      if (gate_memory_half_width_m_ <= 0.0) {
+        gate_memory_half_width_m_ = 0.34;
+      }
+      return;
+    }
+
+    double fp_x_min = footprint_base_pts_.front().x;
+    double fp_x_max = fp_x_min;
+    double fp_hw = 0.0;
+    for (const auto & p : footprint_base_pts_) {
+      fp_x_min = std::min(fp_x_min, p.x);
+      fp_x_max = std::max(fp_x_max, p.x);
+      fp_hw = std::max(fp_hw, std::abs(p.y));
+    }
+    if (gate_memory_body_x_min_m_ < 0.0) {
+      gate_memory_body_x_min_m_ = fp_x_min;
+    }
+    if (gate_memory_body_x_max_m_ < 0.0) {
+      gate_memory_body_x_max_m_ = fp_x_max;
+    }
+    if (gate_memory_half_width_m_ <= 0.0) {
+      gate_memory_half_width_m_ = fp_hw;
+    }
+  }
+
+  struct GateMemorySideHit
+  {
+    bool ok{false};
+    double left_x_body{0.0};
+    double left_y_body{0.0};
+    double right_x_body{0.0};
+    double right_y_body{0.0};
+  };
+
+  GateMemorySideHit sampleGateMemoryAtBodySides(
+    const std::vector<std::pair<float, float>> & pts) const
+  {
+    GateMemorySideHit hit;
+    double left_x_sum = 0.0;
+    double left_y_sum = 0.0;
+    int left_n = 0;
+    double right_x_sum = 0.0;
+    double right_y_sum = 0.0;
+    int right_n = 0;
+
+    const double hw = gate_memory_half_width_m_;
+    const double band = gate_memory_lateral_band_m_;
+
+    for (const auto & p : pts) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x < gate_memory_body_x_min_m_ || x > gate_memory_body_x_max_m_) {
+        continue;
+      }
+      if (y >= hw && y <= hw + band) {
+        left_x_sum += x;
+        left_y_sum += y;
+        ++left_n;
+      } else if (y <= -hw && y >= -hw - band) {
+        right_x_sum += x;
+        right_y_sum += y;
+        ++right_n;
+      }
+    }
+
+    if (left_n < gate_memory_min_side_points_ || right_n < gate_memory_min_side_points_) {
+      return hit;
+    }
+
+    hit.ok = true;
+    hit.left_x_body = left_x_sum / static_cast<double>(left_n);
+    hit.left_y_body = left_y_sum / static_cast<double>(left_n);
+    hit.right_x_body = right_x_sum / static_cast<double>(right_n);
+    hit.right_y_body = right_y_sum / static_cast<double>(right_n);
+    return hit;
+  }
+
+  int findGateMemoryNearOdomUnlocked(double ox, double oy) const
   {
     int best_idx = -1;
     double best_dist = gate_memory_merge_radius_m_;
@@ -1566,173 +1848,149 @@ private:
     return best_idx;
   }
 
-  void consolidateMemorizedGatesUnlocked()
+  void bodyPointToOdom(
+    const Odometry & odom, double bx, double by, double & ox, double & oy) const
   {
-    for (size_t i = 0; i < memorized_gates_.size(); ++i) {
-      for (size_t j = memorized_gates_.size(); j-- > i;) {
-        const double dist = std::hypot(
-          memorized_gates_[i].center_x_odom - memorized_gates_[j].center_x_odom,
-          memorized_gates_[i].center_y_odom - memorized_gates_[j].center_y_odom);
-        if (dist > gate_memory_merge_radius_m_) {
-          continue;
-        }
-        memorized_gates_[i].center_x_odom =
-          0.5 * (memorized_gates_[i].center_x_odom + memorized_gates_[j].center_x_odom);
-        memorized_gates_[i].center_y_odom =
-          0.5 * (memorized_gates_[i].center_y_odom + memorized_gates_[j].center_y_odom);
-        memorized_gates_[i].width_m =
-          0.5 * (memorized_gates_[i].width_m + memorized_gates_[j].width_m);
-        memorized_gates_.erase(memorized_gates_.begin() + static_cast<std::ptrdiff_t>(j));
-        RCLCPP_INFO(
-          get_logger(),
-          "gate_memory consolidated duplicate -> odom=(%.2f, %.2f) width=%.2fm total=%zu",
-          memorized_gates_[i].center_x_odom, memorized_gates_[i].center_y_odom,
-          memorized_gates_[i].width_m, memorized_gates_.size());
-      }
+    bodyCenterToOdom(odom, bx, by, ox, oy);
+  }
+
+  double gateMemoryUpdateAlpha(int pass_count) const
+  {
+    if (pass_count <= 0) {
+      return 1.0;
     }
-  }
-
-  bool snapGateToMemorizedIfNearUnlocked(const Odometry & odom, NarrowGateInfo & gate) const
-  {
-    double ox = 0.0;
-    double oy = 0.0;
-    bodyCenterToOdom(odom, gate.distance_m, gate.center_y_m, ox, oy);
-    const int idx = findMemorizedGateNearOdomUnlocked(ox, oy);
-    if (idx < 0) {
-      return false;
+    if (gate_memory_update_alpha_ > 0.0) {
+      return clampNorm(gate_memory_update_alpha_, 0.01, 1.0);
     }
-    const auto & stored = memorized_gates_[static_cast<size_t>(idx)];
-    odomCenterToBody(
-      odom, stored.center_x_odom, stored.center_y_odom,
-      gate.distance_m, gate.center_y_m);
-    gate.width_m = stored.width_m;
-    gate.confirmed = true;
-    return true;
+    return 1.0 / static_cast<double>(pass_count);
   }
 
-  void resetGateMemoryAccumUnlocked()
+  void applyGateMemoryWeightedUpdate(
+    GateMemoryEntry & stored,
+    double lx_o, double ly_o, double rx_o, double ry_o)
   {
-    gate_memory_accum_active_ = false;
-    gate_memory_frame_count_ = 0;
-    gate_memory_sum_x_odom_ = 0.0;
-    gate_memory_sum_y_odom_ = 0.0;
-    gate_memory_sum_width_m_ = 0.0;
-    gate_memory_track_committed_ = false;
+    const double alpha = gateMemoryUpdateAlpha(stored.pass_count);
+    const auto blend = [alpha](double old_v, double new_v) {
+      return (1.0 - alpha) * old_v + alpha * new_v;
+    };
+    stored.left_x_odom = blend(stored.left_x_odom, lx_o);
+    stored.left_y_odom = blend(stored.left_y_odom, ly_o);
+    stored.right_x_odom = blend(stored.right_x_odom, rx_o);
+    stored.right_y_odom = blend(stored.right_y_odom, ry_o);
+    stored.center_x_odom = 0.5 * (stored.left_x_odom + stored.right_x_odom);
+    stored.center_y_odom = 0.5 * (stored.left_y_odom + stored.right_y_odom);
   }
 
-  void updateGateMemoryAccumUnlocked(
-    const Odometry & odom, const NarrowGateInfo & gate)
+  void commitGateMemoryUnlocked(
+    const Odometry & odom, const GateMemorySideHit & hit, const rclcpp::Time & tnow)
   {
-    if (gate_memory_track_committed_) {
+    double lx_o = 0.0;
+    double ly_o = 0.0;
+    double rx_o = 0.0;
+    double ry_o = 0.0;
+    bodyPointToOdom(odom, hit.left_x_body, hit.left_y_body, lx_o, ly_o);
+    bodyPointToOdom(odom, hit.right_x_body, hit.right_y_body, rx_o, ry_o);
+    const double cx_body = 0.5 * (hit.left_x_body + hit.right_x_body);
+    const double cy_body = 0.5 * (hit.left_y_body + hit.right_y_body);
+    double cx_o = 0.0;
+    double cy_o = 0.0;
+    bodyPointToOdom(odom, cx_body, cy_body, cx_o, cy_o);
+
+    const int idx = findGateMemoryNearOdomUnlocked(cx_o, cy_o);
+    if (idx >= 0) {
+      auto & stored = memorized_gates_[static_cast<size_t>(idx)];
+      stored.pass_count = std::max(1, stored.pass_count + 1);
+      applyGateMemoryWeightedUpdate(stored, lx_o, ly_o, rx_o, ry_o);
+      publishGateMemorySnapshotUnlocked(tnow);
+      RCLCPP_INFO(
+        get_logger(),
+        "gate_memory pass #%d (alpha=%.2f): center odom=(%.2f, %.2f) left=(%.2f, %.2f) right=(%.2f, %.2f)",
+        stored.pass_count, gateMemoryUpdateAlpha(stored.pass_count),
+        stored.center_x_odom, stored.center_y_odom,
+        stored.left_x_odom, stored.left_y_odom, stored.right_x_odom, stored.right_y_odom);
       return;
-    }
-    double ox = 0.0;
-    double oy = 0.0;
-    bodyCenterToOdom(odom, gate.distance_m, gate.center_y_m, ox, oy);
-    if (!gate_memory_accum_active_) {
-      gate_memory_accum_active_ = true;
-      gate_memory_frame_count_ = 0;
-      gate_memory_sum_x_odom_ = 0.0;
-      gate_memory_sum_y_odom_ = 0.0;
-      gate_memory_sum_width_m_ = 0.0;
-    }
-    ++gate_memory_frame_count_;
-    gate_memory_sum_x_odom_ += ox;
-    gate_memory_sum_y_odom_ += oy;
-    gate_memory_sum_width_m_ += gate.width_m;
-  }
-
-  void maybeCommitMemorizedGateUnlocked()
-  {
-    if (gate_memory_track_committed_ || !gate_memory_accum_active_) {
-      return;
-    }
-    if (gate_memory_frame_count_ < gate_memory_commit_frames_) {
-      return;
-    }
-
-    const double mean_x = gate_memory_sum_x_odom_ /
-      static_cast<double>(gate_memory_frame_count_);
-    const double mean_y = gate_memory_sum_y_odom_ /
-      static_cast<double>(gate_memory_frame_count_);
-    const double mean_w = gate_memory_sum_width_m_ /
-      static_cast<double>(gate_memory_frame_count_);
-
-    for (auto & stored : memorized_gates_) {
-      if (std::hypot(stored.center_x_odom - mean_x, stored.center_y_odom - mean_y) <=
-        gate_memory_merge_radius_m_)
-      {
-        stored.center_x_odom = 0.7 * stored.center_x_odom + 0.3 * mean_x;
-        stored.center_y_odom = 0.7 * stored.center_y_odom + 0.3 * mean_y;
-        stored.width_m = 0.7 * stored.width_m + 0.3 * mean_w;
-        gate_memory_track_committed_ = true;
-        consolidateMemorizedGatesUnlocked();
-        RCLCPP_INFO(
-          get_logger(),
-          "gate_memory merge same door: odom=(%.2f, %.2f) width=%.2fm frames=%d total=%zu",
-          stored.center_x_odom, stored.center_y_odom, stored.width_m,
-          gate_memory_frame_count_, memorized_gates_.size());
-        return;
-      }
     }
 
     if (static_cast<int>(memorized_gates_.size()) >= gate_memory_max_count_) {
       const auto & evicted = memorized_gates_.front();
       RCLCPP_INFO(
         get_logger(),
-        "gate_memory evict oldest: odom=(%.2f, %.2f) width=%.2fm",
-        evicted.center_x_odom, evicted.center_y_odom, evicted.width_m);
+        "gate_memory evict oldest: center odom=(%.2f, %.2f) pass=%d",
+        evicted.center_x_odom, evicted.center_y_odom, evicted.pass_count);
       memorized_gates_.erase(memorized_gates_.begin());
     }
 
-    MemorizedGateCenter stored;
-    stored.center_x_odom = mean_x;
-    stored.center_y_odom = mean_y;
-    stored.width_m = mean_w;
+    GateMemoryEntry stored;
+    stored.left_x_odom = lx_o;
+    stored.left_y_odom = ly_o;
+    stored.right_x_odom = rx_o;
+    stored.right_y_odom = ry_o;
+    stored.center_x_odom = 0.5 * (lx_o + rx_o);
+    stored.center_y_odom = 0.5 * (ly_o + ry_o);
+    stored.pass_count = 1;
     memorized_gates_.push_back(stored);
-    gate_memory_track_committed_ = true;
-    consolidateMemorizedGatesUnlocked();
+    publishGateMemorySnapshotUnlocked(tnow);
     RCLCPP_INFO(
       get_logger(),
-      "gate_memory saved #%zu: odom=(%.2f, %.2f) width=%.2fm frames=%d",
-      memorized_gates_.size(), mean_x, mean_y, mean_w, gate_memory_frame_count_);
+      "gate_memory saved #%zu: center odom=(%.2f, %.2f) left=(%.2f, %.2f) right=(%.2f, %.2f)",
+      memorized_gates_.size(), cx_o, cy_o, lx_o, ly_o, rx_o, ry_o);
   }
 
-  std::optional<NarrowGateInfo> scanMemorizedGate(
-    const Odometry & odom, double norm_x, double norm_y) const
+  void updateGateMemory(const Odometry & odom, const rclcpp::Time & tnow)
   {
-    if (memorized_gates_.empty()) {
-      return std::nullopt;
+    if (!gate_memory_publish_enable_ || !gate_path_enable_) {
+      return;
     }
 
-    std::optional<NarrowGateInfo> best;
-    double best_score = std::numeric_limits<double>::infinity();
-
-    for (const auto & stored : memorized_gates_) {
-      double bx = 0.0;
-      double by = 0.0;
-      odomCenterToBody(odom, stored.center_x_odom, stored.center_y_odom, bx, by);
-      if (std::hypot(bx, by) > gate_local_radius_m_) {
-        continue;
-      }
-
-      NarrowGateInfo gate;
-      gate.distance_m = bx;
-      gate.center_y_m = by;
-      gate.width_m = stored.width_m;
-      gate.confirmed = true;
-      gate.axis_yaw_body = computeGateAxisYaw(gate, norm_y);
-      if (!intentMatchesGate(gate, norm_x, norm_y, odom)) {
-        continue;
-      }
-
-      const double score = openingIntentScore(bx, by, norm_x, norm_y);
-      if (score < best_score) {
-        best_score = score;
-        best = gate;
-      }
+    const bool cloud_ok = have_cloud_ &&
+      (tnow - latest_cloud_stamp_).seconds() <= obstacle_timeout_;
+    if (!cloud_ok) {
+      return;
     }
-    return best;
+
+    std::vector<std::pair<float, float>> pts;
+    {
+      std::lock_guard<std::mutex> lock(cloud_mutex_);
+      pts = cloud_pts_;
+    }
+
+    const GateMemorySideHit hit = sampleGateMemoryAtBodySides(pts);
+    const bool speed_ok = vehiclePlanarSpeedMps(odom) > gate_memory_min_speed_mps_;
+    const bool detect_ok = hit.ok && speed_ok;
+
+    std::lock_guard<std::mutex> lock(gate_mutex_);
+
+    if (gate_memory_cooldown_frames_ > 0) {
+      --gate_memory_cooldown_frames_;
+    }
+
+    if (!detect_ok) {
+      if (!hit.ok) {
+        gate_memory_rearm_left_frames_ = gate_memory_rearm_frames_;
+      }
+      gate_memory_streak_frames_ = 0;
+      return;
+    }
+
+    if (gate_memory_rearm_left_frames_ > 0) {
+      --gate_memory_rearm_left_frames_;
+      gate_memory_streak_frames_ = 0;
+      return;
+    }
+
+    if (gate_memory_cooldown_frames_ > 0) {
+      return;
+    }
+
+    ++gate_memory_streak_frames_;
+    if (gate_memory_streak_frames_ < gate_memory_confirm_frames_) {
+      return;
+    }
+
+    commitGateMemoryUnlocked(odom, hit, tnow);
+    gate_memory_streak_frames_ = 0;
+    gate_memory_cooldown_frames_ = gate_memory_confirm_frames_;
+    gate_memory_rearm_left_frames_ = gate_memory_rearm_frames_;
   }
 
   void resetGateTrackingUnlocked()
@@ -1741,7 +1999,6 @@ private:
     gate_confirmed_ = false;
     gate_match_count_ = 0;
     have_last_gate_ = false;
-    resetGateMemoryAccumUnlocked();
   }
 
   void resetGateTracking()
@@ -1773,7 +2030,6 @@ private:
     gate_track_width_m_ = gate.width_m;
     confirmed_gate_ = gate;
     confirmed_gate_.confirmed = false;
-    resetGateMemoryAccumUnlocked();
   }
 
   void updateGateTrackMeasurement(const NarrowGateInfo & gate)
@@ -1954,15 +2210,7 @@ private:
     auto cloud_candidate = scanNarrowGateFromCloud(tnow, odom, norm_x, norm_y);
     std::lock_guard<std::mutex> lock(gate_mutex_);
 
-    auto candidate = cloud_candidate;
-    if (candidate && snapGateToMemorizedIfNearUnlocked(odom, *candidate)) {
-      RCLCPP_DEBUG(
-        get_logger(), "gate_path snap cloud detect to memorized gate body=(%.2f, %.2f)",
-        candidate->distance_m, candidate->center_y_m);
-    }
-    if (!candidate) {
-      candidate = scanMemorizedGate(odom, norm_x, norm_y);
-    }
+    const auto candidate = cloud_candidate;
     const bool intent_ok = candidate &&
       intentMatchesGate(*candidate, norm_x, norm_y, odom) &&
       intentMatchesTrackDirection(norm_x, norm_y, odom);
@@ -1977,10 +2225,6 @@ private:
       last_gate_ = makeActiveGate(norm_y);
       last_gate_stamp_ = tnow;
       have_last_gate_ = true;
-      if (gate_track_from_cloud_) {
-        updateGateMemoryAccumUnlocked(odom, last_gate_);
-        maybeCommitMemorizedGateUnlocked();
-      }
       return last_gate_;
     }
 
@@ -1995,10 +2239,6 @@ private:
         maybeConfirmGateTrack(tnow, norm_y, odom);
         last_gate_ = makeActiveGate(norm_y);
         last_gate_stamp_ = tnow;
-        if (gate_track_from_cloud_) {
-          updateGateMemoryAccumUnlocked(odom, last_gate_);
-          maybeCommitMemorizedGateUnlocked();
-        }
         return last_gate_;
       }
     }
@@ -2506,9 +2746,17 @@ private:
   double gate_ema_alpha_{0.35};
   double gate_lock_distance_delta_m_{0.18};
   double gate_lock_center_y_delta_m_{0.15};
-  int gate_memory_commit_frames_{50};
-  int gate_memory_max_count_{1};
-  double gate_memory_merge_radius_m_{2.00};
+  int gate_memory_confirm_frames_{5};
+  int gate_memory_max_count_{5};
+  double gate_memory_merge_radius_m_{1.00};
+  double gate_memory_lateral_band_m_{0.20};
+  double gate_memory_min_speed_mps_{0.30};
+  double gate_memory_body_x_min_m_{-0.2};
+  double gate_memory_body_x_max_m_{0.935};
+  double gate_memory_half_width_m_{0.34};
+  int gate_memory_min_side_points_{1};
+  int gate_memory_rearm_frames_{3};
+  double gate_memory_update_alpha_{0.0};
   double gate_pass_mode_enter_m_{0.80};
   double gate_pass_front_center_x_m_{0.85};
   double gate_pass_mode_exit_m_{0.95};
@@ -2517,6 +2765,9 @@ private:
   std::string narrow_gate_pass_mode_topic_;
   bool gate_marker_enable_{true};
   std::string gate_marker_topic_;
+  bool gate_memory_publish_enable_{true};
+  std::string gate_memory_topic_;
+  std::string gate_memory_state_topic_;
   bool narrow_gate_pass_active_{false};
   rclcpp::Time narrow_gate_pass_last_intent_stamp_{0, 0, RCL_ROS_TIME};
   bool pass_mode_gate_odom_valid_{false};
@@ -2539,13 +2790,10 @@ private:
   mutable bool gate_confirmed_{false};
   mutable bool gate_track_from_cloud_{false};
   mutable int gate_match_count_{0};
-  mutable int gate_memory_frame_count_{0};
-  mutable bool gate_memory_accum_active_{false};
-  mutable bool gate_memory_track_committed_{false};
-  mutable double gate_memory_sum_x_odom_{0.0};
-  mutable double gate_memory_sum_y_odom_{0.0};
-  mutable double gate_memory_sum_width_m_{0.0};
-  mutable std::vector<MemorizedGateCenter> memorized_gates_;
+  int gate_memory_streak_frames_{0};
+  int gate_memory_cooldown_frames_{0};
+  int gate_memory_rearm_left_frames_{0};
+  std::vector<GateMemoryEntry> memorized_gates_;
   mutable double gate_track_distance_m_{0.0};
   mutable double gate_track_center_y_m_{0.0};
   mutable double gate_track_width_m_{0.0};
@@ -2569,6 +2817,8 @@ private:
   rclcpp::Publisher<Path>::SharedPtr path_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_pass_mode_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_marker_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_memory_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gate_memory_state_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Polygon>::SharedPtr footprint_pub_;
   rclcpp_action::Client<FollowPath>::SharedPtr action_client_;
   rclcpp::TimerBase::SharedPtr timer_;
