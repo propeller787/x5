@@ -300,6 +300,51 @@ public:
     gate_side_pass_max_speed_mps_ = declare_parameter<double>(
       "gate_side_pass_max_speed_mps", 0.10);
     gate_side_pass_body_clear_m_ = declare_parameter<double>("gate_side_pass_body_clear_m", 0.35);
+    gate_side_pass_width_min_m_ = declare_parameter<double>("gate_side_pass_width_min_m", 0.25);
+    gate_side_pass_enter_forward_cloud_enable_ = declare_parameter<bool>(
+      "gate_side_pass_enter_forward_cloud_enable", true);
+    gate_side_pass_enter_check_depth_m_ = declare_parameter<double>(
+      "gate_side_pass_enter_check_depth_m", 0.15);
+    gate_side_pass_enter_forward_strip_x_ = declare_parameter<std::vector<double>>(
+      "gate_side_pass_enter_forward_strip_x", {0.685, 0.935, 0.685});
+    gate_side_pass_enter_forward_strip_y_min_ = declare_parameter<std::vector<double>>(
+      "gate_side_pass_enter_forward_strip_y_min", {0.2, -0.2, -0.34});
+    gate_side_pass_enter_forward_strip_y_max_ = declare_parameter<std::vector<double>>(
+      "gate_side_pass_enter_forward_strip_y_max", {0.34, 0.2, -0.2});
+    if (gate_side_pass_enter_forward_strip_x_.size() !=
+      gate_side_pass_enter_forward_strip_y_min_.size() ||
+      gate_side_pass_enter_forward_strip_x_.size() !=
+      gate_side_pass_enter_forward_strip_y_max_.size())
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "gate_side_pass_enter forward strip array size mismatch; using defaults");
+      gate_side_pass_enter_forward_strip_x_ = {0.685, 0.935, 0.685};
+      gate_side_pass_enter_forward_strip_y_min_ = {0.2, -0.2, -0.34};
+      gate_side_pass_enter_forward_strip_y_max_ = {0.34, 0.2, -0.2};
+    }
+    gate_side_pass_exit_forward_clear_enable_ = declare_parameter<bool>(
+      "gate_side_pass_exit_forward_clear_enable", true);
+    gate_side_pass_exit_check_depth_m_ = declare_parameter<double>(
+      "gate_side_pass_exit_check_depth_m", 0.10);
+    gate_side_pass_exit_forward_strip_x_ = declare_parameter<std::vector<double>>(
+      "gate_side_pass_exit_forward_strip_x", {0.685, 0.685});
+    gate_side_pass_exit_forward_strip_y_min_ = declare_parameter<std::vector<double>>(
+      "gate_side_pass_exit_forward_strip_y_min", {0.2, -0.34});
+    gate_side_pass_exit_forward_strip_y_max_ = declare_parameter<std::vector<double>>(
+      "gate_side_pass_exit_forward_strip_y_max", {0.34, -0.2});
+    if (gate_side_pass_exit_forward_strip_x_.size() !=
+      gate_side_pass_exit_forward_strip_y_min_.size() ||
+      gate_side_pass_exit_forward_strip_x_.size() !=
+      gate_side_pass_exit_forward_strip_y_max_.size())
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "gate_side_pass_exit forward strip array size mismatch; using defaults");
+      gate_side_pass_exit_forward_strip_x_ = {0.685, 0.685};
+      gate_side_pass_exit_forward_strip_y_min_ = {0.2, -0.34};
+      gate_side_pass_exit_forward_strip_y_max_ = {0.34, -0.2};
+    }
     gate_pass_mode_enter_m_ = declare_parameter<double>("gate_pass_mode_enter_m", 0.80);
     gate_pass_front_center_x_m_ = declare_parameter<double>("gate_pass_front_center_x_m", 0.85);
     gate_pass_mode_exit_m_ = declare_parameter<double>("gate_pass_mode_exit_m", 0.95);
@@ -562,39 +607,125 @@ private:
     setSidePassCrawlMode(false, tnow);
   }
 
+  bool forwardCornerStripHasPoint(
+    const std::vector<std::pair<float, float>> & local_pts,
+    double x0, double depth, double y0, double y1) const
+  {
+    const double x1 = x0 + depth;
+    for (const auto & p : local_pts) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool sidePassEnterForwardRegionHasCloud(
+    const std::vector<std::pair<float, float>> & local_pts) const
+  {
+    if (!gate_side_pass_enter_forward_cloud_enable_) {
+      return true;
+    }
+    if (local_pts.empty()) {
+      return false;
+    }
+
+    const double depth = gate_side_pass_enter_check_depth_m_;
+    for (size_t i = 0; i < gate_side_pass_enter_forward_strip_x_.size(); ++i) {
+      if (forwardCornerStripHasPoint(
+          local_pts,
+          gate_side_pass_enter_forward_strip_x_[i], depth,
+          gate_side_pass_enter_forward_strip_y_min_[i],
+          gate_side_pass_enter_forward_strip_y_max_[i]))
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool sidePassExitForwardCornersClear(
+    const std::vector<std::pair<float, float>> & local_pts) const
+  {
+    if (!gate_side_pass_exit_forward_clear_enable_) {
+      return true;
+    }
+    if (local_pts.empty()) {
+      return true;
+    }
+
+    const double depth = gate_side_pass_exit_check_depth_m_;
+    for (size_t i = 0; i < gate_side_pass_exit_forward_strip_x_.size(); ++i) {
+      const double x0 = gate_side_pass_exit_forward_strip_x_[i];
+      const double x1 = x0 + depth;
+      const double y0 = gate_side_pass_exit_forward_strip_y_min_[i];
+      const double y1 = gate_side_pass_exit_forward_strip_y_max_[i];
+      for (const auto & p : local_pts) {
+        const double x = static_cast<double>(p.first);
+        const double y = static_cast<double>(p.second);
+        if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   void updateSidePassCrawlMode(
     const NarrowGateInfo & gate, double norm_x, double norm_y,
-    const Odometry & odom, const rclcpp::Time & tnow, int memory_idx)
+    const Odometry & odom, const rclcpp::Time & tnow, int memory_idx,
+    const std::vector<std::pair<float, float>> & local_pts)
   {
     const double border_dist = bodyBorderDistanceToPoint(
       gate.distance_m, gate.center_y_m);
+    const bool forward_corners_clear = sidePassExitForwardCornersClear(local_pts);
 
     if (gateSidePassBodyCleared(gate)) {
-      setSidePassCrawlMode(false, tnow);
-      RCLCPP_INFO(get_logger(), "side_pass crawl exit: cleared along bisector");
-      return;
+      if (forward_corners_clear) {
+        setSidePassCrawlMode(false, tnow);
+        RCLCPP_INFO(get_logger(), "side_pass crawl exit: cleared along bisector");
+        return;
+      }
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "side_pass crawl exit held: forward corner ROI blocked (bisector cleared)");
     }
 
     if (border_dist > gate_side_pass_trigger_dist_m_) {
       if (narrow_gate_side_pass_crawl_active_) {
-        setSidePassCrawlMode(false, tnow);
-        RCLCPP_INFO(
-          get_logger(),
-          "side_pass crawl exit: border_dist=%.2fm > %.2fm",
-          border_dist, gate_side_pass_trigger_dist_m_);
+        if (forward_corners_clear) {
+          setSidePassCrawlMode(false, tnow);
+          RCLCPP_INFO(
+            get_logger(),
+            "side_pass crawl exit: border_dist=%.2fm > %.2fm",
+            border_dist, gate_side_pass_trigger_dist_m_);
+        } else {
+          RCLCPP_INFO_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "side_pass crawl exit held: forward corner ROI blocked (border_dist=%.2fm)",
+            border_dist);
+        }
       }
       return;
     }
 
     const bool intent_ok = stickPointsTowardSidePass(gate, norm_x, norm_y);
     const bool speed_ok = vehiclePlanarSpeedMps(odom) < gate_side_pass_max_speed_mps_;
+    const bool forward_region_blocked =
+      sidePassEnterForwardRegionHasCloud(local_pts);
     if (!narrow_gate_side_pass_crawl_active_) {
-      if (intent_ok && speed_ok) {
+      if (intent_ok && speed_ok && forward_region_blocked) {
         setSidePassCrawlMode(true, tnow, memory_idx);
         RCLCPP_INFO(
           get_logger(),
           "side_pass crawl enter: border_dist=%.2fm gate body=(%.2f, %.2f) idx=%d",
           border_dist, gate.distance_m, gate.center_y_m, memory_idx);
+      } else if (intent_ok && speed_ok) {
+        RCLCPP_INFO_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "side_pass crawl enter held: no cloud in left/right/front forward ROI");
       }
       return;
     }
@@ -1262,14 +1393,30 @@ private:
             last_gate_ = mem->first;
             have_last_gate_ = true;
             updateSidePassCrawlMode(
-              last_gate_, norm_x, norm_y, *odom, tnow, mem->second);
+              last_gate_, norm_x, norm_y, *odom, tnow, mem->second,
+              side_pass_local_pts);
             if (narrow_gate_side_pass_crawl_active_) {
               refreshSidePassMemoryGateUnlocked(
                 *odom, norm_x, norm_y, side_pass_local_pts);
             }
-          } else if (narrow_gate_side_pass_crawl_active_ && have_last_gate_) {
-            updateSidePassCrawlMode(
-              last_gate_, norm_x, norm_y, *odom, tnow, side_pass_memory_gate_idx_);
+          } else if (narrow_gate_side_pass_crawl_active_ &&
+            side_pass_memory_gate_idx_ >= 0 &&
+            side_pass_memory_gate_idx_ <
+            static_cast<int>(memorized_gates_.size()))
+          {
+            const auto & entry =
+              memorized_gates_[static_cast<size_t>(side_pass_memory_gate_idx_)];
+            if (const auto live_gate = narrowGateFromMemoryEntryUnlocked(
+                entry, *odom, norm_x, norm_y, side_pass_local_pts))
+            {
+              last_gate_ = *live_gate;
+              have_last_gate_ = true;
+              updateSidePassCrawlMode(
+                *live_gate, norm_x, norm_y, *odom, tnow, side_pass_memory_gate_idx_,
+                side_pass_local_pts);
+            } else {
+              clearSidePassCrawlMode(tnow);
+            }
           } else if (narrow_gate_side_pass_crawl_active_) {
             clearSidePassCrawlMode(tnow);
           }
@@ -1571,7 +1718,8 @@ private:
   }
 
   bool openingSliceValid(
-    float left_y, float right_y, int left_count, int right_count, double width) const
+    float left_y, float right_y, int left_count, int right_count, double width,
+    double width_min, double width_max) const
   {
     if (left_count < gate_min_side_points_ || right_count < gate_min_side_points_) {
       return false;
@@ -1581,7 +1729,15 @@ private:
         return false;
       }
     }
-    return width >= gate_width_min_m_ && width <= gate_width_max_m_;
+    return width >= width_min && width <= width_max;
+  }
+
+  bool openingSliceValid(
+    float left_y, float right_y, int left_count, int right_count, double width) const
+  {
+    return openingSliceValid(
+      left_y, right_y, left_count, right_count, width,
+      gate_width_min_m_, gate_width_max_m_);
   }
 
   struct OpeningSliceSample
@@ -1595,7 +1751,7 @@ private:
 
   std::optional<OpeningSliceSample> sampleOpeningSliceAtDistance(
     const std::vector<std::pair<float, float>> & local_pts,
-    double dist) const
+    double dist, double width_min, double width_max) const
   {
     const double dist_step = std::max(0.03, gate_scan_dist_step_m_);
     const double bin_half = dist_step * 0.5;
@@ -1640,7 +1796,7 @@ private:
     }
 
     const double width = static_cast<double>(left_y - right_y);
-    if (!openingSliceValid(left_y, right_y, left_count, right_count, width)) {
+    if (!openingSliceValid(left_y, right_y, left_count, right_count, width, width_min, width_max)) {
       return std::nullopt;
     }
 
@@ -1666,7 +1822,7 @@ private:
 
   std::optional<OpeningSliceSample> sampleOpeningBilateralNearDistance(
     const std::vector<std::pair<float, float>> & local_pts,
-    double target_dist) const
+    double target_dist, double width_min, double width_max) const
   {
     const double tol = gate_lock_distance_delta_m_;
     const double dist_step = std::max(0.03, gate_scan_dist_step_m_);
@@ -1677,7 +1833,7 @@ private:
     double best_dist_err = std::numeric_limits<double>::infinity();
 
     for (double dist = dist_min; dist <= dist_max + 1e-6; dist += dist_step) {
-      const auto slice = sampleOpeningSliceAtDistance(local_pts, dist);
+      const auto slice = sampleOpeningSliceAtDistance(local_pts, dist, width_min, width_max);
       if (!slice) {
         continue;
       }
@@ -1704,7 +1860,8 @@ private:
       dist <= gate_local_radius_m_ + 1e-6;
       dist += dist_step)
     {
-      const auto slice = sampleOpeningSliceAtDistance(local_pts, dist);
+      const auto slice = sampleOpeningSliceAtDistance(
+        local_pts, dist, gate_width_min_m_, gate_width_max_m_);
       if (!slice) {
         continue;
       }
@@ -2009,7 +2166,9 @@ private:
     bool have_geometry = false;
 
     if (!local_pts.empty()) {
-      if (const auto slice = sampleOpeningBilateralNearDistance(local_pts, cx)) {
+      if (const auto slice = sampleOpeningBilateralNearDistance(
+          local_pts, cx, gate_side_pass_width_min_m_, gate_width_max_m_))
+      {
         cx = slice->distance_m;
         cy = slice->center_y_m;
         width = slice->width_m;
@@ -2022,7 +2181,9 @@ private:
 
     if (!have_geometry) {
       width = std::hypot(rx - lx, ry - ly);
-      if (width < gate_width_min_m_ - 1e-3 || width > gate_width_max_m_ + 1e-3) {
+      if (width < gate_side_pass_width_min_m_ - 1e-3 ||
+        width > gate_width_max_m_ + 1e-3)
+      {
         return std::nullopt;
       }
       gate_line_yaw = std::atan2(ry - ly, rx - lx);
@@ -2950,6 +3111,17 @@ private:
   double gate_side_pass_stick_angle_max_{0.95};
   double gate_side_pass_max_speed_mps_{0.10};
   double gate_side_pass_body_clear_m_{0.35};
+  double gate_side_pass_width_min_m_{0.25};
+  bool gate_side_pass_enter_forward_cloud_enable_{true};
+  double gate_side_pass_enter_check_depth_m_{0.15};
+  std::vector<double> gate_side_pass_enter_forward_strip_x_{0.685, 0.935, 0.685};
+  std::vector<double> gate_side_pass_enter_forward_strip_y_min_{0.2, -0.2, -0.34};
+  std::vector<double> gate_side_pass_enter_forward_strip_y_max_{0.34, 0.2, -0.2};
+  bool gate_side_pass_exit_forward_clear_enable_{true};
+  double gate_side_pass_exit_check_depth_m_{0.10};
+  std::vector<double> gate_side_pass_exit_forward_strip_x_{0.685, 0.685};
+  std::vector<double> gate_side_pass_exit_forward_strip_y_min_{0.2, -0.34};
+  std::vector<double> gate_side_pass_exit_forward_strip_y_max_{0.34, -0.2};
   double footprint_body_x_min_{-0.2};
   double footprint_body_x_max_{0.935};
   double footprint_body_y_min_{-0.34};

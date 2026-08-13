@@ -108,6 +108,19 @@ joystick_local_path_node:
     gate_side_pass_stick_angle_max: 0.95
     gate_side_pass_max_speed_mps: 0.10   # 触发时 |v| 须低于此值
     gate_side_pass_body_clear_m: 0.35
+    gate_side_pass_width_min_m: 0.25   # 侧穿专用；正对 detect 仍用 gate_width_min_m=0.75
+    # 进入侧穿：左/右/前 forward strip（15cm 深度）任一有 point 即可，确认贴障需脱困
+    gate_side_pass_enter_forward_cloud_enable: true
+    gate_side_pass_enter_check_depth_m: 0.15
+    gate_side_pass_enter_forward_strip_x: [0.685, 0.935, 0.685]
+    gate_side_pass_enter_forward_strip_y_min: [0.2, -0.2, -0.34]
+    gate_side_pass_enter_forward_strip_y_max: [0.34, 0.2, -0.2]
+    # 自然退出（bisector/border）前：左右前角 forward strip 须无点云，逻辑同 cmd_vel side_pass_crawl_check_depth_m
+    gate_side_pass_exit_forward_clear_enable: true
+    gate_side_pass_exit_check_depth_m: 0.10
+    gate_side_pass_exit_forward_strip_x: [0.685, 0.685]
+    gate_side_pass_exit_forward_strip_y_min: [0.2, -0.34]
+    gate_side_pass_exit_forward_strip_y_max: [0.34, -0.2]
     narrow_gate_side_pass_mode_topic: "/mppi/narrow_gate_side_pass_mode"
 
     # 过窄门模式：匹配窄门且车头中心距门中心 <= gate_pass_mode_enter_m 时激活。
