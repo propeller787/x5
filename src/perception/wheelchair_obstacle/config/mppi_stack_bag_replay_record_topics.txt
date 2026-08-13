@@ -11,6 +11,7 @@
 /local_costmap/published_footprint
 /mppi/local_intent_path
 /mppi/narrow_gate_pass_mode
+/mppi/narrow_gate_side_pass_mode
 /mppi/gate_markers
 /mppi/gate_memory
 /mppi/gate_memory/state

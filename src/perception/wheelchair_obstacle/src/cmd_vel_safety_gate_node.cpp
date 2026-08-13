@@ -9,6 +9,7 @@
 //   - tiered wz cap from nearby obstacle-point density
 //   - gear vx cap from /vlago/car/info (1-4 gear -> configurable kph limits)
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
+//   - side pass crawl (/mppi/narrow_gate_side_pass_mode): skip MPPI; footprint 5cm forward/lateral strips + crawl
 //     (forward -> no reverse, backward -> no forward; lateral -> no opposite turn); stop on release
 //   - after narrow gate exit: linear vx ramp-up to avoid sudden acceleration
 //   - vx accel limit: max 1 m/s^2 when speeding up forward/reverse; decel/brake unchanged
@@ -171,6 +172,63 @@ public:
     narrow_gate_exit_ramp_vx_target_ = declare_parameter<double>(
       "narrow_gate_exit_ramp_vx_target", 1.50);
 
+    narrow_gate_side_pass_mode_topic_ = declare_parameter<std::string>(
+      "narrow_gate_side_pass_mode_topic", "/mppi/narrow_gate_side_pass_mode");
+    side_pass_crawl_check_depth_m_ = declare_parameter<double>(
+      "side_pass_crawl_check_depth_m", 0.05);
+    side_pass_crawl_forward_strip_x_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_forward_strip_x", {0.685, 0.935, 0.685});
+    side_pass_crawl_forward_strip_y_min_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_forward_strip_y_min", {0.2, -0.2, -0.34});
+    side_pass_crawl_forward_strip_y_max_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_forward_strip_y_max", {0.34, 0.2, -0.2});
+    if (side_pass_crawl_forward_strip_x_.size() !=
+      side_pass_crawl_forward_strip_y_min_.size() ||
+      side_pass_crawl_forward_strip_x_.size() !=
+      side_pass_crawl_forward_strip_y_max_.size())
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "side_pass forward strip array size mismatch; using defaults");
+      side_pass_crawl_forward_strip_x_ = {0.685, 0.935, 0.685};
+      side_pass_crawl_forward_strip_y_min_ = {0.2, -0.2, -0.34};
+      side_pass_crawl_forward_strip_y_max_ = {0.34, 0.2, -0.2};
+    }
+    if (side_pass_crawl_forward_strip_x_.empty()) {
+      side_pass_crawl_forward_strip_x_ = {0.685, 0.935, 0.685};
+      side_pass_crawl_forward_strip_y_min_ = {0.2, -0.2, -0.34};
+      side_pass_crawl_forward_strip_y_max_ = {0.34, 0.2, -0.2};
+    }
+    side_pass_crawl_lateral_strip_x_min_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_lateral_strip_x_min", {-0.2, 0.685, 0.7});
+    side_pass_crawl_lateral_strip_x_max_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_lateral_strip_x_max", {0.685, 0.7, 0.935});
+    side_pass_crawl_lateral_strip_y_edge_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_lateral_strip_y_edge", {0.33, 0.34, 0.20});
+    if (side_pass_crawl_lateral_strip_x_min_.size() !=
+      side_pass_crawl_lateral_strip_x_max_.size() ||
+      side_pass_crawl_lateral_strip_x_min_.size() !=
+      side_pass_crawl_lateral_strip_y_edge_.size())
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "side_pass lateral strip array size mismatch; using defaults");
+      side_pass_crawl_lateral_strip_x_min_ = {-0.2, 0.685, 0.7};
+      side_pass_crawl_lateral_strip_x_max_ = {0.685, 0.7, 0.935};
+      side_pass_crawl_lateral_strip_y_edge_ = {0.33, 0.34, 0.20};
+    }
+    if (side_pass_crawl_lateral_strip_x_min_.empty()) {
+      side_pass_crawl_lateral_strip_x_min_ = {-0.2, 0.685, 0.7};
+      side_pass_crawl_lateral_strip_x_max_ = {0.685, 0.7, 0.935};
+      side_pass_crawl_lateral_strip_y_edge_ = {0.33, 0.34, 0.20};
+    }
+    side_pass_crawl_vx_mps_ = declare_parameter<double>("side_pass_crawl_vx_mps", 0.10);
+    side_pass_crawl_wz_rps_ = declare_parameter<double>("side_pass_crawl_wz_rps", 0.10);
+    side_pass_crawl_rocker_forward_min_ = declare_parameter<double>(
+      "side_pass_crawl_rocker_forward_min", 5.0);
+    side_pass_crawl_rocker_lateral_min_ = declare_parameter<double>(
+      "side_pass_crawl_rocker_lateral_min", 5.0);
+
     if (narrow_gate_exit_ramp_sec_ < 0.05) {
       narrow_gate_exit_ramp_sec_ = 0.05;
     }
@@ -214,6 +272,10 @@ public:
       narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
       std::bind(&CmdVelSafetyGateNode::onNarrowGatePassMode, this, std::placeholders::_1));
 
+    narrow_gate_side_pass_mode_sub_ = create_subscription<Bool>(
+      narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&CmdVelSafetyGateNode::onNarrowGateSidePassMode, this, std::placeholders::_1));
+
     out_pub_ = create_publisher<Twist>(out_topic_, 10);
     wz_tier_pub_ = create_publisher<UInt8>(
       std::string(get_name()) + "/wz_density_tier", 10);
@@ -232,7 +294,8 @@ public:
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
       "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d gear_vx_cap=%d "
       "gear_vx_kph=[%.0f,%.0f,%.0f,%.0f] narrow_gate_vx_max=%.2f "
-      "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s) vx_accel_limit=%d(%.1fm/s^2)",
+      "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s) vx_accel_limit=%d(%.1fm/s^2) "
+      "side_pass_crawl=%.2fm/s/%.2frps forward_strips=%zu depth=%.0fmm",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
       obstacle_topic_.c_str(), car_info_topic_.c_str(), out_topic_.c_str(),
@@ -248,13 +311,43 @@ public:
       narrow_gate_vx_max_,
       narrow_gate_exit_ramp_enable_ ? 1 : 0,
       narrow_gate_exit_ramp_sec_, narrow_gate_exit_ramp_vx_target_,
-      vx_accel_limit_enable_ ? 1 : 0, vx_accel_max_mps2_);
+      vx_accel_limit_enable_ ? 1 : 0, vx_accel_max_mps2_,
+      side_pass_crawl_vx_mps_, side_pass_crawl_wz_rps_,
+      side_pass_crawl_forward_strip_x_.size(),
+      side_pass_crawl_check_depth_m_ * 1000.0);
+    for (size_t i = 0; i < side_pass_crawl_forward_strip_x_.size(); ++i) {
+      RCLCPP_INFO(
+        get_logger(),
+        "  side_pass forward strip[%zu]: x=[%.3f, %.3f] y=[%.3f, %.3f]",
+        i,
+        side_pass_crawl_forward_strip_x_[i],
+        side_pass_crawl_forward_strip_x_[i] + side_pass_crawl_check_depth_m_,
+        side_pass_crawl_forward_strip_y_min_[i],
+        side_pass_crawl_forward_strip_y_max_[i]);
+    }
+    for (size_t i = 0; i < side_pass_crawl_lateral_strip_x_min_.size(); ++i) {
+      const double ye = side_pass_crawl_lateral_strip_y_edge_[i];
+      const double depth = side_pass_crawl_check_depth_m_;
+      RCLCPP_INFO(
+        get_logger(),
+        "  side_pass lateral strip[%zu]: x=[%.3f, %.3f] left_y=[%.3f, %.3f] "
+        "right_y=[%.3f, %.3f]",
+        i,
+        side_pass_crawl_lateral_strip_x_min_[i],
+        side_pass_crawl_lateral_strip_x_max_[i],
+        ye, ye + depth, -(ye + depth), -ye);
+    }
   }
 
 private:
   void onNarrowGatePassMode(const Bool::SharedPtr msg)
   {
     narrow_gate_pass_active_.store(msg->data, std::memory_order_relaxed);
+  }
+
+  void onNarrowGateSidePassMode(const Bool::SharedPtr msg)
+  {
+    narrow_gate_side_pass_crawl_active_.store(msg->data, std::memory_order_relaxed);
   }
 
   void onTwist(const Twist::SharedPtr msg)
@@ -427,6 +520,92 @@ private:
   int nearbyObstaclePointCount() const
   {
     return nearbyObstaclePointCountInRadius(density_check_radius_);
+  }
+
+  int countObstaclePointsInBox(
+    double x_min, double x_max, double y_min, double y_max) const
+  {
+    int count = 0;
+    std::lock_guard<std::mutex> lock(cloud_mutex_);
+    for (const auto & p : cloud_pts_) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x >= x_min && x <= x_max && y >= y_min && y <= y_max) {
+        ++count;
+      }
+    }
+    return count;
+  }
+
+  bool sidePassRoiClear(
+    double x_min, double x_max, double y_min, double y_max) const
+  {
+    return countObstaclePointsInBox(x_min, x_max, y_min, y_max) == 0;
+  }
+
+  bool sidePassForwardStripsClear() const
+  {
+    const double depth = side_pass_crawl_check_depth_m_;
+    for (size_t i = 0; i < side_pass_crawl_forward_strip_x_.size(); ++i) {
+      const double x0 = side_pass_crawl_forward_strip_x_[i];
+      if (!sidePassRoiClear(
+          x0, x0 + depth,
+          side_pass_crawl_forward_strip_y_min_[i],
+          side_pass_crawl_forward_strip_y_max_[i]))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool sidePassLateralStripsClear(bool left) const
+  {
+    const double depth = side_pass_crawl_check_depth_m_;
+    for (size_t i = 0; i < side_pass_crawl_lateral_strip_x_min_.size(); ++i) {
+      const double ye = side_pass_crawl_lateral_strip_y_edge_[i];
+      const double x0 = side_pass_crawl_lateral_strip_x_min_[i];
+      const double x1 = side_pass_crawl_lateral_strip_x_max_[i];
+      if (left) {
+        if (!sidePassRoiClear(x0, x1, ye, ye + depth)) {
+          return false;
+        }
+      } else if (!sidePassRoiClear(x0, x1, -(ye + depth), -ye)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Twist computeSidePassCrawlTwist(const rclcpp::Time & tnow) const
+  {
+    Twist out;
+    if (!rockerFresh(tnow)) {
+      return out;
+    }
+
+    const double rx = static_cast<double>(
+      latest_rocker_x_.load(std::memory_order_relaxed));
+    const double ry = static_cast<double>(
+      latest_rocker_y_.load(std::memory_order_relaxed));
+
+    if (rx > side_pass_crawl_rocker_forward_min_ &&
+      sidePassForwardStripsClear())
+    {
+      out.linear.x = side_pass_crawl_vx_mps_;
+    }
+
+    if (ry > side_pass_crawl_rocker_lateral_min_ &&
+      sidePassLateralStripsClear(true))
+    {
+      out.angular.z = side_pass_crawl_wz_rps_;
+    } else if (ry < -side_pass_crawl_rocker_lateral_min_ &&
+      sidePassLateralStripsClear(false))
+    {
+      out.angular.z = -side_pass_crawl_wz_rps_;
+    }
+
+    return out;
   }
 
   void beginNarrowGateExitRamp(const rclcpp::Time & tnow)
@@ -709,6 +888,27 @@ private:
       }
     }
 
+    const bool side_pass_crawl =
+      narrow_gate_side_pass_crawl_active_.load(std::memory_order_relaxed);
+    if (side_pass_crawl) {
+      Twist out;
+      if (!halted && !soft_stopping_ && cloud_ok && rockerFresh(tnow) &&
+        !rocker_released)
+      {
+        out = computeSidePassCrawlTwist(tnow);
+      } else if (!reason.empty()) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+          "side_pass crawl halted: %s", reason.c_str());
+      } else if (!cloud_ok) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+          "side_pass crawl halted: cloud stale");
+      }
+      out_pub_->publish(out);
+      last_pub_stamp_ = tnow;
+      last_out_ = out;
+      return;
+    }
+
     Twist target;
     bool input_ok = false;
     if (!soft_stopping_) {
@@ -879,6 +1079,7 @@ private:
   double release_soft_stop_vel_eps_{0.02};
 
   std::string narrow_gate_pass_mode_topic_;
+  std::string narrow_gate_side_pass_mode_topic_;
   double narrow_gate_vx_max_{0.20};
   bool narrow_gate_rocker_intent_filter_enable_{true};
   double narrow_gate_rocker_forward_min_{5.0};
@@ -886,9 +1087,21 @@ private:
   bool narrow_gate_exit_ramp_enable_{true};
   double narrow_gate_exit_ramp_sec_{2.0};
   double narrow_gate_exit_ramp_vx_target_{1.50};
+  double side_pass_crawl_check_depth_m_{0.05};
+  std::vector<double> side_pass_crawl_forward_strip_x_{0.685, 0.935, 0.685};
+  std::vector<double> side_pass_crawl_forward_strip_y_min_{0.2, -0.2, -0.34};
+  std::vector<double> side_pass_crawl_forward_strip_y_max_{0.34, 0.2, -0.2};
+  std::vector<double> side_pass_crawl_lateral_strip_x_min_{-0.2, 0.685, 0.7};
+  std::vector<double> side_pass_crawl_lateral_strip_x_max_{0.685, 0.7, 0.935};
+  std::vector<double> side_pass_crawl_lateral_strip_y_edge_{0.33, 0.34, 0.20};
+  double side_pass_crawl_vx_mps_{0.10};
+  double side_pass_crawl_wz_rps_{0.10};
+  double side_pass_crawl_rocker_forward_min_{5.0};
+  double side_pass_crawl_rocker_lateral_min_{5.0};
   bool vx_accel_limit_enable_{true};
   double vx_accel_max_mps2_{1.0};
   std::atomic<bool> narrow_gate_pass_active_{false};
+  std::atomic<bool> narrow_gate_side_pass_crawl_active_{false};
   bool narrow_gate_pass_prev_{false};
   bool narrow_gate_exit_ramp_active_{false};
   rclcpp::Time narrow_gate_exit_ramp_start_{0, 0, RCL_ROS_TIME};
@@ -900,6 +1113,7 @@ private:
   rclcpp::Subscription<CarInfo>::SharedPtr car_info_sub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_pass_mode_sub_;
+  rclcpp::Subscription<Bool>::SharedPtr narrow_gate_side_pass_mode_sub_;
   rclcpp::Publisher<Twist>::SharedPtr out_pub_;
   rclcpp::Publisher<UInt8>::SharedPtr wz_tier_pub_;
   rclcpp::TimerBase::SharedPtr timer_;

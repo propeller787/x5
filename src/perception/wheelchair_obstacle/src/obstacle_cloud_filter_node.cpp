@@ -77,29 +77,44 @@ public:
 
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
+    narrow_gate_side_pass_mode_topic_ = declare_parameter<std::string>(
+      "narrow_gate_side_pass_mode_topic", "/mppi/narrow_gate_side_pass_mode");
     narrow_gate_pass_mode_sub_ = create_subscription<std_msgs::msg::Bool>(
       narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
       std::bind(&ObstacleCloudFilterNode::onNarrowGatePassMode, this, std::placeholders::_1));
+    narrow_gate_side_pass_mode_sub_ = create_subscription<std_msgs::msg::Bool>(
+      narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(
+        &ObstacleCloudFilterNode::onNarrowGateSidePassMode, this,
+        std::placeholders::_1));
 
     RCLCPP_INFO(
       get_logger(),
-      "obstacle_cloud_filter started: in=%s out=%s frame=%s pass_mode=%s",
+      "obstacle_cloud_filter started: in=%s out=%s frame=%s pass_mode=%s side_pass=%s",
       input_cloud_topic_.c_str(), output_cloud_topic_.c_str(), target_frame_.c_str(),
-      narrow_gate_pass_mode_topic_.c_str());
+      narrow_gate_pass_mode_topic_.c_str(), narrow_gate_side_pass_mode_topic_.c_str());
   }
 
 private:
   void onNarrowGatePassMode(const std_msgs::msg::Bool::SharedPtr msg)
   {
-    setPassModeProfile(msg->data);
+    narrow_gate_pass_active_ = msg->data;
+    syncPassModeFilterProfile();
   }
 
-  void setPassModeProfile(bool pass_mode)
+  void onNarrowGateSidePassMode(const std_msgs::msg::Bool::SharedPtr msg)
   {
-    if (pass_mode == narrow_gate_pass_active_) {
+    narrow_gate_side_pass_active_ = msg->data;
+    syncPassModeFilterProfile();
+  }
+
+  void syncPassModeFilterProfile()
+  {
+    const bool pass_mode = narrow_gate_pass_active_ || narrow_gate_side_pass_active_;
+    if (pass_mode == pass_mode_filter_active_) {
       return;
     }
-    narrow_gate_pass_active_ = pass_mode;
+    pass_mode_filter_active_ = pass_mode;
     if (pass_mode) {
       range_ = normal_range_;
       range_.range_max = pass_range_max_m_;
@@ -114,7 +129,10 @@ private:
       self_mask_enabled_ = false;
       RCLCPP_INFO(
         get_logger(),
-        "pass_mode filter: res=%.2fm roi x=[%.2f,%.2f] y=[%.2f,%.2f] self_mask=off",
+        "pass_mode filter ON (forward=%s side_pass=%s): res=%.2fm roi x=[%.2f,%.2f] "
+        "y=[%.2f,%.2f] self_mask=off",
+        narrow_gate_pass_active_ ? "yes" : "no",
+        narrow_gate_side_pass_active_ ? "yes" : "no",
         pass_resolution_m_, roi_.x_min, roi_.x_max, roi_.y_min, roi_.y_max);
     } else {
       range_ = normal_range_;
@@ -535,7 +553,10 @@ private:
   double marker_period_sec_ = 1.0;
 
   std::string narrow_gate_pass_mode_topic_;
+  std::string narrow_gate_side_pass_mode_topic_;
   bool narrow_gate_pass_active_{false};
+  bool narrow_gate_side_pass_active_{false};
+  bool pass_mode_filter_active_{false};
   double pass_resolution_m_{0.02};
   double pass_obstacle_margin_m_{1.00};
   double pass_body_front_x_m_{0.935};
@@ -547,6 +568,7 @@ private:
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr narrow_gate_pass_mode_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr narrow_gate_side_pass_mode_sub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr output_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr self_mask_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr roi_marker_pub_;

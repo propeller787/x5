@@ -5,10 +5,12 @@
 //   Backward sector (60 deg + hysteresis): Cartesian goal behind vehicle,
 //   path yaw fixed at current heading -> MPPI drives vx<0 (reverse avoid, no U-turn).
 //   Pure lateral (|rx| deadbanded) -> in-place turn.
-//   Forward + narrow gate: detect/track up to gate_detect_speed_max_mps while approaching;
+//   Forward + narrow gate (head-on): bilateral cloud scan along body +x only;
+//     oblique/side crossing uses gate_side_pass crawl (safety_gate direct vx/wz, skip MPPI).
 //     pass_mode enters ONLY when |odom|<=gate_creep_speed_max_mps; once active, keeps until
 //     body clear / intent timeout / front_to_gate (not odom overspeed). In pass_mode:
 //     gate distance refreshed from odom anchor + cloud; zero footprint padding;
+//     side_pass memory match: center from odom memory, width from live bilateral cloud slice.
 //
 // MPPI warm-start reset (stick enters dead zone only):
 //   1. cancel FollowPath (handle or cancel_all_goals)
@@ -266,8 +268,6 @@ public:
       "gate_creep_intent_cross_slack_m", 0.35);
     gate_creep_intent_angle_delta_max_ = declare_parameter<double>(
       "gate_creep_intent_angle_delta_max", 0.95);
-    gate_creep_scan_body_forward_ = declare_parameter<bool>(
-      "gate_creep_scan_body_forward", true);
     gate_path_tail_m_ = declare_parameter<double>("gate_path_tail_m", 0.50);
     gate_hold_sec_ = declare_parameter<double>("gate_hold_sec", 0.25);
     gate_confirm_sec_ = declare_parameter<double>("gate_confirm_sec", 0.50);
@@ -287,6 +287,19 @@ public:
     gate_memory_min_side_points_ = declare_parameter<int>("gate_memory_min_side_points", 1);
     gate_memory_rearm_frames_ = declare_parameter<int>("gate_memory_rearm_frames", 3);
     gate_memory_update_alpha_ = declare_parameter<double>("gate_memory_update_alpha", 0.0);
+    gate_side_pass_enable_ = declare_parameter<bool>("gate_side_pass_enable", true);
+    gate_side_pass_min_pass_count_ = declare_parameter<int>("gate_side_pass_min_pass_count", 2);
+    gate_side_pass_trigger_dist_m_ = declare_parameter<double>(
+      "gate_side_pass_trigger_dist_m", 0.20);
+    gate_side_pass_stick_forward_min_ = declare_parameter<double>(
+      "gate_side_pass_stick_forward_min", 0.08);
+    gate_side_pass_stick_lateral_min_ = declare_parameter<double>(
+      "gate_side_pass_stick_lateral_min", 0.08);
+    gate_side_pass_stick_angle_max_ = declare_parameter<double>(
+      "gate_side_pass_stick_angle_max", 0.95);
+    gate_side_pass_max_speed_mps_ = declare_parameter<double>(
+      "gate_side_pass_max_speed_mps", 0.10);
+    gate_side_pass_body_clear_m_ = declare_parameter<double>("gate_side_pass_body_clear_m", 0.35);
     gate_pass_mode_enter_m_ = declare_parameter<double>("gate_pass_mode_enter_m", 0.80);
     gate_pass_front_center_x_m_ = declare_parameter<double>("gate_pass_front_center_x_m", 0.85);
     gate_pass_mode_exit_m_ = declare_parameter<double>("gate_pass_mode_exit_m", 0.95);
@@ -295,6 +308,8 @@ public:
     gate_pass_mode_hold_sec_ = declare_parameter<double>("gate_pass_mode_hold_sec", 0.25);
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
+    narrow_gate_side_pass_mode_topic_ = declare_parameter<std::string>(
+      "narrow_gate_side_pass_mode_topic", "/mppi/narrow_gate_side_pass_mode");
     gate_marker_enable_ = declare_parameter<bool>("gate_marker_enable", true);
     gate_marker_topic_ = declare_parameter<std::string>(
       "gate_marker_topic", "/mppi/gate_markers");
@@ -333,6 +348,8 @@ public:
     path_pub_ = create_publisher<Path>(intent_path_topic_, 1);
     narrow_gate_pass_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
       narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local());
+    narrow_gate_side_pass_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
+      narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local());
     if (gate_marker_enable_ && gate_path_enable_) {
       gate_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
         gate_marker_topic_, rclcpp::QoS(1).transient_local());
@@ -357,6 +374,7 @@ public:
     std_msgs::msg::Bool pass_mode_init;
     pass_mode_init.data = false;
     narrow_gate_pass_mode_pub_->publish(pass_mode_init);
+    narrow_gate_side_pass_mode_pub_->publish(pass_mode_init);
     action_client_ = rclcpp_action::create_client<FollowPath>(this, action_name_);
 
     const double period = 1.0 / std::max(0.1, send_rate_hz_);
@@ -478,7 +496,7 @@ private:
 
   void publishFootprintForGear(int gear)
   {
-    if (narrow_gate_pass_active_) {
+    if (narrow_gate_pass_active_ || narrow_gate_side_pass_crawl_active_) {
       publishFootprintWithPadding(0.0);
       return;
     }
@@ -506,6 +524,91 @@ private:
     RCLCPP_INFO(
       get_logger(), "narrow_gate_pass_mode -> %s",
       active ? "ACTIVE" : "inactive");
+  }
+
+  void setSidePassCrawlMode(bool active, const rclcpp::Time & tnow, int memory_idx = -1)
+  {
+    if (active == narrow_gate_side_pass_crawl_active_) {
+      return;
+    }
+    narrow_gate_side_pass_crawl_active_ = active;
+    narrow_gate_side_pass_last_intent_stamp_ = tnow;
+    have_published_footprint_ = false;
+    if (active) {
+      side_pass_memory_gate_idx_ = memory_idx;
+      cancelActiveGoal();
+    } else {
+      side_pass_memory_gate_idx_ = -1;
+    }
+
+    std_msgs::msg::Bool msg;
+    msg.data = active;
+    narrow_gate_side_pass_mode_pub_->publish(msg);
+
+    RCLCPP_INFO(
+      get_logger(), "narrow_gate_side_pass_mode -> %s",
+      active ? "ACTIVE (crawl)" : "inactive");
+  }
+
+  void publishSidePassCrawlModeState()
+  {
+    std_msgs::msg::Bool msg;
+    msg.data = narrow_gate_side_pass_crawl_active_;
+    narrow_gate_side_pass_mode_pub_->publish(msg);
+  }
+
+  void clearSidePassCrawlMode(const rclcpp::Time & tnow)
+  {
+    setSidePassCrawlMode(false, tnow);
+  }
+
+  void updateSidePassCrawlMode(
+    const NarrowGateInfo & gate, double norm_x, double norm_y,
+    const Odometry & odom, const rclcpp::Time & tnow, int memory_idx)
+  {
+    const double border_dist = bodyBorderDistanceToPoint(
+      gate.distance_m, gate.center_y_m);
+
+    if (gateSidePassBodyCleared(gate)) {
+      setSidePassCrawlMode(false, tnow);
+      RCLCPP_INFO(get_logger(), "side_pass crawl exit: cleared along bisector");
+      return;
+    }
+
+    if (border_dist > gate_side_pass_trigger_dist_m_) {
+      if (narrow_gate_side_pass_crawl_active_) {
+        setSidePassCrawlMode(false, tnow);
+        RCLCPP_INFO(
+          get_logger(),
+          "side_pass crawl exit: border_dist=%.2fm > %.2fm",
+          border_dist, gate_side_pass_trigger_dist_m_);
+      }
+      return;
+    }
+
+    const bool intent_ok = stickPointsTowardSidePass(gate, norm_x, norm_y);
+    const bool speed_ok = vehiclePlanarSpeedMps(odom) < gate_side_pass_max_speed_mps_;
+    if (!narrow_gate_side_pass_crawl_active_) {
+      if (intent_ok && speed_ok) {
+        setSidePassCrawlMode(true, tnow, memory_idx);
+        RCLCPP_INFO(
+          get_logger(),
+          "side_pass crawl enter: border_dist=%.2fm gate body=(%.2f, %.2f) idx=%d",
+          border_dist, gate.distance_m, gate.center_y_m, memory_idx);
+      }
+      return;
+    }
+
+    if (intent_ok) {
+      narrow_gate_side_pass_last_intent_stamp_ = tnow;
+    } else if ((tnow - narrow_gate_side_pass_last_intent_stamp_).seconds() >
+      gate_pass_mode_hold_sec_)
+    {
+      setSidePassCrawlMode(false, tnow);
+      RCLCPP_INFO(
+        get_logger(), "side_pass crawl exit: intent timeout (%.2fs)",
+        (tnow - narrow_gate_side_pass_last_intent_stamp_).seconds());
+    }
   }
 
   void publishNarrowGatePassModeState()
@@ -850,6 +953,21 @@ private:
     return gate.distance_m <= gate_pass_mode_body_clear_x_m_;
   }
 
+  bool gateSidePassBodyCleared(const NarrowGateInfo & gate) const
+  {
+    const double cx = gate.distance_m;
+    const double cy = gate.center_y_m;
+    const double ex = std::cos(gate.axis_yaw_body);
+    const double ey = std::sin(gate.axis_yaw_body);
+    const double along = (-cx) * ex + (-cy) * ey;
+    return along >= gate_side_pass_body_clear_m_;
+  }
+
+  bool gatePassBodyCleared(const NarrowGateInfo & gate) const
+  {
+    return gateBodyCleared(gate);
+  }
+
   void updateNarrowGatePassMode(
     const NarrowGateInfo & gate, double norm_x, double norm_y,
     const Odometry & odom, const rclcpp::Time & tnow)
@@ -858,10 +976,11 @@ private:
       intentMatchesTrackDirection(norm_x, norm_y, odom);
     const double front_to_gate = gateFrontCenterToGateM(gate);
 
-    if (gateBodyCleared(gate)) {
+    if (gatePassBodyCleared(gate)) {
       setNarrowGatePassMode(false, tnow);
       RCLCPP_INFO(
-        get_logger(), "narrow_gate_pass_mode exit: body cleared gate x=%.2fm",
+        get_logger(),
+        "narrow_gate_pass_mode exit: body cleared gate x=%.2fm",
         gate.distance_m);
       return;
     }
@@ -952,6 +1071,7 @@ private:
           }
           resetGateTracking();
           clearNarrowGatePassMode(tnow);
+          clearSidePassCrawlMode(tnow);
           publishGateMarkers(*odom);
           return;
         }
@@ -979,6 +1099,7 @@ private:
     }
     if (use_spatial_range_ && gate_path_enable_) {
       publishNarrowGatePassModeState();
+      publishSidePassCrawlModeState();
       if (footprint_publish_enable_) {
         int gear = gear_default_index_;
         {
@@ -990,6 +1111,13 @@ private:
         publishFootprintForGear(gear);
       }
     }
+
+    if (narrow_gate_side_pass_crawl_active_) {
+      cancelActiveGoal();
+      publishEmptyPath();
+      return;
+    }
+
     if (!mppiResetQuietElapsed()) {
       return;
     }
@@ -1123,9 +1251,37 @@ private:
       }
       path = buildPathToBodyOffset(*odom, dx_body, dy_body, stick_theta);
       if (gate_path_enable_ && sector == DriveSector::Forward) {
-        if (narrow_gate_pass_active_) {
+        const auto side_pass_local_pts =
+          gate_side_pass_enable_ ? fetchLocalCloudPoints(tnow) :
+          std::vector<std::pair<float, float>>{};
+        if (gate_side_pass_enable_) {
           std::lock_guard<std::mutex> lock(gate_mutex_);
-          if (have_last_gate_ && refreshPassModeGateUnlocked(tnow, *odom, norm_x, norm_y)) {
+          if (const auto mem = findSidePassMemorizedGateUnlocked(
+              *odom, norm_x, norm_y, side_pass_local_pts))
+          {
+            last_gate_ = mem->first;
+            have_last_gate_ = true;
+            updateSidePassCrawlMode(
+              last_gate_, norm_x, norm_y, *odom, tnow, mem->second);
+            if (narrow_gate_side_pass_crawl_active_) {
+              refreshSidePassMemoryGateUnlocked(
+                *odom, norm_x, norm_y, side_pass_local_pts);
+            }
+          } else if (narrow_gate_side_pass_crawl_active_ && have_last_gate_) {
+            updateSidePassCrawlMode(
+              last_gate_, norm_x, norm_y, *odom, tnow, side_pass_memory_gate_idx_);
+          } else if (narrow_gate_side_pass_crawl_active_) {
+            clearSidePassCrawlMode(tnow);
+          }
+        } else if (narrow_gate_side_pass_crawl_active_) {
+          clearSidePassCrawlMode(tnow);
+        }
+
+        if (!narrow_gate_side_pass_crawl_active_ && narrow_gate_pass_active_) {
+          std::lock_guard<std::mutex> lock(gate_mutex_);
+          if (have_last_gate_ &&
+            refreshPassModeGateUnlocked(tnow, *odom, norm_x, norm_y))
+          {
             updateNarrowGatePassMode(last_gate_, norm_x, norm_y, *odom, tnow);
             if (narrow_gate_pass_active_) {
               NarrowGateInfo path_gate = last_gate_;
@@ -1137,13 +1293,18 @@ private:
                 last_gate_.distance_m, gateFrontCenterToGateM(last_gate_),
                 last_gate_.width_m, last_gate_.center_y_m);
             }
-          } else if (narrow_gate_pass_active_) {
+          } else {
             clearNarrowGatePassMode(tnow);
           }
-        } else if (isVehicleGateDetectSpeed(*odom)) {
+        } else if (!narrow_gate_side_pass_crawl_active_ &&
+          isVehicleGateDetectSpeed(*odom) &&
+          !isStickLateralIntent(norm_x, norm_y))
+        {
           const auto gate = detectNarrowGate(tnow, *odom, norm_x, norm_y);
           if (gate) {
-            updateNarrowGatePassMode(*gate, norm_x, norm_y, *odom, tnow);
+            if (isVehicleCreepOrStopped(*odom)) {
+              updateNarrowGatePassMode(*gate, norm_x, norm_y, *odom, tnow);
+            }
             NarrowGateInfo path_gate = *gate;
             if (narrow_gate_pass_active_) {
               path_gate.confirmed = true;
@@ -1156,12 +1317,17 @@ private:
               narrow_gate_pass_active_ ? " [pass_mode]" : "",
               gate->distance_m, gateFrontCenterToGateM(*gate),
               gate->width_m, gate->center_y_m);
+          } else if (!isVehicleGateDetectSpeed(*odom)) {
+            resetGateTracking();
+            clearNarrowGatePassMode(tnow);
           } else {
             clearNarrowGatePassMode(tnow);
           }
-        } else {
-          resetGateTracking();
-          clearNarrowGatePassMode(tnow);
+        } else if (!narrow_gate_side_pass_crawl_active_) {
+          if (!isVehicleGateDetectSpeed(*odom)) {
+            resetGateTracking();
+            clearNarrowGatePassMode(tnow);
+          }
         }
       } else if (gate_path_enable_) {
         clearNarrowGatePassMode(tnow);
@@ -1265,36 +1431,29 @@ private:
     return local;
   }
 
+  std::vector<std::pair<float, float>> fetchLocalCloudPoints(
+    const rclcpp::Time & tnow) const
+  {
+    bool cloud_ok = false;
+    std::vector<std::pair<float, float>> pts;
+    {
+      std::lock_guard<std::mutex> lock(cloud_mutex_);
+      cloud_ok = have_cloud_ &&
+        (tnow - latest_cloud_stamp_).seconds() <= obstacle_timeout_;
+      if (cloud_ok) {
+        pts = cloud_pts_;
+      }
+    }
+    if (!cloud_ok) {
+      return {};
+    }
+    return filterLocalCloudPoints(pts);
+  }
+
   bool isStickLateralIntent(double norm_x, double norm_y) const
   {
     return std::abs(norm_y) / std::max(std::abs(norm_x), 1e-3) >=
            gate_intent_lateral_ratio_min_;
-  }
-
-  std::vector<std::pair<float, float>> filterLocalCloudPointsForGate(
-    const std::vector<std::pair<float, float>> & pts,
-    double norm_x, double norm_y) const
-  {
-    const auto local = filterLocalCloudPoints(pts);
-    if (!isStickLateralIntent(norm_x, norm_y)) {
-      return local;
-    }
-
-    const double stick_theta = std::atan2(norm_y, norm_x);
-    const double half_wedge = gate_stick_wedge_half_deg_ * M_PI / 180.0;
-    std::vector<std::pair<float, float>> wedge;
-    wedge.reserve(local.size());
-    for (const auto & p : local) {
-      if (static_cast<double>(p.first) < gate_scan_dist_min_m_ - 0.05) {
-        continue;
-      }
-      const double pt_theta = std::atan2(
-        static_cast<double>(p.second), static_cast<double>(p.first));
-      if (std::abs(normalizeAngle(pt_theta - stick_theta)) <= half_wedge) {
-        wedge.push_back(p);
-      }
-    }
-    return wedge.empty() ? local : wedge;
   }
 
   double vehiclePlanarSpeedMps(const Odometry & odom) const
@@ -1321,28 +1480,26 @@ private:
 
   double effectiveStickForwardMin(double norm_x, double norm_y, const Odometry & odom) const
   {
-    if (isStickLateralIntent(norm_x, norm_y)) {
-      return isGateCreepSpeed(odom) ?
-        std::min(gate_creep_stick_forward_min_, gate_lateral_stick_forward_min_) :
-        gate_lateral_stick_forward_min_;
-    }
+    (void)norm_x;
+    (void)norm_y;
     return isGateCreepSpeed(odom) ? gate_creep_stick_forward_min_ : gate_stick_forward_min_;
   }
 
-  double intentStickForwardMin(double norm_x, double norm_y) const
+  bool intentForwardTowardGate(
+    const NarrowGateInfo & gate, double norm_x, double norm_y,
+    const Odometry & odom) const
   {
-    return isStickLateralIntent(norm_x, norm_y) ?
-      gate_lateral_stick_forward_min_ : gate_stick_forward_min_;
-  }
-
-  bool intentTrendTowardOpening(
-    const NarrowGateInfo & gate, double norm_x, double norm_y) const
-  {
-    if (norm_x < gate_creep_stick_forward_min_) {
+    if (isStickLateralIntent(norm_x, norm_y)) {
+      return false;
+    }
+    const double fwd_min = isGateCreepSpeed(odom) ?
+      gate_creep_stick_forward_min_ : gate_stick_forward_min_;
+    if (norm_x < fwd_min) {
       return false;
     }
     const double stick_r = std::hypot(norm_x, norm_y);
-    if (stick_r < gate_creep_stick_min_) {
+    const double stick_min = isGateCreepSpeed(odom) ? gate_creep_stick_min_ : 1e-3;
+    if (stick_r < stick_min) {
       return false;
     }
     if (gate.distance_m < gate_scan_dist_min_m_ ||
@@ -1351,33 +1508,66 @@ private:
       return false;
     }
 
-    const double half_w = 0.5 * gate.width_m + gate_creep_intent_cross_slack_m_;
+    const double slack = isGateCreepSpeed(odom) ?
+      gate_creep_intent_cross_slack_m_ : gate_intent_cross_slack_m_;
+    const double half_w = 0.5 * gate.width_m + slack;
     if (std::abs(gate.center_y_m) > half_w) {
       return false;
     }
 
+    const double max_angle = isGateCreepSpeed(odom) ?
+      gate_creep_intent_angle_max_ : gate_intent_angle_delta_max_;
     const double stick_angle = std::atan2(norm_y, norm_x);
     const double gate_angle = std::atan2(
       gate.center_y_m, std::max(gate.distance_m, 0.05));
-    const double delta = std::abs(normalizeAngle(stick_angle - gate_angle));
-    if (delta > gate_creep_intent_angle_max_) {
+    if (std::abs(normalizeAngle(stick_angle - gate_angle)) > max_angle) {
       return false;
     }
 
     const double ux = norm_x / stick_r;
     const double uy = norm_y / stick_r;
-    const double along = gate.distance_m * ux + gate.center_y_m * uy;
-    return along >= 0.05;
+    return gate.distance_m * ux + gate.center_y_m * uy >= 0.05;
   }
 
   bool intentMatchesGate(
     const NarrowGateInfo & gate, double norm_x, double norm_y,
     const Odometry & odom) const
   {
-    if (isGateCreepSpeed(odom) && !isStickLateralIntent(norm_x, norm_y)) {
-      return intentTrendTowardOpening(gate, norm_x, norm_y);
+    return intentForwardTowardGate(gate, norm_x, norm_y, odom);
+  }
+
+  bool stickPointsTowardSidePass(
+    const NarrowGateInfo & gate, double norm_x, double norm_y) const
+  {
+    const double stick_r = std::hypot(norm_x, norm_y);
+    if (stick_r < 1e-3) {
+      return false;
     }
-    return intentCrossesOpening(gate, norm_x, norm_y);
+
+    const double cx = gate.distance_m;
+    const double cy = gate.center_y_m;
+
+    if (norm_x >= gate_side_pass_stick_forward_min_ && cx > 0.05) {
+      const double stick_angle = std::atan2(norm_y, norm_x);
+      const double gate_angle = std::atan2(cy, std::max(cx, 0.05));
+      if (std::abs(normalizeAngle(stick_angle - gate_angle)) <=
+        gate_side_pass_stick_angle_max_)
+      {
+        return true;
+      }
+    }
+
+    if (norm_y >= gate_side_pass_stick_lateral_min_ &&
+      cy > gate_center_y_deadband_m_)
+    {
+      return true;
+    }
+    if (norm_y <= -gate_side_pass_stick_lateral_min_ &&
+      cy < -gate_center_y_deadband_m_)
+    {
+      return true;
+    }
+    return false;
   }
 
   bool openingSliceValid(
@@ -1394,88 +1584,107 @@ private:
     return width >= gate_width_min_m_ && width <= gate_width_max_m_;
   }
 
-  std::optional<NarrowGateInfo> scanOpeningAlongRay(
-    const std::vector<std::pair<float, float>> & local_pts,
-    double theta, double norm_x, double norm_y, const Odometry & odom) const
+  struct OpeningSliceSample
   {
-    const double cos_t = std::cos(theta);
-    const double sin_t = std::sin(theta);
-    const double slice_half = std::max(0.03, gate_slice_half_width_m_);
+    double distance_m{0.0};
+    double center_y_m{0.0};
+    double width_m{0.0};
+    float left_y{0.0f};
+    float right_y{0.0f};
+  };
+
+  std::optional<OpeningSliceSample> sampleOpeningSliceAtDistance(
+    const std::vector<std::pair<float, float>> & local_pts,
+    double dist) const
+  {
     const double dist_step = std::max(0.03, gate_scan_dist_step_m_);
+    const double bin_half = dist_step * 0.5;
     const double center_clear = std::max(0.05, gate_center_clear_half_width_m_);
 
-    std::optional<NarrowGateInfo> best;
-    double best_score = std::numeric_limits<double>::infinity();
+    float left_y = std::numeric_limits<float>::infinity();
+    float right_y = -std::numeric_limits<float>::infinity();
+    float left_x_at = 0.0f;
+    float right_x_at = 0.0f;
+    int left_count = 0;
+    int right_count = 0;
 
-    for (
-      double dist = gate_scan_dist_min_m_;
-      dist <= gate_local_radius_m_ + 1e-6;
-      dist += dist_step)
+    for (const auto & p : local_pts) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x < dist - bin_half || x > dist + bin_half) {
+        continue;
+      }
+      if (y > center_clear) {
+        ++left_count;
+        if (y < left_y) {
+          left_y = static_cast<float>(y);
+          left_x_at = p.first;
+        }
+      } else if (y < -center_clear) {
+        ++right_count;
+        if (y > right_y) {
+          right_y = static_cast<float>(y);
+          right_x_at = p.first;
+        }
+      }
+    }
+
+    if (!std::isfinite(left_y) || !std::isfinite(right_y)) {
+      return std::nullopt;
+    }
+
+    if (std::abs(static_cast<double>(left_x_at) - static_cast<double>(right_x_at)) >
+      gate_opening_depth_m_)
     {
-      float left_y = std::numeric_limits<float>::infinity();
-      float right_y = -std::numeric_limits<float>::infinity();
-      int left_count = 0;
-      int right_count = 0;
+      return std::nullopt;
+    }
 
-      for (const auto & p : local_pts) {
-        const double xs = static_cast<double>(p.first) * cos_t +
-          static_cast<double>(p.second) * sin_t;
-        const double ys = -static_cast<double>(p.first) * sin_t +
-          static_cast<double>(p.second) * cos_t;
-        if (std::abs(xs - dist) > slice_half) {
-          continue;
-        }
-        if (ys > center_clear) {
-          ++left_count;
-          left_y = std::min(left_y, static_cast<float>(ys));
-        } else if (ys < -center_clear) {
-          ++right_count;
-          right_y = std::max(right_y, static_cast<float>(ys));
-        }
-      }
+    const double width = static_cast<double>(left_y - right_y);
+    if (!openingSliceValid(left_y, right_y, left_count, right_count, width)) {
+      return std::nullopt;
+    }
 
-      if (!std::isfinite(left_y) || !std::isfinite(right_y)) {
+    for (const auto & p : local_pts) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x < dist - bin_half - 0.04 || x > dist + bin_half + 0.04) {
         continue;
       }
+      if (std::abs(y) <= center_clear) {
+        return std::nullopt;
+      }
+    }
 
-      const double width = static_cast<double>(left_y - right_y);
-      if (!openingSliceValid(left_y, right_y, left_count, right_count, width)) {
+    OpeningSliceSample sample;
+    sample.distance_m = dist;
+    sample.center_y_m = 0.5 * (static_cast<double>(left_y) + static_cast<double>(right_y));
+    sample.width_m = width;
+    sample.left_y = left_y;
+    sample.right_y = right_y;
+    return sample;
+  }
+
+  std::optional<OpeningSliceSample> sampleOpeningBilateralNearDistance(
+    const std::vector<std::pair<float, float>> & local_pts,
+    double target_dist) const
+  {
+    const double tol = gate_lock_distance_delta_m_;
+    const double dist_step = std::max(0.03, gate_scan_dist_step_m_);
+    const double dist_min = std::max(gate_scan_dist_min_m_, target_dist - tol);
+    const double dist_max = std::min(gate_local_radius_m_, target_dist + tol);
+
+    std::optional<OpeningSliceSample> best;
+    double best_dist_err = std::numeric_limits<double>::infinity();
+
+    for (double dist = dist_min; dist <= dist_max + 1e-6; dist += dist_step) {
+      const auto slice = sampleOpeningSliceAtDistance(local_pts, dist);
+      if (!slice) {
         continue;
       }
-
-      bool center_blocked = false;
-      for (const auto & p : local_pts) {
-        const double xs = static_cast<double>(p.first) * cos_t +
-          static_cast<double>(p.second) * sin_t;
-        const double ys = -static_cast<double>(p.first) * sin_t +
-          static_cast<double>(p.second) * cos_t;
-        if (std::abs(xs - dist) > slice_half + 0.04) {
-          continue;
-        }
-        if (std::abs(ys) <= center_clear) {
-          center_blocked = true;
-          break;
-        }
-      }
-      if (center_blocked) {
-        continue;
-      }
-
-      const double center_x = dist * cos_t;
-      const double center_y = dist * sin_t;
-
-      NarrowGateInfo gate;
-      gate.distance_m = center_x;
-      gate.center_y_m = center_y;
-      gate.width_m = width;
-      if (!intentMatchesGate(gate, norm_x, norm_y, odom)) {
-        continue;
-      }
-
-      const double score = openingIntentScore(center_x, center_y, norm_x, norm_y);
-      if (score < best_score) {
-        best_score = score;
-        best = gate;
+      const double err = std::abs(slice->distance_m - target_dist);
+      if (err < best_dist_err) {
+        best_dist_err = err;
+        best = slice;
       }
     }
     return best;
@@ -1486,8 +1695,6 @@ private:
     double norm_x, double norm_y, const Odometry & odom) const
   {
     const double dist_step = std::max(0.03, gate_scan_dist_step_m_);
-    const double bin_half = dist_step * 0.5;
-    const double center_clear = std::max(0.05, gate_center_clear_half_width_m_);
 
     std::optional<NarrowGateInfo> best;
     double best_score = std::numeric_limits<double>::infinity();
@@ -1497,77 +1704,21 @@ private:
       dist <= gate_local_radius_m_ + 1e-6;
       dist += dist_step)
     {
-      float left_y = std::numeric_limits<float>::infinity();
-      float right_y = -std::numeric_limits<float>::infinity();
-      float left_x_at = 0.0f;
-      float right_x_at = 0.0f;
-      int left_count = 0;
-      int right_count = 0;
-
-      for (const auto & p : local_pts) {
-        const double x = static_cast<double>(p.first);
-        const double y = static_cast<double>(p.second);
-        if (x < dist - bin_half || x > dist + bin_half) {
-          continue;
-        }
-        if (y > center_clear) {
-          ++left_count;
-          if (y < left_y) {
-            left_y = static_cast<float>(y);
-            left_x_at = p.first;
-          }
-        } else if (y < -center_clear) {
-          ++right_count;
-          if (y > right_y) {
-            right_y = static_cast<float>(y);
-            right_x_at = p.first;
-          }
-        }
-      }
-
-      if (!std::isfinite(left_y) || !std::isfinite(right_y)) {
+      const auto slice = sampleOpeningSliceAtDistance(local_pts, dist);
+      if (!slice) {
         continue;
       }
-
-      if (std::abs(static_cast<double>(left_x_at) - static_cast<double>(right_x_at)) >
-        gate_opening_depth_m_)
-      {
-        continue;
-      }
-
-      const double width = static_cast<double>(left_y - right_y);
-      if (!openingSliceValid(left_y, right_y, left_count, right_count, width)) {
-        continue;
-      }
-
-      bool center_blocked = false;
-      for (const auto & p : local_pts) {
-        const double x = static_cast<double>(p.first);
-        const double y = static_cast<double>(p.second);
-        if (x < dist - bin_half - 0.04 || x > dist + bin_half + 0.04) {
-          continue;
-        }
-        if (std::abs(y) <= center_clear) {
-          center_blocked = true;
-          break;
-        }
-      }
-      if (center_blocked) {
-        continue;
-      }
-
-      const double center_x = dist;
-      const double center_y = 0.5 * (static_cast<double>(left_y) + static_cast<double>(right_y));
 
       NarrowGateInfo gate;
-      gate.distance_m = center_x;
-      gate.center_y_m = center_y;
-      gate.width_m = width;
+      gate.distance_m = slice->distance_m;
+      gate.center_y_m = slice->center_y_m;
+      gate.width_m = slice->width_m;
       if (!intentMatchesGate(gate, norm_x, norm_y, odom)) {
         continue;
       }
 
-      const double score = openingIntentScore(center_x, center_y, norm_x, norm_y);
+      const double score = openingIntentScore(
+        slice->distance_m, slice->center_y_m, norm_x, norm_y);
       if (score < best_score) {
         best_score = score;
         best = gate;
@@ -1576,48 +1727,17 @@ private:
     return best;
   }
 
-  std::optional<NarrowGateInfo> scanOpeningFromLocalCloud(
+  std::optional<NarrowGateInfo> scanForwardGateFromLocalCloud(
     const std::vector<std::pair<float, float>> & local_pts,
-    double norm_x, double norm_y, const Odometry & odom,
-    bool always_try_body_forward) const
+    double norm_x, double norm_y, const Odometry & odom) const
   {
-    const double stick_theta = std::atan2(norm_y, norm_x);
-    std::optional<NarrowGateInfo> best;
-    double best_score = std::numeric_limits<double>::infinity();
-
-    auto consider = [&](const std::optional<NarrowGateInfo> & gate) {
-      if (!gate) {
-        return;
-      }
-      const double score = openingIntentScore(
-        gate->distance_m, gate->center_y_m, norm_x, norm_y);
-      if (score < best_score) {
-        best_score = score;
-        best = gate;
-      }
-    };
-
-    if (gate_detect_mode_ == "bilateral") {
-      consider(scanOpeningBilateral(local_pts, norm_x, norm_y, odom));
-    }
-
-    consider(scanOpeningAlongRay(local_pts, stick_theta, norm_x, norm_y, odom));
-
-    const bool lateral = isStickLateralIntent(norm_x, norm_y);
-    if (always_try_body_forward ||
-      (gate_creep_scan_body_forward_ &&
-        (isGateCreepSpeed(odom) || lateral) &&
-        std::abs(normalizeAngle(stick_theta)) > 0.05))
-    {
-      consider(scanOpeningAlongRay(local_pts, 0.0, norm_x, norm_y, odom));
-    }
-    return best;
+    return scanOpeningBilateral(local_pts, norm_x, norm_y, odom);
   }
 
   bool intentCrossesOpening(
     const NarrowGateInfo & gate, double norm_x, double norm_y) const
   {
-    if (norm_x < intentStickForwardMin(norm_x, norm_y)) {
+    if (norm_x < gate_lateral_stick_forward_min_) {
       return false;
     }
     const double stick_r = std::hypot(norm_x, norm_y);
@@ -1710,13 +1830,9 @@ private:
 
   double computeGateAxisYaw(const NarrowGateInfo & gate, double norm_y) const
   {
-    if (std::abs(gate.center_y_m) <= gate_center_y_deadband_m_) {
-      return 0.0;
-    }
-    const double side_sign =
-      (std::abs(gate.center_y_m) > 1e-3) ? ((gate.center_y_m > 0.0) ? 1.0 : -1.0) :
-      ((norm_y >= 0.0) ? 1.0 : -1.0);
-    return side_sign * (M_PI / 2.0);
+    (void)gate;
+    (void)norm_y;
+    return 0.0;
   }
 
   void bodyCenterToOdom(
@@ -1759,6 +1875,10 @@ private:
       if (gate_memory_half_width_m_ <= 0.0) {
         gate_memory_half_width_m_ = 0.34;
       }
+      footprint_body_x_min_ = gate_memory_body_x_min_m_;
+      footprint_body_x_max_ = gate_memory_body_x_max_m_;
+      footprint_body_y_min_ = -gate_memory_half_width_m_;
+      footprint_body_y_max_ = gate_memory_half_width_m_;
       return;
     }
 
@@ -1779,6 +1899,27 @@ private:
     if (gate_memory_half_width_m_ <= 0.0) {
       gate_memory_half_width_m_ = fp_hw;
     }
+    footprint_body_x_min_ = fp_x_min;
+    footprint_body_x_max_ = fp_x_max;
+    footprint_body_y_min_ = -fp_hw;
+    footprint_body_y_max_ = fp_hw;
+  }
+
+  double bodyBorderDistanceToPoint(double bx, double by) const
+  {
+    double dx = 0.0;
+    if (bx < footprint_body_x_min_) {
+      dx = footprint_body_x_min_ - bx;
+    } else if (bx > footprint_body_x_max_) {
+      dx = bx - footprint_body_x_max_;
+    }
+    double dy = 0.0;
+    if (by < footprint_body_y_min_) {
+      dy = footprint_body_y_min_ - by;
+    } else if (by > footprint_body_y_max_) {
+      dy = by - footprint_body_y_max_;
+    }
+    return std::hypot(dx, dy);
   }
 
   struct GateMemorySideHit
@@ -1846,6 +1987,133 @@ private:
       }
     }
     return best_idx;
+  }
+
+  std::optional<NarrowGateInfo> narrowGateFromMemoryEntryUnlocked(
+    const GateMemoryEntry & entry, const Odometry & odom,
+    double norm_x, double norm_y,
+    const std::vector<std::pair<float, float>> & local_pts) const
+  {
+    double lx = 0.0;
+    double ly = 0.0;
+    double rx = 0.0;
+    double ry = 0.0;
+    double cx = 0.0;
+    double cy = 0.0;
+    odomCenterToBody(odom, entry.left_x_odom, entry.left_y_odom, lx, ly);
+    odomCenterToBody(odom, entry.right_x_odom, entry.right_y_odom, rx, ry);
+    odomCenterToBody(odom, entry.center_x_odom, entry.center_y_odom, cx, cy);
+
+    double width = 0.0;
+    double gate_line_yaw = 0.0;
+    bool have_geometry = false;
+
+    if (!local_pts.empty()) {
+      if (const auto slice = sampleOpeningBilateralNearDistance(local_pts, cx)) {
+        cx = slice->distance_m;
+        cy = slice->center_y_m;
+        width = slice->width_m;
+        gate_line_yaw = std::atan2(
+          static_cast<double>(slice->right_y) - static_cast<double>(slice->left_y),
+          0.0);
+        have_geometry = true;
+      }
+    }
+
+    if (!have_geometry) {
+      width = std::hypot(rx - lx, ry - ly);
+      if (width < gate_width_min_m_ - 1e-3 || width > gate_width_max_m_ + 1e-3) {
+        return std::nullopt;
+      }
+      gate_line_yaw = std::atan2(ry - ly, rx - lx);
+    }
+
+    const double bisector_a = normalizeAngle(gate_line_yaw + M_PI_2);
+    const double bisector_b = normalizeAngle(gate_line_yaw - M_PI_2);
+    const double stick_yaw = std::atan2(norm_y, norm_x);
+    const double axis_yaw = std::abs(normalizeAngle(bisector_a - stick_yaw)) <=
+      std::abs(normalizeAngle(bisector_b - stick_yaw)) ?
+      bisector_a : bisector_b;
+
+    NarrowGateInfo gate;
+    gate.distance_m = cx;
+    gate.center_y_m = cy;
+    gate.width_m = width;
+    gate.axis_yaw_body = axis_yaw;
+    gate.confirmed = true;
+    return gate;
+  }
+
+  std::optional<std::pair<NarrowGateInfo, int>> findSidePassMemorizedGateUnlocked(
+    const Odometry & odom, double norm_x, double norm_y,
+    const std::vector<std::pair<float, float>> & local_pts) const
+  {
+    if (!gate_side_pass_enable_) {
+      return std::nullopt;
+    }
+    if (vehiclePlanarSpeedMps(odom) >= gate_side_pass_max_speed_mps_) {
+      return std::nullopt;
+    }
+
+    std::optional<std::pair<NarrowGateInfo, int>> best;
+    double best_dist = std::numeric_limits<double>::infinity();
+
+    for (int i = 0; i < static_cast<int>(memorized_gates_.size()); ++i) {
+      const auto & entry = memorized_gates_[static_cast<size_t>(i)];
+      if (entry.pass_count <= gate_side_pass_min_pass_count_) {
+        continue;
+      }
+
+      const auto gate = narrowGateFromMemoryEntryUnlocked(
+        entry, odom, norm_x, norm_y, local_pts);
+      if (!gate) {
+        continue;
+      }
+
+      const double border_dist = bodyBorderDistanceToPoint(
+        gate->distance_m, gate->center_y_m);
+      if (border_dist > gate_side_pass_trigger_dist_m_) {
+        continue;
+      }
+      if (!stickPointsTowardSidePass(*gate, norm_x, norm_y)) {
+        continue;
+      }
+
+      if (border_dist < best_dist) {
+        best_dist = border_dist;
+        best = std::make_pair(*gate, i);
+      }
+    }
+    return best;
+  }
+
+  bool refreshSidePassMemoryGateUnlocked(
+    const Odometry & odom, double norm_x, double norm_y,
+    const std::vector<std::pair<float, float>> & local_pts)
+  {
+    if (side_pass_memory_gate_idx_ < 0 ||
+      side_pass_memory_gate_idx_ >= static_cast<int>(memorized_gates_.size()))
+    {
+      return false;
+    }
+
+    const auto & entry = memorized_gates_[static_cast<size_t>(side_pass_memory_gate_idx_)];
+    const auto gate = narrowGateFromMemoryEntryUnlocked(
+      entry, odom, norm_x, norm_y, local_pts);
+    if (!gate) {
+      return false;
+    }
+
+    pass_mode_gate_odom_x_ = entry.center_x_odom;
+    pass_mode_gate_odom_y_ = entry.center_y_odom;
+    pass_mode_gate_width_m_ = gate->width_m;
+    pass_mode_gate_odom_valid_ = true;
+
+    last_gate_ = *gate;
+    have_last_gate_ = true;
+    gate_confirmed_ = true;
+    confirmed_gate_ = *gate;
+    return true;
   }
 
   void bodyPointToOdom(
@@ -2079,6 +2347,9 @@ private:
     const rclcpp::Time & tnow, const Odometry & odom,
     double norm_x, double norm_y) const
   {
+    if (isStickLateralIntent(norm_x, norm_y)) {
+      return std::nullopt;
+    }
     if (norm_x < effectiveStickForwardMin(norm_x, norm_y, odom)) {
       return std::nullopt;
     }
@@ -2101,18 +2372,21 @@ private:
       return std::nullopt;
     }
 
-    const auto local_pts = filterLocalCloudPointsForGate(pts, norm_x, norm_y);
+    const auto local_pts = filterLocalCloudPoints(pts);
     if (local_pts.empty()) {
       return std::nullopt;
     }
 
-    return scanOpeningFromLocalCloud(local_pts, norm_x, norm_y, odom, false);
+    return scanForwardGateFromLocalCloud(local_pts, norm_x, norm_y, odom);
   }
 
   std::optional<NarrowGateInfo> scanPassModeGateFromCloud(
     const rclcpp::Time & tnow, const Odometry & odom,
     double norm_x, double norm_y) const
   {
+    if (isStickLateralIntent(norm_x, norm_y)) {
+      return std::nullopt;
+    }
     if (norm_x < gate_creep_stick_forward_min_) {
       return std::nullopt;
     }
@@ -2135,12 +2409,12 @@ private:
       return std::nullopt;
     }
 
-    const auto local_pts = filterLocalCloudPointsForGate(pts, norm_x, norm_y);
+    const auto local_pts = filterLocalCloudPoints(pts);
     if (local_pts.empty()) {
       return std::nullopt;
     }
 
-    return scanOpeningFromLocalCloud(local_pts, norm_x, norm_y, odom, true);
+    return scanForwardGateFromLocalCloud(local_pts, norm_x, norm_y, odom);
   }
 
   bool refreshPassModeGateUnlocked(
@@ -2202,6 +2476,10 @@ private:
   std::optional<NarrowGateInfo> detectNarrowGate(
     const rclcpp::Time & tnow, const Odometry & odom, double norm_x, double norm_y)
   {
+    if (isStickLateralIntent(norm_x, norm_y)) {
+      resetGateTracking();
+      return std::nullopt;
+    }
     if (norm_x < effectiveStickForwardMin(norm_x, norm_y, odom)) {
       resetGateTracking();
       return std::nullopt;
@@ -2250,13 +2528,10 @@ private:
   Path buildGateCenterlinePath(
     const Odometry & odom, const NarrowGateInfo & gate, double goal_x_body) const
   {
-    if (gate.confirmed) {
-      return buildConfirmedGateCenterlinePath(odom, gate, goal_x_body);
-    }
-    return buildTentativeGateCenterlinePath(odom, gate, goal_x_body);
+    return buildForwardGateCenterlinePath(odom, gate, goal_x_body);
   }
 
-  Path buildTentativeGateCenterlinePath(
+  Path buildForwardGateCenterlinePath(
     const Odometry & odom, const NarrowGateInfo & gate, double goal_x_body) const
   {
     Path path;
@@ -2305,95 +2580,6 @@ private:
       // Keep heading near current yaw so the vehicle enters the gate perpendicular
       // (along +x body), only xy bends toward the opening center.
       p.pose.orientation = quaternionFromYaw(yaw0);
-      path.poses.push_back(p);
-    }
-
-    return path;
-  }
-
-  Path buildConfirmedGateCenterlinePath(
-    const Odometry & odom, const NarrowGateInfo & gate, double goal_x_body) const
-  {
-    Path path;
-    path.header.stamp = now();
-    path.header.frame_id = global_frame_;
-
-    const double x0 = odom.pose.pose.position.x;
-    const double y0 = odom.pose.pose.position.y;
-    const double yaw0 = yawFromQuaternion(odom.pose.pose.orientation);
-    const double cos_y = std::cos(yaw0);
-    const double sin_y = std::sin(yaw0);
-
-    const double x_end = gate.distance_m;
-    const double y_end = gate.center_y_m;
-    const double axis_yaw = gate.axis_yaw_body;
-    const double yaw_entry = normalizeAngle(yaw0 + axis_yaw);
-    const double side_sign = (y_end >= 0.0) ? 1.0 : -1.0;
-
-    const double turn_lead_m = std::clamp(
-      0.30 + 0.45 * std::abs(y_end), 0.35, std::max(0.40, x_end - 0.10));
-    const double x_turn = std::clamp(
-      x_end - turn_lead_m, 0.15, std::max(0.15, x_end - 0.08));
-
-    const double curve_len = std::hypot(x_end - x_turn, y_end);
-    const double tangent_len0 = std::max(0.20, 0.75 * curve_len);
-    const double tangent_len1 = std::max(0.20, 0.75 * curve_len);
-    const double mx0 = tangent_len0;
-    const double my0 = 0.0;
-    const double mx1 = tangent_len1 * std::cos(axis_yaw);
-    const double my1 = tangent_len1 * std::sin(axis_yaw);
-
-    std::vector<BodyPoint> body_pts;
-    body_pts.push_back({0.0, 0.0});
-
-    const double approach_step = 0.08;
-    for (double x = approach_step; x < x_turn - 1e-6; x += approach_step) {
-      body_pts.push_back({x, 0.0});
-    }
-    if (body_pts.back().x < x_turn - 1e-6) {
-      body_pts.push_back({x_turn, 0.0});
-    }
-
-    const int hermite_steps = std::max(10, path_interpolation_steps_ / 2);
-    for (int i = 1; i <= hermite_steps; ++i) {
-      const double u = static_cast<double>(i) / static_cast<double>(hermite_steps);
-      body_pts.push_back(
-        hermitePoint(u, x_turn, 0.0, x_end, y_end, mx0, my0, mx1, my1));
-    }
-
-    const double tail_m = std::max(
-      gate_path_tail_m_,
-      std::clamp(0.45 + 0.25 * std::abs(y_end), 0.45, 0.80));
-    const double tail_step = 0.08;
-    if (std::abs(axis_yaw) < 1e-3) {
-      const double x_tail = std::max(x_end + tail_m, std::max(x_end, goal_x_body));
-      for (double x = x_end + tail_step; x <= x_tail + 1e-6; x += tail_step) {
-        body_pts.push_back({x, y_end});
-      }
-    } else {
-      for (double s = tail_step; s <= tail_m + 1e-6; s += tail_step) {
-        body_pts.push_back({x_end, y_end + side_sign * s});
-      }
-    }
-
-    for (const auto & bp : body_pts) {
-      PoseStamped p;
-      p.header = path.header;
-      p.pose.position.x = x0 + cos_y * bp.x - sin_y * bp.y;
-      p.pose.position.y = y0 + sin_y * bp.x + cos_y * bp.y;
-      p.pose.position.z = 0.0;
-
-      double yaw_path = yaw0;
-      if (bp.x >= x_turn - 1e-6) {
-        if (bp.x >= x_end - 1e-6 && std::abs(axis_yaw) > 1e-3) {
-          yaw_path = yaw_entry;
-        } else {
-          const double t = std::clamp(
-            (bp.x - x_turn) / std::max(x_end - x_turn, 1e-3), 0.0, 1.0);
-          yaw_path = lerpAngle(yaw0, yaw_entry, t);
-        }
-      }
-      p.pose.orientation = quaternionFromYaw(yaw_path);
       path.poses.push_back(p);
     }
 
@@ -2738,7 +2924,6 @@ private:
   double gate_creep_intent_angle_max_{0.95};
   double gate_creep_intent_cross_slack_m_{0.35};
   double gate_creep_intent_angle_delta_max_{0.95};
-  bool gate_creep_scan_body_forward_{true};
   double gate_path_tail_m_{0.50};
   double gate_hold_sec_{0.25};
   double gate_confirm_sec_{0.50};
@@ -2757,19 +2942,35 @@ private:
   int gate_memory_min_side_points_{1};
   int gate_memory_rearm_frames_{3};
   double gate_memory_update_alpha_{0.0};
+  bool gate_side_pass_enable_{true};
+  int gate_side_pass_min_pass_count_{2};
+  double gate_side_pass_trigger_dist_m_{0.20};
+  double gate_side_pass_stick_forward_min_{0.08};
+  double gate_side_pass_stick_lateral_min_{0.08};
+  double gate_side_pass_stick_angle_max_{0.95};
+  double gate_side_pass_max_speed_mps_{0.10};
+  double gate_side_pass_body_clear_m_{0.35};
+  double footprint_body_x_min_{-0.2};
+  double footprint_body_x_max_{0.935};
+  double footprint_body_y_min_{-0.34};
+  double footprint_body_y_max_{0.34};
   double gate_pass_mode_enter_m_{0.80};
   double gate_pass_front_center_x_m_{0.85};
   double gate_pass_mode_exit_m_{0.95};
   double gate_pass_mode_body_clear_x_m_{-0.45};
   double gate_pass_mode_hold_sec_{0.25};
   std::string narrow_gate_pass_mode_topic_;
+  std::string narrow_gate_side_pass_mode_topic_;
   bool gate_marker_enable_{true};
   std::string gate_marker_topic_;
   bool gate_memory_publish_enable_{true};
   std::string gate_memory_topic_;
   std::string gate_memory_state_topic_;
   bool narrow_gate_pass_active_{false};
+  bool narrow_gate_side_pass_crawl_active_{false};
+  int side_pass_memory_gate_idx_{-1};
   rclcpp::Time narrow_gate_pass_last_intent_stamp_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time narrow_gate_side_pass_last_intent_stamp_{0, 0, RCL_ROS_TIME};
   bool pass_mode_gate_odom_valid_{false};
   double pass_mode_gate_odom_x_{0.0};
   double pass_mode_gate_odom_y_{0.0};
@@ -2816,6 +3017,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Publisher<Path>::SharedPtr path_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_pass_mode_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_side_pass_mode_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_memory_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gate_memory_state_pub_;
