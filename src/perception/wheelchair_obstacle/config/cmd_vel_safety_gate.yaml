@@ -92,7 +92,7 @@ cmd_vel_safety_gate_node:
     # --- 侧身穿行 crawl（订阅 /mppi/narrow_gate_side_pass_mode，跳过 MPPI）---
     narrow_gate_side_pass_mode_topic: "/mppi/narrow_gate_side_pass_mode"
     # 前向：footprint 前三段 y 带，x 基准 0.685/0.935/0.685 各向 +x 延伸 check_depth
-    side_pass_crawl_check_depth_m: 0.05
+    side_pass_crawl_check_depth_m: 0.06
     side_pass_crawl_forward_strip_x: [0.685, 0.935, 0.685]
     side_pass_crawl_forward_strip_y_min: [0.2, -0.2, -0.34]
     side_pass_crawl_forward_strip_y_max: [0.34, 0.2, -0.2]

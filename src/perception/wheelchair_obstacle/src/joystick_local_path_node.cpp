@@ -7,6 +7,7 @@
 //   Pure lateral (|rx| deadbanded) -> in-place turn.
 //   Forward + narrow gate (head-on): bilateral cloud scan along body +x only;
 //     oblique/side crossing uses gate_side_pass crawl (safety_gate direct vx/wz, skip MPPI).
+//     proximity_side_pass: no memory gate; enter on left/right/front 10cm + slow; exit 15cm shell.
 //     pass_mode enters ONLY when |odom|<=gate_creep_speed_max_mps; once active, keeps until
 //     body clear / intent timeout / front_to_gate (not odom overspeed). In pass_mode:
 //     gate distance refreshed from odom anchor + cloud; zero footprint padding;
@@ -345,6 +346,17 @@ public:
       gate_side_pass_exit_forward_strip_y_min_ = {0.2, -0.34};
       gate_side_pass_exit_forward_strip_y_max_ = {0.34, -0.2};
     }
+    proximity_side_pass_enable_ = declare_parameter<bool>("proximity_side_pass_enable", true);
+    proximity_side_pass_enter_depth_m_ = declare_parameter<double>(
+      "proximity_side_pass_enter_depth_m", 0.10);
+    proximity_side_pass_exit_margin_m_ = declare_parameter<double>(
+      "proximity_side_pass_exit_margin_m", 0.15);
+    proximity_side_pass_max_speed_mps_ = declare_parameter<double>(
+      "proximity_side_pass_max_speed_mps", 0.10);
+    proximity_side_pass_confirm_frames_ = declare_parameter<int>(
+      "proximity_side_pass_confirm_frames", 10);
+    proximity_side_pass_exit_confirm_frames_ = declare_parameter<int>(
+      "proximity_side_pass_exit_confirm_frames", 5);
     gate_pass_mode_enter_m_ = declare_parameter<double>("gate_pass_mode_enter_m", 0.80);
     gate_pass_front_center_x_m_ = declare_parameter<double>("gate_pass_front_center_x_m", 0.85);
     gate_pass_mode_exit_m_ = declare_parameter<double>("gate_pass_mode_exit_m", 0.95);
@@ -505,6 +517,9 @@ private:
     cloud_pts_ = std::move(pts);
     latest_cloud_stamp_ = now();
     have_cloud_ = true;
+    if (proximity_side_pass_enable_) {
+      updateProximitySidePassCrawlModeFromCloud();
+    }
   }
 
   void onCarInfo(const CarInfo::SharedPtr msg)
@@ -571,28 +586,43 @@ private:
       active ? "ACTIVE" : "inactive");
   }
 
-  void setSidePassCrawlMode(bool active, const rclcpp::Time & tnow, int memory_idx = -1)
+  enum class SidePassSource { None, MemoryGate, Proximity };
+
+  void setSidePassCrawlMode(
+    bool active, const rclcpp::Time & tnow, int memory_idx = -1,
+    SidePassSource source = SidePassSource::MemoryGate)
   {
-    if (active == narrow_gate_side_pass_crawl_active_) {
+    if (active == narrow_gate_side_pass_crawl_active_ &&
+      (!active || side_pass_source_ == source))
+    {
       return;
     }
     narrow_gate_side_pass_crawl_active_ = active;
     narrow_gate_side_pass_last_intent_stamp_ = tnow;
     have_published_footprint_ = false;
     if (active) {
+      side_pass_source_ = source;
       side_pass_memory_gate_idx_ = memory_idx;
+      proximity_side_pass_enter_streak_ = 0;
+      proximity_side_pass_exit_streak_ = 0;
       cancelActiveGoal();
     } else {
+      side_pass_source_ = SidePassSource::None;
       side_pass_memory_gate_idx_ = -1;
+      proximity_side_pass_enter_streak_ = 0;
+      proximity_side_pass_exit_streak_ = 0;
     }
 
     std_msgs::msg::Bool msg;
     msg.data = active;
     narrow_gate_side_pass_mode_pub_->publish(msg);
 
+    const char * src =
+      source == SidePassSource::Proximity ? "proximity" :
+      source == SidePassSource::MemoryGate ? "memory_gate" : "none";
     RCLCPP_INFO(
-      get_logger(), "narrow_gate_side_pass_mode -> %s",
-      active ? "ACTIVE (crawl)" : "inactive");
+      get_logger(), "narrow_gate_side_pass_mode -> %s (%s)",
+      active ? "ACTIVE (crawl)" : "inactive", src);
   }
 
   void publishSidePassCrawlModeState()
@@ -671,6 +701,112 @@ private:
       }
     }
     return true;
+  }
+
+  bool proximitySidePassEnterRegionHasCloud(
+    const std::vector<std::pair<float, float>> & local_pts) const
+  {
+    if (local_pts.empty()) {
+      return false;
+    }
+    const double depth = proximity_side_pass_enter_depth_m_;
+    for (size_t i = 0; i < gate_side_pass_enter_forward_strip_x_.size(); ++i) {
+      if (forwardCornerStripHasPoint(
+          local_pts,
+          gate_side_pass_enter_forward_strip_x_[i], depth,
+          gate_side_pass_enter_forward_strip_y_min_[i],
+          gate_side_pass_enter_forward_strip_y_max_[i]))
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool proximitySidePassSurroundingClear(
+    const std::vector<std::pair<float, float>> & local_pts) const
+  {
+    if (local_pts.empty()) {
+      return false;
+    }
+    const double m = proximity_side_pass_exit_margin_m_;
+    const double x0 = footprint_body_x_min_ - m;
+    const double x1 = footprint_body_x_max_ + m;
+    const double y0 = footprint_body_y_min_ - m;
+    const double y1 = footprint_body_y_max_ + m;
+    for (const auto & p : local_pts) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void updateProximitySidePassCrawlModeFromCloud()
+  {
+    if (narrow_gate_pass_active_) {
+      proximity_side_pass_enter_streak_ = 0;
+      return;
+    }
+    if (narrow_gate_side_pass_crawl_active_ &&
+      side_pass_source_ == SidePassSource::MemoryGate)
+    {
+      return;
+    }
+
+    const rclcpp::Time tnow = now();
+    Odometry::SharedPtr odom;
+    {
+      std::lock_guard<std::mutex> lock(odom_mutex_);
+      odom = latest_odom_;
+    }
+    if (!odom) {
+      proximity_side_pass_enter_streak_ = 0;
+      return;
+    }
+
+    const auto local_pts = filterLocalCloudPoints(cloud_pts_);
+
+    if (narrow_gate_side_pass_crawl_active_ &&
+      side_pass_source_ == SidePassSource::Proximity)
+    {
+      if (proximitySidePassSurroundingClear(local_pts)) {
+        ++proximity_side_pass_exit_streak_;
+        if (proximity_side_pass_exit_streak_ >= proximity_side_pass_exit_confirm_frames_) {
+          setSidePassCrawlMode(false, tnow);
+          RCLCPP_INFO(
+            get_logger(),
+            "proximity side_pass crawl exit: surrounding %.0fcm clear",
+            proximity_side_pass_exit_margin_m_ * 100.0);
+        }
+      } else {
+        proximity_side_pass_exit_streak_ = 0;
+      }
+      return;
+    }
+
+    const bool speed_ok =
+      vehiclePlanarSpeedMps(*odom) < proximity_side_pass_max_speed_mps_;
+    const bool blocked = proximitySidePassEnterRegionHasCloud(local_pts);
+    const bool rocker_ok = isRockerOutOfDeadband(tnow);
+    if (!speed_ok || !blocked || !rocker_ok) {
+      proximity_side_pass_enter_streak_ = 0;
+      return;
+    }
+
+    ++proximity_side_pass_enter_streak_;
+    if (proximity_side_pass_enter_streak_ >= proximity_side_pass_confirm_frames_) {
+      setSidePassCrawlMode(true, tnow, -1, SidePassSource::Proximity);
+      RCLCPP_INFO(
+        get_logger(),
+        "proximity side_pass crawl enter: |v|<%.2f blocked %.0fcm rocker active x%d frames",
+        proximity_side_pass_max_speed_mps_,
+        proximity_side_pass_enter_depth_m_ * 100.0,
+        proximity_side_pass_confirm_frames_);
+      proximity_side_pass_enter_streak_ = 0;
+    }
   }
 
   void updateSidePassCrawlMode(
@@ -1385,7 +1521,9 @@ private:
         const auto side_pass_local_pts =
           gate_side_pass_enable_ ? fetchLocalCloudPoints(tnow) :
           std::vector<std::pair<float, float>>{};
-        if (gate_side_pass_enable_) {
+        if (gate_side_pass_enable_ &&
+          side_pass_source_ != SidePassSource::Proximity)
+        {
           std::lock_guard<std::mutex> lock(gate_mutex_);
           if (const auto mem = findSidePassMemorizedGateUnlocked(
               *odom, norm_x, norm_y, side_pass_local_pts))
@@ -1400,6 +1538,7 @@ private:
                 *odom, norm_x, norm_y, side_pass_local_pts);
             }
           } else if (narrow_gate_side_pass_crawl_active_ &&
+            side_pass_source_ == SidePassSource::MemoryGate &&
             side_pass_memory_gate_idx_ >= 0 &&
             side_pass_memory_gate_idx_ <
             static_cast<int>(memorized_gates_.size()))
@@ -1417,10 +1556,14 @@ private:
             } else {
               clearSidePassCrawlMode(tnow);
             }
-          } else if (narrow_gate_side_pass_crawl_active_) {
+          } else if (narrow_gate_side_pass_crawl_active_ &&
+            side_pass_source_ == SidePassSource::MemoryGate)
+          {
             clearSidePassCrawlMode(tnow);
           }
-        } else if (narrow_gate_side_pass_crawl_active_) {
+        } else if (narrow_gate_side_pass_crawl_active_ &&
+          side_pass_source_ == SidePassSource::MemoryGate)
+        {
           clearSidePassCrawlMode(tnow);
         }
 
@@ -1501,6 +1644,23 @@ private:
   double applyRockerDeadbandAxis(double axis) const
   {
     return (std::abs(axis) <= rocker_deadband_) ? 0.0 : axis;
+  }
+
+  bool isRockerOutOfDeadband(const rclcpp::Time & tnow)
+  {
+    Joystick::SharedPtr joy;
+    rclcpp::Time joy_stamp;
+    {
+      std::lock_guard<std::mutex> lock(joystick_mutex_);
+      joy = latest_joystick_;
+      joy_stamp = latest_joystick_stamp_;
+    }
+    if (!joy || (tnow - joy_stamp).seconds() > joystick_timeout_) {
+      return false;
+    }
+    const double rx = applyRockerDeadbandAxis(static_cast<double>(joy->rocker_x));
+    const double ry = applyRockerDeadbandAxis(static_cast<double>(joy->rocker_y));
+    return std::abs(rx) >= 1e-6 || std::abs(ry) >= 1e-6;
   }
 
   // Stick angle atan2(ry, rx): 0 = forward (+x). Forward 300 deg <=> |angle| <= 150 deg;
@@ -3122,6 +3282,15 @@ private:
   std::vector<double> gate_side_pass_exit_forward_strip_x_{0.685, 0.685};
   std::vector<double> gate_side_pass_exit_forward_strip_y_min_{0.2, -0.34};
   std::vector<double> gate_side_pass_exit_forward_strip_y_max_{0.34, -0.2};
+  bool proximity_side_pass_enable_{true};
+  double proximity_side_pass_enter_depth_m_{0.10};
+  double proximity_side_pass_exit_margin_m_{0.15};
+  double proximity_side_pass_max_speed_mps_{0.10};
+  int proximity_side_pass_confirm_frames_{10};
+  int proximity_side_pass_exit_confirm_frames_{5};
+  int proximity_side_pass_enter_streak_{0};
+  int proximity_side_pass_exit_streak_{0};
+  SidePassSource side_pass_source_{SidePassSource::None};
   double footprint_body_x_min_{-0.2};
   double footprint_body_x_max_{0.935};
   double footprint_body_y_min_{-0.34};

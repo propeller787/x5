@@ -9,7 +9,7 @@
 //   - tiered wz cap from nearby obstacle-point density
 //   - gear vx cap from /vlago/car/info (1-4 gear -> configurable kph limits)
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
-//   - side pass crawl (/mppi/narrow_gate_side_pass_mode): skip MPPI; footprint 5cm forward/lateral strips + crawl
+//   - side pass crawl (/mppi/narrow_gate_side_pass_mode): skip MPPI; footprint 6cm forward/lateral strips + crawl
 //     (forward -> no reverse, backward -> no forward; lateral -> no opposite turn); stop on release
 //   - after narrow gate exit: linear vx ramp-up to avoid sudden acceleration
 //   - vx accel limit: max 1 m/s^2 when speeding up forward/reverse; decel/brake unchanged
@@ -175,7 +175,7 @@ public:
     narrow_gate_side_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_side_pass_mode_topic", "/mppi/narrow_gate_side_pass_mode");
     side_pass_crawl_check_depth_m_ = declare_parameter<double>(
-      "side_pass_crawl_check_depth_m", 0.05);
+      "side_pass_crawl_check_depth_m", 0.06);
     side_pass_crawl_forward_strip_x_ = declare_parameter<std::vector<double>>(
       "side_pass_crawl_forward_strip_x", {0.685, 0.935, 0.685});
     side_pass_crawl_forward_strip_y_min_ = declare_parameter<std::vector<double>>(
@@ -1087,7 +1087,7 @@ private:
   bool narrow_gate_exit_ramp_enable_{true};
   double narrow_gate_exit_ramp_sec_{2.0};
   double narrow_gate_exit_ramp_vx_target_{1.50};
-  double side_pass_crawl_check_depth_m_{0.05};
+  double side_pass_crawl_check_depth_m_{0.06};
   std::vector<double> side_pass_crawl_forward_strip_x_{0.685, 0.935, 0.685};
   std::vector<double> side_pass_crawl_forward_strip_y_min_{0.2, -0.2, -0.34};
   std::vector<double> side_pass_crawl_forward_strip_y_max_{0.34, 0.2, -0.2};

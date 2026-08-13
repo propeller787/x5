@@ -123,6 +123,15 @@ joystick_local_path_node:
     gate_side_pass_exit_forward_strip_y_max: [0.34, -0.2]
     narrow_gate_side_pass_mode_topic: "/mppi/narrow_gate_side_pass_mode"
 
+    # 贴障侧穿：不依赖记忆窄门；左/右/前 10cm 有障 + |v|<0.1 + 摇杆出死区，点云 10 帧（~1s@10Hz）进入
+    # 退出：footprint 含后向外扩 15cm 内无障碍，连续 5 帧后回 MPPI
+    proximity_side_pass_enable: true
+    proximity_side_pass_enter_depth_m: 0.15
+    proximity_side_pass_exit_margin_m: 0.20
+    proximity_side_pass_max_speed_mps: 0.10
+    proximity_side_pass_confirm_frames: 10
+    proximity_side_pass_exit_confirm_frames: 5
+
     # 过窄门模式：匹配窄门且车头中心距门中心 <= gate_pass_mode_enter_m 时激活。
     # gate_pass_front_center_x_m 为 base_link 下前向参考点（约车头中心）。
     # 零 footprint padding；costmap inflation/resolution 由 PassModeInflationLayer 处理。
