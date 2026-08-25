@@ -66,14 +66,16 @@ public:
         self_mask_marker_topic_, rclcpp::QoS(1).transient_local());
       roi_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
         roi_marker_topic_, rclcpp::QoS(1).transient_local());
-      marker_timer_ = create_wall_timer(
-        std::chrono::milliseconds(static_cast<int>(marker_period_sec_ * 1000.0)),
-        std::bind(&ObstacleCloudFilterNode::publishDebugMarkers, this));
     }
 
-    cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-      input_cloud_topic_, rclcpp::SensorDataQoS(),
-      std::bind(&ObstacleCloudFilterNode::onCloud, this, std::placeholders::_1));
+    mppi_auxiliary_status_topic_ = declare_parameter<std::string>(
+      "mppi_auxiliary_status_topic", "/mppi_auxiliary/status");
+    mppi_auxiliary_default_ = declare_parameter<bool>("mppi_auxiliary_default", true);
+    auxiliary_active_.store(mppi_auxiliary_default_, std::memory_order_relaxed);
+
+    auxiliary_status_sub_ = create_subscription<std_msgs::msg::Bool>(
+      mppi_auxiliary_status_topic_, 10,
+      std::bind(&ObstacleCloudFilterNode::onAuxiliaryStatus, this, std::placeholders::_1));
 
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
@@ -88,14 +90,58 @@ public:
         &ObstacleCloudFilterNode::onNarrowGateSidePassMode, this,
         std::placeholders::_1));
 
+    if (mppi_auxiliary_default_) {
+      enableInputSubscriptions();
+    }
+
     RCLCPP_INFO(
       get_logger(),
-      "obstacle_cloud_filter started: in=%s out=%s frame=%s pass_mode=%s side_pass=%s",
+      "obstacle_cloud_filter started: in=%s out=%s frame=%s pass_mode=%s side_pass=%s auxiliary=%s",
       input_cloud_topic_.c_str(), output_cloud_topic_.c_str(), target_frame_.c_str(),
-      narrow_gate_pass_mode_topic_.c_str(), narrow_gate_side_pass_mode_topic_.c_str());
+      narrow_gate_pass_mode_topic_.c_str(), narrow_gate_side_pass_mode_topic_.c_str(),
+      mppi_auxiliary_status_topic_.c_str());
   }
 
 private:
+  void onAuxiliaryStatus(const std_msgs::msg::Bool::SharedPtr msg)
+  {
+    const bool active = msg->data;
+    const bool was = auxiliary_active_.exchange(active, std::memory_order_relaxed);
+    if (was == active) {
+      return;
+    }
+    if (!active) {
+      disableInputSubscriptions();
+      RCLCPP_INFO(get_logger(), "mppi auxiliary inactive: idle (unsubscribed)");
+    } else {
+      enableInputSubscriptions();
+      RCLCPP_INFO(get_logger(), "mppi auxiliary active: obstacle filter enabled");
+    }
+  }
+
+  void enableInputSubscriptions()
+  {
+    if (!cloud_sub_) {
+      cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
+        input_cloud_topic_, rclcpp::SensorDataQoS(),
+        std::bind(&ObstacleCloudFilterNode::onCloud, this, std::placeholders::_1));
+    }
+    if (publish_markers_ && !marker_timer_) {
+      marker_timer_ = create_wall_timer(
+        std::chrono::milliseconds(static_cast<int>(marker_period_sec_ * 1000.0)),
+        std::bind(&ObstacleCloudFilterNode::publishDebugMarkers, this));
+    }
+  }
+
+  void disableInputSubscriptions()
+  {
+    cloud_sub_.reset();
+    if (marker_timer_) {
+      marker_timer_->cancel();
+      marker_timer_.reset();
+    }
+  }
+
   void onNarrowGatePassMode(const std_msgs::msg::Bool::SharedPtr msg)
   {
     narrow_gate_pass_active_ = msg->data;
@@ -564,9 +610,14 @@ private:
   double pass_body_half_width_m_{0.34};
   double pass_range_max_m_{2.50};
 
+  std::string mppi_auxiliary_status_topic_;
+  bool mppi_auxiliary_default_{true};
+  std::atomic<bool> auxiliary_active_{true};
+
   ObstacleCloudFilterCore core_;
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr auxiliary_status_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr narrow_gate_pass_mode_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr narrow_gate_side_pass_mode_sub_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr output_pub_;

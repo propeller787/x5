@@ -7,3 +7,8 @@ odom_fusion_node:
       fused_odom_topic: "/odom/fused"
       odom_frame_id: "odom"
       base_link_frame_id: "base_link"
+    fusion:
+      # IMU 静止零偏补偿：vyaw = imu.wz - gyro_z_bias_rad_s
+      # 标定 bag_20260820_180242（21.7s 静止）：mean(wz) = -0.00645 rad/s (-0.37 deg/s)
+      # gyro_z_bias_rad_s: -0.00645  // 黑红车
+      gyro_z_bias_rad_s: 0.0

@@ -1,5 +1,9 @@
 cmd_vel_safety_gate_node:
   ros__parameters:
+    # SceneNode /mppi_auxiliary/status：false 时退订点云、停 50Hz timer、发一次零速
+    mppi_auxiliary_status_topic: "/mppi_auxiliary/status"
+    mppi_auxiliary_default: true
+
     # 总开关：false 时跳过门控逻辑，仅按 bypass_source 直通输出（测试用）。
     gate_enable: true
     # gate_enable=false 时有效：handle=/handle/control，cmd_vel=/cmd_vel
@@ -7,7 +11,7 @@ cmd_vel_safety_gate_node:
     bypass_source: "cmd_vel"
 
     cmd_vel_in: "/cmd_vel"
-    cmd_vel_out: "/nav/control"
+    cmd_vel_out: "/mppi/control"
     # 行进意图（proximity 限速方向）：来自固件已按挡位缩放的摇杆速度。
     handle_control_topic: "/handle/control"
     # 原始摇杆（CAN 0x226, interface/msg/Joystick, rocker_x/y in [-100, 100]）。
@@ -29,7 +33,7 @@ cmd_vel_safety_gate_node:
     obstacle_points_topic: "/perception/obstacle_points"
     # Nav2 Humble 的 controller_server 在 /cmd_vel 上发布 geometry_msgs/Twist
     #（TwistStamped / enable_stamped_cmd_vel 仅在 Iron/Jazzy+ 上才有）。订阅类型必须
-    # 与发布者一致，否则 DDS 会丢弃每一条消息，门控会把 /nav/control 锁定为 0。
+    # 与发布者一致，否则 DDS 会丢弃每一条消息，门控会把 /mppi/control 锁定为 0。
     input_type: "twist"
 
     cmd_timeout: 0.30
