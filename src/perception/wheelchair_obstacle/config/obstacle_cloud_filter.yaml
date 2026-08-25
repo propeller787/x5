@@ -1,5 +1,9 @@
 obstacle_cloud_filter:
   ros__parameters:
+    # SceneNode /mppi_auxiliary/status：false 时退订点云、停 debug timer（零 CPU 回调）
+    mppi_auxiliary_status_topic: "/mppi_auxiliary/status"
+    mppi_auxiliary_default: true
+
     input_cloud_topic: "/perception/lidar_fusion/points"
     output_cloud_topic: "/perception/obstacle_points"
     self_mask_marker_topic: "/perception/obstacle_points/debug/self_mask"

@@ -23,6 +23,7 @@
 // velocity_integration: legacy /handle/control (v,w) integration.
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <future>
@@ -581,6 +582,12 @@ public:
       "gate_memory_topic", "/mppi/gate_memory");
     gate_memory_state_topic_ = declare_parameter<std::string>(
       "gate_memory_state_topic", "/mppi/gate_memory/state");
+
+    mppi_auxiliary_status_topic_ = declare_parameter<std::string>(
+      "mppi_auxiliary_status_topic", "/mppi_auxiliary/status");
+    mppi_auxiliary_default_ = declare_parameter<bool>("mppi_auxiliary_default", true);
+    auxiliary_active_.store(mppi_auxiliary_default_, std::memory_order_relaxed);
+
     use_spatial_range_ = (path_generation_mode_ == "spatial_range");
 
     odom_sub_ = create_subscription<Odometry>(
@@ -684,16 +691,19 @@ public:
     }
     action_client_ = rclcpp_action::create_client<FollowPath>(this, action_name_);
 
-    const double period = 1.0 / std::max(0.1, send_rate_hz_);
-    timer_ = create_wall_timer(
-      std::chrono::milliseconds(static_cast<int>(period * 1000)),
-      std::bind(&JoystickLocalPathNode::onTimer, this));
+    auxiliary_status_sub_ = create_subscription<std_msgs::msg::Bool>(
+      mppi_auxiliary_status_topic_, 10,
+      std::bind(&JoystickLocalPathNode::onAuxiliaryStatus, this, std::placeholders::_1));
+
+    if (mppi_auxiliary_default_) {
+      startPathTimer();
+    }
 
     RCLCPP_INFO(
       get_logger(),
-      "joystick_local_path_node: mode=%s odom=%s action=%s frame=%s send_rate=%.1f",
+      "joystick_local_path_node: mode=%s odom=%s action=%s frame=%s send_rate=%.1f auxiliary=%s",
       path_generation_mode_.c_str(), odom_topic_.c_str(), action_name_.c_str(),
-      global_frame_.c_str(), send_rate_hz_);
+      global_frame_.c_str(), send_rate_hz_, mppi_auxiliary_status_topic_.c_str());
     if (use_spatial_range_) {
       const double half_back = backward_sector_deg_ * 0.5;
       RCLCPP_INFO(
@@ -877,6 +887,53 @@ private:
       forward_msg.data = state.forward_sector;
       rocker_forward_sector_mode_pub_->publish(forward_msg);
     }
+  }
+
+  void onAuxiliaryStatus(const std_msgs::msg::Bool::SharedPtr msg)
+  {
+    const bool active = msg->data;
+    const bool was = auxiliary_active_.exchange(active, std::memory_order_relaxed);
+    if (was == active) {
+      return;
+    }
+    if (!active) {
+      enterAuxiliaryIdle();
+      RCLCPP_INFO(get_logger(), "mppi auxiliary inactive: idle (no path/goals)");
+    } else {
+      exitAuxiliaryIdle();
+      RCLCPP_INFO(get_logger(), "mppi auxiliary active: path planning enabled");
+    }
+  }
+
+  void startPathTimer()
+  {
+    if (timer_) {
+      return;
+    }
+    const double period = 1.0 / std::max(0.1, send_rate_hz_);
+    timer_ = create_wall_timer(
+      std::chrono::milliseconds(static_cast<int>(period * 1000)),
+      std::bind(&JoystickLocalPathNode::onTimer, this));
+  }
+
+  void stopPathTimer()
+  {
+    if (timer_) {
+      timer_->cancel();
+      timer_.reset();
+    }
+  }
+
+  void enterAuxiliaryIdle()
+  {
+    cancelActiveGoal();
+    publishEmptyPath();
+    stopPathTimer();
+  }
+
+  void exitAuxiliaryIdle()
+  {
+    startPathTimer();
   }
 
   void onControl(const Twist::SharedPtr msg)
@@ -4624,6 +4681,9 @@ private:
   rclcpp::Time last_wz_tier_change_stamp_{0, 0, RCL_ROS_TIME};
   bool release_soft_stop_active_{false};
   bool stick_release_halt_active_{false};
+  std::string mppi_auxiliary_status_topic_;
+  bool mppi_auxiliary_default_{true};
+  std::atomic<bool> auxiliary_active_{true};
   std::vector<geometry_msgs::msg::Point> footprint_base_pts_;
   double last_footprint_padding_{-1.0};
   bool have_published_footprint_{false};
@@ -4813,6 +4873,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gate_memory_state_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Polygon>::SharedPtr footprint_pub_;
   rclcpp_action::Client<FollowPath>::SharedPtr action_client_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr auxiliary_status_sub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   std::mutex ctrl_mutex_;

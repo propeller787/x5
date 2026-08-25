@@ -1,4 +1,4 @@
-// Safety gate between Nav2 MPPI (/cmd_vel) and the wheelchair CAN adapter (/nav/control).
+// Safety gate between Nav2 MPPI (/cmd_vel) and downstream control (/mppi/control).
 //
 // Always forwards MPPI output (with optional gate_enable bypass for testing).
 // Retained safety layers:
@@ -24,6 +24,7 @@
 //   - mppi fail soft-stop: /cmd_vel -> 0 while rocker active -> release logic (obstacle check);
 //     recover when /cmd_vel becomes non-zero again (even during soft-stop lowpass)
 //   - left_turn_wz_trick: optional +offset on output wz when |wz|>intent_eps
+//   - mppi auxiliary idle (/mppi_auxiliary/status false): unsub cloud, stop timer, zero output once
 
 #include <algorithm>
 #include <atomic>
@@ -90,7 +91,7 @@ public:
   : rclcpp::Node("cmd_vel_safety_gate_node")
   {
     in_stamped_topic_ = declare_parameter<std::string>("cmd_vel_in", "/cmd_vel");
-    out_topic_ = declare_parameter<std::string>("cmd_vel_out", "/nav/control");
+    out_topic_ = declare_parameter<std::string>("cmd_vel_out", "/mppi/control");
     handle_topic_ = declare_parameter<std::string>("handle_control_topic", "/handle/control");
     obstacle_topic_ = declare_parameter<std::string>("obstacle_points_topic", "/perception/obstacle_points");
     input_type_ = declare_parameter<std::string>("input_type", "twist");
@@ -206,6 +207,11 @@ public:
       "mppi_fail_soft_stop_avoid_wz_max", 0.35);
     mppi_fail_soft_stop_max_frames_ = declare_parameter<int>(
       "mppi_fail_soft_stop_max_frames", 50);
+
+    mppi_auxiliary_status_topic_ = declare_parameter<std::string>(
+      "mppi_auxiliary_status_topic", "/mppi_auxiliary/status");
+    mppi_auxiliary_default_ = declare_parameter<bool>("mppi_auxiliary_default", true);
+    auxiliary_active_.store(mppi_auxiliary_default_, std::memory_order_relaxed);
 
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
@@ -493,9 +499,9 @@ public:
       car_info_topic_, 10,
       std::bind(&CmdVelSafetyGateNode::onCarInfo, this, std::placeholders::_1));
 
-    cloud_sub_ = create_subscription<PointCloud2>(
-      obstacle_topic_, rclcpp::SensorDataQoS(),
-      std::bind(&CmdVelSafetyGateNode::onCloud, this, std::placeholders::_1));
+    auxiliary_status_sub_ = create_subscription<Bool>(
+      mppi_auxiliary_status_topic_, 10,
+      std::bind(&CmdVelSafetyGateNode::onAuxiliaryStatus, this, std::placeholders::_1));
 
     narrow_gate_pass_mode_sub_ = create_subscription<Bool>(
       narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
@@ -529,16 +535,17 @@ public:
 
     out_pub_ = create_publisher<Twist>(out_topic_, 10);
 
-    const double period = 1.0 / std::max(0.1, publish_rate_hz_);
-    timer_ = create_wall_timer(
-      std::chrono::milliseconds(static_cast<int>(period * 1000)),
-      std::bind(&CmdVelSafetyGateNode::onTimer, this));
-
     last_pub_stamp_ = now();
+
+    if (mppi_auxiliary_default_) {
+      enableCloudSubscription();
+      startPublishTimer();
+    }
 
     RCLCPP_INFO(
       get_logger(),
-      "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s "
+      "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s auxiliary=%s default=%d "
+      "in=%s handle=%s rocker=%s cloud=%s "
       "car_info=%s out=%s "
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
       "vx_reverse_max=%.2f release_soft_stop_topic=%s gear_vx_cap=%d "
@@ -547,6 +554,7 @@ public:
       "stick_vx_scale=%d(min_ratio=%.2f wz=%d) vx_accel_limit=%d(%.1fm/s^2) side_pass_crawl_enable=%d "
       "side_pass_crawl=%.2fm/s/%.2frps forward_strips=%zu depth=%.0fmm",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
+      mppi_auxiliary_status_topic_.c_str(), mppi_auxiliary_default_ ? 1 : 0,
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
       obstacle_topic_.c_str(), car_info_topic_.c_str(), out_topic_.c_str(),
       input_type_.c_str(),
@@ -638,6 +646,85 @@ public:
   }
 
 private:
+  void onAuxiliaryStatus(const Bool::SharedPtr msg)
+  {
+    const bool active = msg->data;
+    const bool was = auxiliary_active_.exchange(active, std::memory_order_relaxed);
+    if (was == active) {
+      return;
+    }
+    if (!active) {
+      enterAuxiliaryIdle();
+    } else {
+      exitAuxiliaryIdle();
+      RCLCPP_INFO(get_logger(), "mppi auxiliary active: safety gate enabled");
+    }
+  }
+
+  void enableCloudSubscription()
+  {
+    if (!cloud_sub_) {
+      cloud_sub_ = create_subscription<PointCloud2>(
+        obstacle_topic_, rclcpp::SensorDataQoS(),
+        std::bind(&CmdVelSafetyGateNode::onCloud, this, std::placeholders::_1));
+    }
+  }
+
+  void disableCloudSubscription()
+  {
+    cloud_sub_.reset();
+  }
+
+  void startPublishTimer()
+  {
+    if (timer_) {
+      return;
+    }
+    const double period = 1.0 / std::max(0.1, publish_rate_hz_);
+    timer_ = create_wall_timer(
+      std::chrono::milliseconds(static_cast<int>(period * 1000)),
+      std::bind(&CmdVelSafetyGateNode::onTimer, this));
+  }
+
+  void stopPublishTimer()
+  {
+    if (timer_) {
+      timer_->cancel();
+      timer_.reset();
+    }
+  }
+
+  void publishZeroOutput(const char * reason)
+  {
+    Twist out;
+    out_pub_->publish(out);
+    last_pub_stamp_ = now();
+    last_out_ = out;
+    RCLCPP_INFO(get_logger(), "%s: zero output on %s", reason, out_topic_.c_str());
+  }
+
+  void enterAuxiliaryIdle()
+  {
+    clearCloudCache();
+    endSoftStop();
+    disableCloudSubscription();
+    stopPublishTimer();
+    publishZeroOutput("auxiliary inactive");
+  }
+
+  void exitAuxiliaryIdle()
+  {
+    enableCloudSubscription();
+    startPublishTimer();
+  }
+
+  void clearCloudCache()
+  {
+    std::lock_guard<std::mutex> lock(cloud_mutex_);
+    cloud_pts_.clear();
+    have_cloud_ = false;
+  }
+
   void onNarrowGatePassMode(const Bool::SharedPtr msg)
   {
     narrow_gate_pass_active_.store(msg->data, std::memory_order_relaxed);
@@ -2686,7 +2773,7 @@ private:
     last_out_ = out;
   }
 
-  void publishBypass(const rclcpp::Time & tnow)
+  void publishBypass(const rclcpp::Time & tnow, const char * reason = "gate_enable=false")
   {
     Twist out;
     if (bypass_source_ == "cmd_vel") {
@@ -2707,8 +2794,8 @@ private:
 
     RCLCPP_WARN_THROTTLE(
       get_logger(), *get_clock(), 5000,
-      "gate_enable=false: bypass %s -> %s",
-      bypass_source_.c_str(), out_topic_.c_str());
+      "%s: bypass %s -> %s",
+      reason, bypass_source_.c_str(), out_topic_.c_str());
   }
 
   // Parameters
@@ -2765,6 +2852,9 @@ private:
   std::string release_soft_stop_mode_topic_;
   std::string stick_release_halt_topic_;
   bool mppi_fail_soft_stop_enable_{true};
+  std::string mppi_auxiliary_status_topic_;
+  bool mppi_auxiliary_default_{true};
+  std::atomic<bool> auxiliary_active_{true};
 
   std::string narrow_gate_pass_mode_topic_;
   std::string narrow_gate_side_pass_mode_topic_;
@@ -2863,6 +2953,7 @@ private:
   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
   rclcpp::Subscription<CarInfo>::SharedPtr car_info_sub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr cloud_sub_;
+  rclcpp::Subscription<Bool>::SharedPtr auxiliary_status_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_pass_mode_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_side_pass_mode_sub_;
   rclcpp::Subscription<Bool>::SharedPtr open_corridor_cruise_mode_sub_;

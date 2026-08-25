@@ -1,5 +1,9 @@
 joystick_local_path_node:
   ros__parameters:
+    # SceneNode /mppi_auxiliary/status：false 时 cancel goal、停 path timer
+    mppi_auxiliary_status_topic: "/mppi_auxiliary/status"
+    mppi_auxiliary_default: true
+
     path_generation_mode: "spatial_range"
 
     joystick_topic: "/sensor/joystick"
