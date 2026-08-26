@@ -11,8 +11,8 @@
 //   - rocker sector intent filter: forward half-plane split into front / left-front /
 //     right-front sectors; block reverse in front, opposite turn in lateral-forward sectors
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
-//   - side pass crawl (/mppi/narrow_gate_side_pass_mode): skip MPPI; footprint 6cm forward/lateral strips + crawl
-//     (forward -> no reverse, backward -> no forward; lateral -> no opposite turn); stop on release
+//   - side pass crawl (/mppi/narrow_gate_side_pass_mode): skip MPPI; footprint strips + crawl
+//     (forward/backward vx and lateral wz when corresponding strips clear)
 //   - after narrow gate exit: linear vx ramp-up to avoid sudden acceleration
 //   - vx accel limit: max 1 m/s^2 when speeding up forward/reverse; decel/brake unchanged
 //   - mppi fail soft-stop: /cmd_vel -> 0 while rocker active -> release logic (obstacle check);
@@ -226,6 +226,31 @@ public:
       side_pass_crawl_forward_strip_y_min_ = {0.2, -0.2, -0.34};
       side_pass_crawl_forward_strip_y_max_ = {0.34, 0.2, -0.2};
     }
+    side_pass_crawl_reverse_enable_ = declare_parameter<bool>(
+      "side_pass_crawl_reverse_enable", false);
+    side_pass_crawl_rear_strip_x_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_rear_strip_x", {-0.2, -0.2, -0.2});
+    side_pass_crawl_rear_strip_y_min_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_rear_strip_y_min", {0.2, -0.2, -0.34});
+    side_pass_crawl_rear_strip_y_max_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_rear_strip_y_max", {0.34, 0.2, -0.2});
+    if (side_pass_crawl_rear_strip_x_.size() !=
+      side_pass_crawl_rear_strip_y_min_.size() ||
+      side_pass_crawl_rear_strip_x_.size() !=
+      side_pass_crawl_rear_strip_y_max_.size())
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "side_pass rear strip array size mismatch; using defaults");
+      side_pass_crawl_rear_strip_x_ = {-0.2, -0.2, -0.2};
+      side_pass_crawl_rear_strip_y_min_ = {0.2, -0.2, -0.34};
+      side_pass_crawl_rear_strip_y_max_ = {0.34, 0.2, -0.2};
+    }
+    if (side_pass_crawl_rear_strip_x_.empty()) {
+      side_pass_crawl_rear_strip_x_ = {-0.2, -0.2, -0.2};
+      side_pass_crawl_rear_strip_y_min_ = {0.2, -0.2, -0.34};
+      side_pass_crawl_rear_strip_y_max_ = {0.34, 0.2, -0.2};
+    }
     side_pass_crawl_lateral_strip_x_min_ = declare_parameter<std::vector<double>>(
       "side_pass_crawl_lateral_strip_x_min", {-0.2, 0.685, 0.7});
     side_pass_crawl_lateral_strip_x_max_ = declare_parameter<std::vector<double>>(
@@ -351,6 +376,16 @@ public:
         side_pass_crawl_forward_strip_x_[i] + side_pass_crawl_check_depth_m_,
         side_pass_crawl_forward_strip_y_min_[i],
         side_pass_crawl_forward_strip_y_max_[i]);
+    }
+    for (size_t i = 0; i < side_pass_crawl_rear_strip_x_.size(); ++i) {
+      RCLCPP_INFO(
+        get_logger(),
+        "  side_pass rear strip[%zu]: x=[%.3f, %.3f] y=[%.3f, %.3f]",
+        i,
+        side_pass_crawl_rear_strip_x_[i] - side_pass_crawl_check_depth_m_,
+        side_pass_crawl_rear_strip_x_[i],
+        side_pass_crawl_rear_strip_y_min_[i],
+        side_pass_crawl_rear_strip_y_max_[i]);
     }
     for (size_t i = 0; i < side_pass_crawl_lateral_strip_x_min_.size(); ++i) {
       const double ye = side_pass_crawl_lateral_strip_y_edge_[i];
@@ -684,6 +719,22 @@ private:
     return true;
   }
 
+  bool sidePassRearStripsClear() const
+  {
+    const double depth = side_pass_crawl_check_depth_m_;
+    for (size_t i = 0; i < side_pass_crawl_rear_strip_x_.size(); ++i) {
+      const double x0 = side_pass_crawl_rear_strip_x_[i];
+      if (!sidePassRoiClear(
+          x0 - depth, x0,
+          side_pass_crawl_rear_strip_y_min_[i],
+          side_pass_crawl_rear_strip_y_max_[i]))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool sidePassLateralStripsClear(bool left) const
   {
     const double depth = side_pass_crawl_check_depth_m_;
@@ -718,6 +769,11 @@ private:
       sidePassForwardStripsClear())
     {
       out.linear.x = side_pass_crawl_vx_mps_;
+    } else if (side_pass_crawl_reverse_enable_ &&
+      rx < -side_pass_crawl_rocker_forward_min_ &&
+      sidePassRearStripsClear())
+    {
+      out.linear.x = -side_pass_crawl_vx_mps_;
     }
 
     if (ry > side_pass_crawl_rocker_lateral_min_ &&
@@ -1292,11 +1348,15 @@ private:
   std::vector<double> side_pass_crawl_forward_strip_x_{0.685, 0.935, 0.685};
   std::vector<double> side_pass_crawl_forward_strip_y_min_{0.2, -0.2, -0.34};
   std::vector<double> side_pass_crawl_forward_strip_y_max_{0.34, 0.2, -0.2};
+  std::vector<double> side_pass_crawl_rear_strip_x_{-0.2, -0.2, -0.2};
+  std::vector<double> side_pass_crawl_rear_strip_y_min_{0.2, -0.2, -0.34};
+  std::vector<double> side_pass_crawl_rear_strip_y_max_{0.34, 0.2, -0.2};
   std::vector<double> side_pass_crawl_lateral_strip_x_min_{-0.2, 0.685, 0.7};
   std::vector<double> side_pass_crawl_lateral_strip_x_max_{0.685, 0.7, 0.935};
   std::vector<double> side_pass_crawl_lateral_strip_y_edge_{0.33, 0.34, 0.20};
   double side_pass_crawl_vx_mps_{0.10};
   double side_pass_crawl_wz_rps_{0.10};
+  bool side_pass_crawl_reverse_enable_{false};
   double side_pass_crawl_rocker_forward_min_{5.0};
   double side_pass_crawl_rocker_lateral_min_{5.0};
   bool vx_accel_limit_enable_{true};

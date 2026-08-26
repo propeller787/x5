@@ -50,6 +50,13 @@ joystick_local_path_node:
     footprint_base: "[[-0.2, 0.33], [0.685, 0.34], [0.935, 0.20], [0.935, -0.20], [0.685, -0.34], [-0.2, -0.33]]"
     gear_footprint_padding_m: [0.01, 0.02, 0.03, 0.04]
 
+    # path 完成后按障碍物截断：中心线左右各半车宽+挡位 padding 走廊内最近障距（默认关，实车验证后开）
+    path_obstacle_limit_enable: false
+    path_obstacle_stop_margin_m: 0.20
+    path_obstacle_min_keep_m: 1.5
+    path_obstacle_limit_skip_pass_mode: true
+    path_obstacle_limit_skip_in_place: true
+
     # 窄门 detect/track/pass：仅正对（body +x 双侧切片）；斜穿见 gate_side_pass。
     gate_path_enable: true
     obstacle_points_topic: "/perception/obstacle_points"

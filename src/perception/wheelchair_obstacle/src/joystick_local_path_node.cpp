@@ -226,6 +226,13 @@ public:
       "[[0.935, 0.34], [0.935, -0.34], [-0.2, -0.34], [-0.2, 0.34]]");
     gear_footprint_padding_m_ = declare_parameter<std::vector<double>>(
       "gear_footprint_padding_m", {0.01, 0.02, 0.03, 0.04});
+    path_obstacle_limit_enable_ = declare_parameter<bool>("path_obstacle_limit_enable", false);
+    path_obstacle_stop_margin_m_ = declare_parameter<double>("path_obstacle_stop_margin_m", 0.20);
+    path_obstacle_min_keep_m_ = declare_parameter<double>("path_obstacle_min_keep_m", 0.12);
+    path_obstacle_limit_skip_pass_mode_ = declare_parameter<bool>(
+      "path_obstacle_limit_skip_pass_mode", true);
+    path_obstacle_limit_skip_in_place_ = declare_parameter<bool>(
+      "path_obstacle_limit_skip_in_place", true);
 
     gate_path_enable_ = declare_parameter<bool>("gate_path_enable", true);
     obstacle_points_topic_ = declare_parameter<std::string>(
@@ -482,6 +489,14 @@ public:
         gear_footprint_padding_m_.size() > 1 ? gear_footprint_padding_m_[1] * 100.0 : 0.0,
         gear_footprint_padding_m_.size() > 2 ? gear_footprint_padding_m_[2] * 100.0 : 0.0,
         gear_footprint_padding_m_.size() > 3 ? gear_footprint_padding_m_[3] * 100.0 : 0.0);
+    }
+    if (path_obstacle_limit_enable_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "path_obstacle_limit: stop_margin=%.2fm min_keep=%.2fm skip_pass_mode=%s skip_in_place=%s",
+        path_obstacle_stop_margin_m_, path_obstacle_min_keep_m_,
+        path_obstacle_limit_skip_pass_mode_ ? "yes" : "no",
+        path_obstacle_limit_skip_in_place_ ? "yes" : "no");
     }
   }
 
@@ -1358,6 +1373,15 @@ private:
       }
     }
 
+    int gear = gear_default_index_;
+    {
+      std::lock_guard<std::mutex> lock(gear_mutex_);
+      if (have_gear_ && latest_gear_ >= 1) {
+        gear = latest_gear_;
+      }
+    }
+    applyPathObstacleLimit(path, *odom, gear, tnow);
+
     path_pub_->publish(path);
     publishGateMarkers(*odom);
     publishGateMemorySnapshot();
@@ -1688,6 +1712,170 @@ private:
   double gearFootprintPadding(int gear) const
   {
     return pickGearTable(gear_footprint_padding_m_, gear, gear_default_index_);
+  }
+
+  double footprintHalfWidthM() const
+  {
+    if (!footprint_base_pts_.empty()) {
+      double hw = 0.0;
+      for (const auto & p : footprint_base_pts_) {
+        hw = std::max(hw, std::abs(p.y));
+      }
+      return hw;
+    }
+    return footprint_body_y_max_;
+  }
+
+  void truncatePathAtArcLength(Path & path, double max_arc_m) const
+  {
+    if (path.poses.size() < 2 || max_arc_m <= 0.0) {
+      return;
+    }
+
+    Path out;
+    out.header = path.header;
+    out.poses.push_back(path.poses.front());
+
+    double s = 0.0;
+    for (size_t i = 1; i < path.poses.size(); ++i) {
+      const auto & prev = path.poses[i - 1].pose.position;
+      const auto & cur = path.poses[i].pose.position;
+      const double seg = std::hypot(cur.x - prev.x, cur.y - prev.y);
+      if (seg < 1e-9) {
+        if (s <= max_arc_m + 1e-6) {
+          out.poses.push_back(path.poses[i]);
+        }
+        continue;
+      }
+      if (s + seg <= max_arc_m + 1e-6) {
+        s += seg;
+        out.poses.push_back(path.poses[i]);
+        continue;
+      }
+
+      const double remain = max_arc_m - s;
+      const double t = std::clamp(remain / seg, 0.0, 1.0);
+      PoseStamped p;
+      p.header = path.header;
+      p.pose.position.x = prev.x + t * (cur.x - prev.x);
+      p.pose.position.y = prev.y + t * (cur.y - prev.y);
+      p.pose.position.z = prev.z + t * (cur.z - prev.z);
+      const double yaw0 = yawFromQuaternion(path.poses[i - 1].pose.orientation);
+      const double yaw1 = yawFromQuaternion(path.poses[i].pose.orientation);
+      p.pose.orientation = quaternionFromYaw(lerpAngle(yaw0, yaw1, t));
+      out.poses.push_back(p);
+      break;
+    }
+
+    if (out.poses.size() >= 2) {
+      path = std::move(out);
+    }
+  }
+
+  void applyPathObstacleLimit(
+    Path & path, const Odometry & odom, int gear, const rclcpp::Time & tnow)
+  {
+    if (!path_obstacle_limit_enable_ || path.poses.size() < 2) {
+      return;
+    }
+    if (path_obstacle_limit_skip_pass_mode_ &&
+      (narrow_gate_pass_active_ || narrow_gate_side_pass_crawl_active_))
+    {
+      return;
+    }
+
+    if (path_obstacle_limit_skip_in_place_) {
+      const auto & a = path.poses.front().pose.position;
+      const auto & b = path.poses.back().pose.position;
+      if (std::hypot(b.x - a.x, b.y - a.y) < min_goal_distance_m_ * 0.5) {
+        return;
+      }
+    }
+
+    std::vector<std::pair<float, float>> cloud_body;
+    {
+      std::lock_guard<std::mutex> lock(cloud_mutex_);
+      if (!have_cloud_ || (tnow - latest_cloud_stamp_).seconds() > obstacle_timeout_) {
+        return;
+      }
+      cloud_body = cloud_pts_;
+    }
+    if (cloud_body.empty()) {
+      return;
+    }
+
+    const double x0 = odom.pose.pose.position.x;
+    const double y0 = odom.pose.pose.position.y;
+    const double yaw0 = yawFromQuaternion(odom.pose.pose.orientation);
+    const double cos_y = std::cos(yaw0);
+    const double sin_y = std::sin(yaw0);
+
+    std::vector<std::pair<double, double>> cloud_odom;
+    cloud_odom.reserve(cloud_body.size());
+    for (const auto & bp : cloud_body) {
+      const double bx = static_cast<double>(bp.first);
+      const double by = static_cast<double>(bp.second);
+      cloud_odom.emplace_back(
+        x0 + cos_y * bx - sin_y * by,
+        y0 + sin_y * bx + cos_y * by);
+    }
+
+    const double corridor_half = footprintHalfWidthM() + gearFootprintPadding(gear);
+    if (corridor_half <= 0.0) {
+      return;
+    }
+
+    std::vector<double> arc_s(path.poses.size(), 0.0);
+    for (size_t i = 1; i < path.poses.size(); ++i) {
+      const auto & prev = path.poses[i - 1].pose.position;
+      const auto & cur = path.poses[i].pose.position;
+      arc_s[i] = arc_s[i - 1] + std::hypot(cur.x - prev.x, cur.y - prev.y);
+    }
+    const double full_len = arc_s.back();
+    if (full_len < path_obstacle_min_keep_m_) {
+      return;
+    }
+
+    double min_block_s = std::numeric_limits<double>::infinity();
+    for (const auto & obs : cloud_odom) {
+      const double ox = obs.first;
+      const double oy = obs.second;
+      for (size_t i = 0; i + 1 < path.poses.size(); ++i) {
+        const auto & A = path.poses[i].pose.position;
+        const auto & B = path.poses[i + 1].pose.position;
+        const double dx = B.x - A.x;
+        const double dy = B.y - A.y;
+        const double seg_len = std::hypot(dx, dy);
+        if (seg_len < 1e-6) {
+          continue;
+        }
+        const double tx = dx / seg_len;
+        const double ty = dy / seg_len;
+        const double ax = ox - A.x;
+        const double ay = oy - A.y;
+        const double proj = ax * tx + ay * ty;
+        const double lat = std::abs(-ty * ax + tx * ay);
+        if (lat > corridor_half) {
+          continue;
+        }
+        const double proj_clamped = std::clamp(proj, 0.0, seg_len);
+        const double s_block = std::max(
+          arc_s[i] + proj_clamped - path_obstacle_stop_margin_m_,
+          path_obstacle_min_keep_m_);
+        min_block_s = std::min(min_block_s, s_block);
+      }
+    }
+
+    if (!std::isfinite(min_block_s) || min_block_s >= full_len - 1e-3) {
+      return;
+    }
+
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 500,
+      "path_obstacle_limit: truncate %.2fm -> %.2fm corridor_half=%.2fm gear=%d",
+      full_len, min_block_s, corridor_half, gear);
+
+    truncatePathAtArcLength(path, min_block_s);
   }
 
   double gearLateralWzMax(int gear) const
@@ -3209,6 +3397,11 @@ private:
   std::string footprint_topic_;
   std::string footprint_base_;
   std::vector<double> gear_footprint_padding_m_;
+  bool path_obstacle_limit_enable_{false};
+  double path_obstacle_stop_margin_m_{0.20};
+  double path_obstacle_min_keep_m_{0.12};
+  bool path_obstacle_limit_skip_pass_mode_{true};
+  bool path_obstacle_limit_skip_in_place_{true};
   std::vector<geometry_msgs::msg::Point> footprint_base_pts_;
   double last_footprint_padding_{-1.0};
   bool have_published_footprint_{false};

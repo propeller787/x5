@@ -109,6 +109,11 @@ cmd_vel_safety_gate_node:
     side_pass_crawl_forward_strip_x: [0.685, 0.935, 0.685]
     side_pass_crawl_forward_strip_y_min: [0.2, -0.2, -0.34]
     side_pass_crawl_forward_strip_y_max: [0.34, 0.2, -0.2]
+    # 后向：后缘 x=-0.2 三段 y 带，各向 -x 延伸 check_depth；后拉且 strip 无障碍时负 vx crawl
+    side_pass_crawl_reverse_enable: false
+    side_pass_crawl_rear_strip_x: [-0.2, -0.2, -0.2]
+    side_pass_crawl_rear_strip_y_min: [0.2, -0.2, -0.34]
+    side_pass_crawl_rear_strip_y_max: [0.34, 0.2, -0.2]
     # 侧向：footprint 左/右外缘三段 x 不重叠 — 后段/宽体转角/鼻尖（y_edge 对应各段外缘 |y|）
     side_pass_crawl_lateral_strip_x_min: [-0.2, 0.685, 0.7]
     side_pass_crawl_lateral_strip_x_max: [0.685, 0.7, 0.935]
