@@ -100,7 +100,7 @@ cmd_vel_safety_gate_node:
     release_soft_stop_brake_sector_half_angle: 0.30
 
     # MPPI fail 软停（/cmd_vel 突变为 0 且摇杆仍出死区）：减速度 ramp
-    mppi_fail_soft_stop_enable: false
+    mppi_fail_soft_stop_enable: true
     mppi_fail_soft_stop_radius: 0.5
     mppi_fail_soft_stop_decel: 1.0
     mppi_fail_soft_stop_wz_decel: 2.0
@@ -131,7 +131,7 @@ cmd_vel_safety_gate_node:
 
     # --- 侧身穿行 crawl legacy（side_pass_crawl_enable=false 时 gate 处理）---
     # true 时 crawl 由 jlp 发布 /cmd_vel，本节 legacy 逻辑不生效
-    side_pass_crawl_enable: false
+    side_pass_crawl_enable: true
     narrow_gate_side_pass_mode_topic: "/mppi/narrow_gate_side_pass_mode"
     # 前向：footprint 前三段 y 带，x 基准 0.685/0.935/0.685 各向 +x 延伸 check_depth
     side_pass_crawl_check_depth_m: 0.06
@@ -153,7 +153,7 @@ cmd_vel_safety_gate_node:
     side_pass_crawl_rocker_lateral_min: 5.0
 
     # --- 侧边障碍平滑限速（点云 base_link；仅 1 档生效，默认关）---
-    side_speed_limit_enable: false
+    side_speed_limit_enable: true
     side_speed_limit_gear_only: 1
     side_speed_limit_body_half_width_m: 0.34
     side_speed_limit_x_min_m: 0.33
