@@ -179,18 +179,22 @@ joystick_local_path_node:
     proximity_side_pass_confirm_frames: 20
     proximity_side_pass_exit_confirm_frames: 3
 
-    # 过窄门模式：匹配窄门且车头中心距门中心 <= gate_pass_mode_enter_m 时激活。
+    # --- 过窄门 pass_mode（head-on；MPPI 走 gate centerline path）---
+    # 匹配窄门且车头中心距门中心 <= gate_pass_mode_enter_m 时激活。
     # gate_pass_front_center_x_m 为 base_link 下前向参考点（约车头中心）。
     # 零 footprint padding；costmap inflation/resolution 由 PassModeInflationLayer 处理。
-    # /mppi/narrow_gate_pass_mode 通知 safety_gate：vx<=0.2m/s；停车条件与全局相同（松手等）。
+    # /mppi/narrow_gate_pass_mode 通知 safety_gate：vx<=narrow_gate_vx_max。
     # pass_mode 内不因 odom 超速退出；进入仍要求 |v|<=gate_creep_speed_max_mps（detect 可更快）。
-    # pass_mode 内用 odom 锚点持续更新 gate 距离；门中心 body_x <= body_clear 时自动退出。
-    # body_clear 须明显小于后悬 -0.2m，等整车进入门洞后再退（-0.45 ≈ 后缘后再 25cm）。
+    # latch 默认只认 body_clear 退出；intent / front_to_gate 退出可单独打开。
+    # body_clear 须明显小于后悬 -0.2m（-0.55 ≈ 后缘后再 35cm）。
     gate_pass_mode_enter_m: 0.80
     gate_pass_front_center_x_m: 0.85
     gate_pass_mode_exit_m: 0.95
-    gate_pass_mode_body_clear_x_m: -0.45
+    gate_pass_mode_body_clear_x_m: -0.55
     gate_pass_mode_hold_sec: 0.25
+    gate_pass_mode_latch_until_body_clear: true
+    gate_pass_mode_intent_timeout_enable: false
+    gate_pass_mode_front_to_gate_exit_enable: false
     narrow_gate_pass_mode_topic: "/mppi/narrow_gate_pass_mode"
     # RViz：当前窄门（黄/绿/紫）+ 记忆门（蓝球，odom 坐标）
     gate_marker_enable: true
