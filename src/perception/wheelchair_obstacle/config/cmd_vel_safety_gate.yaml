@@ -18,6 +18,15 @@ cmd_vel_safety_gate_node:
     rocker_deadband: 5.0
     # 超过该时长没收到摇杆消息也判失效（fail-safe 停车）。
     rocker_timeout: 0.30
+
+    # --- 摇杆扇区意图滤波（滤除非预期 MPPI 行为）---
+    # atan2(rocker_y, rocker_x): 0=正前，+y=左。前向半圆划分为：
+    #   【前】|θ| ≤ front_half；【左】(front_half, front_half+side_span]；
+    #   【右】[-front_half-side_span, -front_half)。side_span=90° 时覆盖至 ±120°。
+    # 【前】禁倒车；【左】禁右转(wz<0)；【右】禁左转(wz>0)。
+    rocker_sector_intent_filter_enable: true
+    rocker_intent_front_half_deg: 30.0    # 【前】半角 30° → 扇区宽 60°
+    rocker_intent_side_span_deg: 90.0     # 【左】【右】各 90°（含侧后斜向）
     # 障碍物点云：proximity 限速 + wz 密度分档。
     obstacle_points_topic: "/perception/obstacle_points"
     # Nav2 Humble 的 controller_server 在 /cmd_vel 上发布 geometry_msgs/Twist
@@ -65,6 +74,10 @@ cmd_vel_safety_gate_node:
     release_soft_stop_wz_decel: 2.0
     release_soft_stop_vel_eps: 0.02
 
+    # MPPI Optimizer fail（/cmd_vel 突变为 0 且摇杆仍出死区）：走松手软停逻辑
+    # 周边 release_soft_stop_radius 内无障碍 → vx/wz 低通至零；否则急停
+    mppi_fail_soft_stop_enable: false
+
     # --- 按 obstacle_points 周边密度分三档限制角速度（带迟滞）---
     # 调试：/cmd_vel_safety_gate_node/wz_density_tier (0=OPEN, 1=MODERATE, 2=DENSE)
     wz_density_cap_enable: true
@@ -108,3 +121,7 @@ cmd_vel_safety_gate_node:
     # --- 线速度加速限制（仅限制加速；减速/急停/软停车逻辑不变）---
     vx_accel_limit_enable: true
     vx_accel_max_mps2: 1.0
+
+    # --- 输出 wz 微调 trick（/nav/control 发布前；|wz|>intent_eps 时叠加）---
+    left_turn_wz_trick_enable: true
+    left_turn_wz_trick_offset_deg_s: 1.0        # 非零 wz 额外 +1°/s（停车 wz≈0 不加）

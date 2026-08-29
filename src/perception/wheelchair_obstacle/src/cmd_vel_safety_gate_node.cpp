@@ -8,11 +8,16 @@
 //   - proximity speed cap from obstacle cloud + travel intent
 //   - tiered wz cap from nearby obstacle-point density
 //   - gear vx cap from /vlago/car/info (1-4 gear -> configurable kph limits)
+//   - rocker sector intent filter: forward half-plane split into front / left-front /
+//     right-front sectors; block reverse in front, opposite turn in lateral-forward sectors
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
 //   - side pass crawl (/mppi/narrow_gate_side_pass_mode): skip MPPI; footprint 6cm forward/lateral strips + crawl
 //     (forward -> no reverse, backward -> no forward; lateral -> no opposite turn); stop on release
 //   - after narrow gate exit: linear vx ramp-up to avoid sudden acceleration
 //   - vx accel limit: max 1 m/s^2 when speeding up forward/reverse; decel/brake unchanged
+//   - mppi fail soft-stop: /cmd_vel -> 0 while rocker active -> release logic (obstacle check);
+//     recover when /cmd_vel becomes non-zero again (even during soft-stop lowpass)
+//   - left_turn_wz_trick: optional +offset on output wz when |wz|>intent_eps
 
 #include <algorithm>
 #include <atomic>
@@ -75,6 +80,8 @@ public:
 
   enum class WzDensityTier : uint8_t { OPEN = 0, MODERATE = 1, DENSE = 2 };
 
+  enum class RockerForwardZone : uint8_t { NONE = 0, FRONT = 1, LEFT_FRONT = 2, RIGHT_FRONT = 3 };
+
   CmdVelSafetyGateNode()
   : rclcpp::Node("cmd_vel_safety_gate_node")
   {
@@ -97,6 +104,18 @@ public:
     rocker_topic_ = declare_parameter<std::string>("rocker_topic", "/sensor/joystick");
     rocker_deadband_ = declare_parameter<double>("rocker_deadband", 5.0);
     rocker_timeout_ = declare_parameter<double>("rocker_timeout", 0.30);
+    rocker_sector_intent_filter_enable_ = declare_parameter<bool>(
+      "rocker_sector_intent_filter_enable", true);
+    rocker_intent_front_half_deg_ = declare_parameter<double>(
+      "rocker_intent_front_half_deg", 30.0);
+    rocker_intent_side_span_deg_ = declare_parameter<double>(
+      "rocker_intent_side_span_deg", 90.0);
+    if (rocker_intent_front_half_deg_ < 0.0) {
+      rocker_intent_front_half_deg_ = 0.0;
+    }
+    if (rocker_intent_side_span_deg_ < 0.0) {
+      rocker_intent_side_span_deg_ = 0.0;
+    }
 
     cmd_timeout_ = declare_parameter<double>("cmd_timeout", 0.30);
     cmd_hold_timeout_ = declare_parameter<double>("cmd_hold_timeout", 0.50);
@@ -121,6 +140,12 @@ public:
 
     wz_max_ = declare_parameter<double>("wz_max", 1.00);
     vx_reverse_max_ = declare_parameter<double>("vx_reverse_max", 0.5);
+    left_turn_wz_trick_enable_ = declare_parameter<bool>(
+      "left_turn_wz_trick_enable", false);
+    left_turn_wz_trick_offset_deg_s_ = declare_parameter<double>(
+      "left_turn_wz_trick_offset_deg_s", 2.0);
+    left_turn_wz_trick_offset_rps_ =
+      left_turn_wz_trick_offset_deg_s_ * M_PI / 180.0;
 
     car_info_topic_ = declare_parameter<std::string>("car_info_topic", "/vlago/car/info");
     gear_vx_cap_enable_ = declare_parameter<bool>("gear_vx_cap_enable", true);
@@ -155,6 +180,8 @@ public:
     release_soft_stop_decel_ = declare_parameter<double>("release_soft_stop_decel", 1.5);
     release_soft_stop_wz_decel_ = declare_parameter<double>("release_soft_stop_wz_decel", 2.0);
     release_soft_stop_vel_eps_ = declare_parameter<double>("release_soft_stop_vel_eps", 0.02);
+    mppi_fail_soft_stop_enable_ = declare_parameter<bool>(
+      "mppi_fail_soft_stop_enable", false);
 
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
@@ -337,6 +364,18 @@ public:
         side_pass_crawl_lateral_strip_x_max_[i],
         ye, ye + depth, -(ye + depth), -ye);
     }
+    RCLCPP_INFO(
+      get_logger(),
+      "rocker_sector_intent_filter=%d front_half=%.0fdeg side_span=%.0fdeg "
+      "(left/right front each side_span wide)",
+      rocker_sector_intent_filter_enable_ ? 1 : 0,
+      rocker_intent_front_half_deg_, rocker_intent_side_span_deg_);
+    if (left_turn_wz_trick_enable_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "left_turn_wz_trick: +%.2f deg/s (%.4f rad/s) when |output wz|>%.3f",
+        left_turn_wz_trick_offset_deg_s_, left_turn_wz_trick_offset_rps_, intent_eps_);
+    }
   }
 
 private:
@@ -435,6 +474,34 @@ private:
     }
   }
 
+  void scaleWzWithLinearSpeedReduction(Twist & out, double original_vx) const
+  {
+    constexpr double eps = 1e-4;
+    if (std::abs(original_vx) <= intent_eps_) {
+      return;
+    }
+
+    const double new_vx = out.linear.x;
+    const bool reduced =
+      (original_vx > intent_eps_ && new_vx < original_vx - eps) ||
+      (original_vx < -intent_eps_ && new_vx > original_vx + eps);
+    if (!reduced) {
+      return;
+    }
+
+    out.angular.z *= (new_vx / original_vx);
+  }
+
+  void applyLeftTurnWzTrick(Twist & out) const
+  {
+    if (!left_turn_wz_trick_enable_ ||
+      std::abs(out.angular.z) <= intent_eps_)
+    {
+      return;
+    }
+    out.angular.z += left_turn_wz_trick_offset_rps_;
+  }
+
   double applyRockerDeadbandAxis(double axis) const
   {
     return (std::abs(axis) <= rocker_deadband_) ? 0.0 : axis;
@@ -448,6 +515,64 @@ private:
     const auto age_ns = tnow.nanoseconds() -
       latest_rocker_stamp_ns_.load(std::memory_order_relaxed);
     return age_ns <= static_cast<int64_t>(rocker_timeout_ * 1e9);
+  }
+
+  RockerForwardZone classifyRockerForwardZone(double rx, double ry) const
+  {
+    if (std::hypot(rx, ry) <= rocker_deadband_) {
+      return RockerForwardZone::NONE;
+    }
+
+    const double theta = std::atan2(ry, rx);
+    const double front_half_rad = rocker_intent_front_half_deg_ * M_PI / 180.0;
+    const double side_span_rad = rocker_intent_side_span_deg_ * M_PI / 180.0;
+    const double forward_limit_rad = front_half_rad + side_span_rad;
+
+    if (std::abs(theta) <= front_half_rad) {
+      return RockerForwardZone::FRONT;
+    }
+    if (theta > front_half_rad && theta <= forward_limit_rad) {
+      return RockerForwardZone::LEFT_FRONT;
+    }
+    if (theta < -front_half_rad && theta >= -forward_limit_rad) {
+      return RockerForwardZone::RIGHT_FRONT;
+    }
+    return RockerForwardZone::NONE;
+  }
+
+  void applyRockerSectorIntentFilter(Twist & out, const rclcpp::Time & tnow) const
+  {
+    if (!rocker_sector_intent_filter_enable_ || !rockerFresh(tnow)) {
+      return;
+    }
+
+    const double rx = static_cast<double>(
+      latest_rocker_x_.load(std::memory_order_relaxed));
+    const double ry = static_cast<double>(
+      latest_rocker_y_.load(std::memory_order_relaxed));
+
+    switch (classifyRockerForwardZone(rx, ry)) {
+      case RockerForwardZone::FRONT:
+        if (out.linear.x < 0.0) {
+          const double original_vx = out.linear.x;
+          out.linear.x = 0.0;
+          scaleWzWithLinearSpeedReduction(out, original_vx);
+        }
+        break;
+      case RockerForwardZone::LEFT_FRONT:
+        if (out.angular.z < 0.0) {
+          out.angular.z = 0.0;
+        }
+        break;
+      case RockerForwardZone::RIGHT_FRONT:
+        if (out.angular.z > 0.0) {
+          out.angular.z = 0.0;
+        }
+        break;
+      case RockerForwardZone::NONE:
+      default:
+        break;
+    }
   }
 
   void applyNarrowGateRockerIntentFilter(Twist & out, const rclcpp::Time & tnow) const
@@ -718,6 +843,70 @@ private:
            nearbyObstaclePointCountInRadius(release_soft_stop_radius_) == 0;
   }
 
+  bool isTwistNearZero(const Twist & twist) const
+  {
+    return std::abs(twist.linear.x) <= release_soft_stop_vel_eps_ &&
+           std::abs(twist.angular.z) <= release_soft_stop_vel_eps_;
+  }
+
+  void applyReleaseLikeStop(
+    bool cloud_ok, bool & halted, std::string & reason, const char * context)
+  {
+    if (canSoftStopOnRelease(cloud_ok)) {
+      beginSoftStop();
+      return;
+    }
+    halted = true;
+    endSoftStop();
+    if (!cloud_ok) {
+      reason = std::string(context) + " (cloud stale)";
+    } else if (nearbyObstaclePointCountInRadius(release_soft_stop_radius_) > 0) {
+      reason = std::string(context) + " (obstacles nearby)";
+    } else {
+      reason = std::string(context) + " (soft-stop brake clearance)";
+    }
+  }
+
+  void readCmdVelInput(
+    const rclcpp::Time & tnow, Twist & target, bool & input_ok,
+    bool & halted, std::string & reason)
+  {
+    input_ok = false;
+    std::lock_guard<std::mutex> lock(input_mutex_);
+    if (!have_input_) {
+      return;
+    }
+    const double age = (tnow - latest_input_stamp_).seconds();
+    if (age <= cmd_hold_timeout_) {
+      target = latest_twist_;
+      input_ok = true;
+      if (age > cmd_timeout_) {
+        RCLCPP_DEBUG_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "cmd_vel hold (age=%.3fs, fresh<=%.2fs hold<=%.2fs)",
+          age, cmd_timeout_, cmd_hold_timeout_);
+      }
+      return;
+    }
+    halted = true;
+    reason = "cmd_vel stale";
+    mppi_fail_soft_stop_ = false;
+    endSoftStop();
+  }
+
+  void tryRecoverFromMppiFailSoftStop(const Twist & target, bool input_ok)
+  {
+    if (!mppi_fail_soft_stop_ || !input_ok || isTwistNearZero(target)) {
+      return;
+    }
+    mppi_fail_soft_stop_ = false;
+    endSoftStop();
+    RCLCPP_INFO(
+      get_logger(),
+      "mppi fail soft-stop recovered (cmd_vel vx=%.2f wz=%.2f)",
+      target.linear.x, target.angular.z);
+  }
+
   void beginSoftStop()
   {
     if (!soft_stopping_) {
@@ -874,16 +1063,9 @@ private:
         reason = "joystick stale";
         endSoftStop();
       } else if (rocker_released) {
-        if (canSoftStopOnRelease(cloud_ok)) {
-          beginSoftStop();
-        } else {
-          halted = true;
-          endSoftStop();
-          reason = cloud_ok ?
-            "joystick released (obstacles nearby)" :
-            "joystick released (cloud stale)";
-        }
-      } else {
+        mppi_fail_soft_stop_ = false;
+        applyReleaseLikeStop(cloud_ok, halted, reason, "joystick released");
+      } else if (!mppi_fail_soft_stop_) {
         endSoftStop();
       }
     }
@@ -903,6 +1085,7 @@ private:
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
           "side_pass crawl halted: cloud stale");
       }
+      applyLeftTurnWzTrick(out);
       out_pub_->publish(out);
       last_pub_stamp_ = tnow;
       last_out_ = out;
@@ -911,23 +1094,24 @@ private:
 
     Twist target;
     bool input_ok = false;
-    if (!soft_stopping_) {
-      std::lock_guard<std::mutex> lock(input_mutex_);
-      if (have_input_) {
-        const double age = (tnow - latest_input_stamp_).seconds();
-        if (age <= cmd_hold_timeout_) {
-          target = latest_twist_;
-          input_ok = true;
-          if (age > cmd_timeout_) {
-            RCLCPP_DEBUG_THROTTLE(
-              get_logger(), *get_clock(), 2000,
-              "cmd_vel hold (age=%.3fs, fresh<=%.2fs hold<=%.2fs)",
-              age, cmd_timeout_, cmd_hold_timeout_);
-          }
-        } else {
-          halted = true;
-          reason = "cmd_vel stale";
-          endSoftStop();
+    readCmdVelInput(tnow, target, input_ok, halted, reason);
+    tryRecoverFromMppiFailSoftStop(target, input_ok);
+
+    if (mppi_fail_soft_stop_enable_ && !side_pass_crawl && !halted && !soft_stopping_ &&
+      input_ok && have_rocker_.load(std::memory_order_relaxed) &&
+      !rocker_stale && !rocker_released && isTwistNearZero(target))
+    {
+      const bool was_moving =
+        std::abs(last_out_.linear.x) > release_soft_stop_vel_eps_ ||
+        std::abs(last_out_.angular.z) > release_soft_stop_vel_eps_;
+      if (was_moving) {
+        applyReleaseLikeStop(cloud_ok, halted, reason, "mppi fail");
+        if (!halted) {
+          mppi_fail_soft_stop_ = true;
+          RCLCPP_INFO(
+            get_logger(),
+            "mppi fail: release soft-stop (rocker active, cmd_vel=0, radius=%.1fm)",
+            release_soft_stop_radius_);
         }
       }
     }
@@ -935,11 +1119,18 @@ private:
     if (soft_stopping_ && (!cloud_ok ||
       nearbyObstaclePointCountInRadius(release_soft_stop_radius_) > 0))
     {
+      const char * context =
+        mppi_fail_soft_stop_ ? "mppi fail" : "soft-stop aborted";
       halted = true;
+      mppi_fail_soft_stop_ = false;
       endSoftStop();
-      reason = cloud_ok ?
-        "soft-stop aborted (obstacles appeared)" :
-        "soft-stop aborted (cloud stale)";
+      if (!cloud_ok) {
+        reason = std::string(context) + " (cloud stale)";
+      } else if (nearbyObstaclePointCountInRadius(release_soft_stop_radius_) > 0) {
+        reason = std::string(context) + " (obstacles nearby)";
+      } else {
+        reason = std::string(context) + " (soft-stop brake clearance)";
+      }
     }
 
     if (proximity_speed_cap_ && !narrow_gate_pass && input_ok && !halted &&
@@ -990,11 +1181,13 @@ private:
         out.angular.z = clamp(out.angular.z, -effective_wz_max, effective_wz_max);
       }
       applyNarrowGateRockerIntentFilter(out, tnow);
+      applyRockerSectorIntentFilter(out, tnow);
       if (!soft_stopping_) {
         const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
         applyVxAccelLimit(out, dt);
       }
     } else {
+      mppi_fail_soft_stop_ = false;
       last_out_ = Twist();
       if (!reason.empty()) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
@@ -1002,6 +1195,7 @@ private:
       }
     }
 
+    applyLeftTurnWzTrick(out);
     out_pub_->publish(out);
     last_pub_stamp_ = tnow;
     last_out_ = out;
@@ -1045,6 +1239,9 @@ private:
   std::string rocker_topic_;
   double rocker_deadband_{5.0};
   double rocker_timeout_{0.30};
+  bool rocker_sector_intent_filter_enable_{true};
+  double rocker_intent_front_half_deg_{30.0};
+  double rocker_intent_side_span_deg_{90.0};
   bool gate_enable_{true};
   std::string bypass_source_{"handle"};
   double cmd_timeout_{0.30};
@@ -1060,6 +1257,9 @@ private:
   bool proximity_speed_cap_{true};
   double wz_max_{1.00};
   double vx_reverse_max_{0.5};
+  bool left_turn_wz_trick_enable_{false};
+  double left_turn_wz_trick_offset_deg_s_{2.0};
+  double left_turn_wz_trick_offset_rps_{0.03490658503988659};
   std::string car_info_topic_;
   bool gear_vx_cap_enable_{true};
   int gear_default_index_{3};
@@ -1077,6 +1277,7 @@ private:
   double release_soft_stop_decel_{1.5};
   double release_soft_stop_wz_decel_{2.0};
   double release_soft_stop_vel_eps_{0.02};
+  bool mppi_fail_soft_stop_enable_{false};
 
   std::string narrow_gate_pass_mode_topic_;
   std::string narrow_gate_side_pass_mode_topic_;
@@ -1150,6 +1351,7 @@ private:
   bool soft_stopping_{false};
   double soft_stop_vx_{0.0};
   double soft_stop_wz_{0.0};
+  bool mppi_fail_soft_stop_{false};
 };
 
 int main(int argc, char ** argv)
