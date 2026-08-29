@@ -1852,19 +1852,14 @@ private:
             }
           }
         }
-        if (open_cruise_exit_frames_ >= open_corridor_cruise_exit_hold_frames_ ||
-          speed_low || below_mppi)
+        if (speed_low || below_mppi)
         {
           open_cruise_exiting_ = false;
           open_cruise_exit_frames_ = 0;
           open_cruise_vx_ = 0.0;
           open_cruise_ax_ = 0.0;
-          const char * exit_reason = "hold frames elapsed";
-          if (below_mppi) {
-            exit_reason = "vx below mppi cmd";
-          } else if (speed_low) {
-            exit_reason = "speed<=early threshold";
-          }
+          const char * exit_reason = speed_low ?
+            "speed<=early threshold" : "vx below mppi cmd";
           RCLCPP_INFO(
             get_logger(),
             "open_corridor_cruise exit complete (%s, cruise_vx=%.2f mppi_vx=%.2f)",
