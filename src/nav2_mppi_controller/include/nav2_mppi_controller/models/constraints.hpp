@@ -24,10 +24,15 @@ namespace mppi::models
  */
 struct ControlConstraints
 {
-  float vx_max;
-  float vx_min;
-  float vy;
-  float wz;
+  float vx_max{0.0f};
+  float vx_min{0.0f};
+  float vy{0.0f};
+  float wz{0.0f};
+  float ax_max{3.0f};
+  float ax_min{-3.0f};
+  float ay_max{3.0f};
+  float ay_min{-3.0f};
+  float az_max{3.5f};
 };
 
 /**

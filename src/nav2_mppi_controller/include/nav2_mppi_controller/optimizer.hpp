@@ -113,8 +113,10 @@ public:
 
   /**
    * @brief Reset the optimization problem to initial conditions
+   * @param seed_speed When reset_seed_from_speed is enabled, seed control_sequence
+   *   and control_history from this measured speed (typically odom).
    */
-  void reset();
+  void reset(const geometry_msgs::msg::Twist * seed_speed = nullptr);
 
 protected:
   /**
@@ -161,6 +163,11 @@ protected:
    * @brief Apply hard vehicle constraints on control sequence
    */
   void applyControlSequenceConstraints();
+
+  /**
+   * @brief Fill control_sequence and control_history from measured robot speed
+   */
+  void seedControlSequenceFromSpeed(const geometry_msgs::msg::Twist & speed);
 
   /**
    * @brief  Update velocities in state
@@ -244,6 +251,7 @@ protected:
   NoiseGenerator noise_generator_;
 
   models::OptimizerSettings settings_;
+  bool reset_seed_from_speed_{false};
 
   models::State state_;
   models::ControlSequence control_sequence_;

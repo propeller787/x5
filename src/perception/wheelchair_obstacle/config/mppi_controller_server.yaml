@@ -43,6 +43,8 @@ controller_server:
       model_dt: 0.05
       # 须大于 MPPI 正常帧间隔（~0.18s@5Hz），小于回零 cancel→resend（~0.5s）。
       reset_period: 0.35
+      # idle reset 时用 odom robot_speed 填充 control_sequence，使 rollout 噪声均值与 t=0 速度一致。
+      reset_seed_from_speed: true
       time_steps: 40
       batch_size: 600
       iteration_count: 1
@@ -53,12 +55,20 @@ controller_server:
       #   3: 1.687 / 1.102   4: 2.249 / 1.260
       # 设置为略高于挡位 4。倒车（vx_min）与前进幅值相同，使按挡位缩放的倒车意图不被裁剪；
       # 若倒车应限制得更低以保安全，可收紧此值。
-      # 注意：1.1.20 的 ConstraintCritic 只强制速度界限，不强制加速度（ax/ay/az）。加速度
-      # 整形在上游的 cmd_vel 安全门中完成。
       vx_max: 5.0
       vx_min: -3.50
       vy_max: 0.0
       wz_max: 1.20
+      # 加速度约束：rollout 与最优 control sequence 按 model_dt 逐步限幅，使 MPPI 选轨迹时
+      # 即考虑加/减速度（ax_min 为负值表示减速度上限）。与 cmd_vel_safety_gate 的
+      # vx_accel_max_mps2 对齐；减速度可单独设大以便提前规划制动。
+      # 改动前（未引入 ax/ay/az 约束时）：yaml 无此五项，MPPI 仅 ConstraintCritic 限 vx/vy/wz。
+      # 引入后若 yaml 不写，代码默认 ax_max/ay_max=3.0、ax_min/ay_min=-3.0、az_max=3.5 (m/s²或rad/s²)。
+      ax_max: 1.0      # 默认 3.0
+      ax_min: -1.5     # 默认 -3.0
+      ay_max: 1.0      # 默认 3.0
+      ay_min: -1.0     # 默认 -3.0
+      az_max: 2.0      # 默认 3.5
 
       # 略减 vx 采样、加大 wz 采样，使 rollout 更多探索“低速+大角速度”绕障轨迹。
       vx_std: 0.35
@@ -109,6 +119,9 @@ controller_server:
         collision_cost: 500000.0
         consider_footprint: true
         near_goal_distance: 2.5
+        # 近终点（距 path 终点 <= near_goal_distance）是否仍累加膨胀梯度软代价 pose_cost。
+        # false（默认）：仅保留碰撞 + INSCRIBED 硬罚，便于末端对准/原地转向；true：与远场一致避障。
+        near_goal_repulsive_cost_enable: false
         inflation_layer_name: "inflation_layer"
 
       GoalCritic:

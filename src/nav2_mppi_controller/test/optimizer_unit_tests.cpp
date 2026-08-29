@@ -34,6 +34,15 @@ using namespace mppi::critics;  // NOLINT
 using namespace mppi::utils;  // NOLINT
 using xt::evaluation_strategy::immediate;
 
+void declareRelaxedAccelParams(const rclcpp_lifecycle::LifecycleNode::SharedPtr & node)
+{
+  node->declare_parameter("mppic.ax_max", rclcpp::ParameterValue(1000.0));
+  node->declare_parameter("mppic.ax_min", rclcpp::ParameterValue(-1000.0));
+  node->declare_parameter("mppic.ay_max", rclcpp::ParameterValue(1000.0));
+  node->declare_parameter("mppic.ay_min", rclcpp::ParameterValue(-1000.0));
+  node->declare_parameter("mppic.az_max", rclcpp::ParameterValue(1000.0));
+}
+
 class OptimizerTester : public Optimizer
 {
 public:
@@ -115,6 +124,23 @@ public:
     EXPECT_EQ(generated_trajectories_.x, xt::zeros<float>({1000, 50}));
   }
 
+  void setResetSeedFromSpeed(bool enabled)
+  {
+    reset_seed_from_speed_ = enabled;
+  }
+
+  void testResetWithSpeedSeed(const geometry_msgs::msg::Twist & speed)
+  {
+    reset(&speed);
+
+    EXPECT_NEAR(control_sequence_.vx(0), speed.linear.x, 1e-5);
+    EXPECT_NEAR(control_sequence_.wz(0), speed.angular.z, 1e-5);
+    EXPECT_NEAR(control_history_[0].vx, speed.linear.x, 1e-5);
+    EXPECT_NEAR(control_history_[0].wz, speed.angular.z, 1e-5);
+    EXPECT_EQ(state_.vx, xt::zeros<float>({1000, 50}));
+    EXPECT_NEAR(xt::sum(costs_, immediate)(), 0, 1e-6);
+  }
+
   bool fallbackWrapper(bool fail)
   {
     return fallback(fail);
@@ -152,6 +178,11 @@ public:
   void applyControlSequenceConstraintsWrapper()
   {
     return applyControlSequenceConstraints();
+  }
+
+  void setStateSpeed(const geometry_msgs::msg::Twist & speed)
+  {
+    state_.speed = speed;
   }
 
   models::ControlSequence & grabControlSequence()
@@ -321,6 +352,29 @@ TEST(OptimizerTests, resetTests)
   optimizer_tester.testReset();
 }
 
+TEST(OptimizerTests, resetWithSpeedSeedTests)
+{
+  auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("my_node");
+  OptimizerTester optimizer_tester;
+  node->declare_parameter("controller_frequency", rclcpp::ParameterValue(30.0));
+  node->declare_parameter("mppic.batch_size", rclcpp::ParameterValue(1000));
+  node->declare_parameter("mppic.time_steps", rclcpp::ParameterValue(50));
+  node->declare_parameter("mppic.reset_seed_from_speed", rclcpp::ParameterValue(true));
+  auto costmap_ros = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
+    "dummy_costmap", "", "dummy_costmap");
+  ParametersHandler param_handler(node);
+  rclcpp_lifecycle::State lstate;
+  costmap_ros->on_configure(lstate);
+  optimizer_tester.initialize(node, "mppic", costmap_ros, &param_handler);
+  optimizer_tester.setResetSeedFromSpeed(true);
+
+  geometry_msgs::msg::Twist speed;
+  speed.linear.x = 0.42;
+  speed.angular.z = 0.15;
+  optimizer_tester.fillOptimizerWithGarbage();
+  optimizer_tester.testResetWithSpeedSeed(speed);
+}
+
 TEST(OptimizerTests, FallbackTests)
 {
   auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("my_node");
@@ -463,6 +517,7 @@ TEST(OptimizerTests, applyControlSequenceConstraintsTests)
   node->declare_parameter("mppic.vx_min", rclcpp::ParameterValue(-1.0));
   node->declare_parameter("mppic.vy_max", rclcpp::ParameterValue(0.75));
   node->declare_parameter("mppic.wz_max", rclcpp::ParameterValue(2.0));
+  declareRelaxedAccelParams(node);
   auto costmap_ros = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
     "dummy_costmap", "", "dummy_costmap");
   ParametersHandler param_handler(node);
@@ -508,6 +563,42 @@ TEST(OptimizerTests, applyControlSequenceConstraintsTests)
   EXPECT_EQ(sequence.wz, -2.0 * xt::ones<float>({50}));
 }
 
+TEST(OptimizerTests, applyControlSequenceConstraintsAccelTests)
+{
+  auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("my_node");
+  OptimizerTester optimizer_tester;
+  node->declare_parameter("controller_frequency", rclcpp::ParameterValue(20.0));
+  node->declare_parameter("mppic.batch_size", rclcpp::ParameterValue(1000));
+  node->declare_parameter("mppic.time_steps", rclcpp::ParameterValue(50));
+  node->declare_parameter("mppic.model_dt", rclcpp::ParameterValue(0.05));
+  node->declare_parameter("mppic.vx_max", rclcpp::ParameterValue(5.0));
+  node->declare_parameter("mppic.vx_min", rclcpp::ParameterValue(-5.0));
+  node->declare_parameter("mppic.vy_max", rclcpp::ParameterValue(0.75));
+  node->declare_parameter("mppic.wz_max", rclcpp::ParameterValue(2.0));
+  node->declare_parameter("mppic.ax_max", rclcpp::ParameterValue(1.0));
+  node->declare_parameter("mppic.ax_min", rclcpp::ParameterValue(-2.0));
+  node->declare_parameter("mppic.az_max", rclcpp::ParameterValue(2.0));
+  auto costmap_ros = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
+    "dummy_costmap", "", "dummy_costmap");
+  ParametersHandler param_handler(node);
+  rclcpp_lifecycle::State lstate;
+  costmap_ros->on_configure(lstate);
+  optimizer_tester.initialize(node, "mppic", costmap_ros, &param_handler);
+
+  geometry_msgs::msg::Twist speed;
+  speed.linear.x = 2.0;
+  speed.angular.z = 0.0;
+  optimizer_tester.setStateSpeed(speed);
+
+  auto & sequence = optimizer_tester.grabControlSequence();
+  sequence.vx = xt::zeros<float>({50});
+  sequence.vy = xt::zeros<float>({50});
+  sequence.wz = xt::zeros<float>({50});
+  optimizer_tester.applyControlSequenceConstraintsWrapper();
+  EXPECT_NEAR(sequence.vx(0), 1.9f, 1e-5);  // 2.0 - 2.0 * 0.05
+  EXPECT_NEAR(sequence.vx(1), 1.8f, 1e-5);
+}
+
 TEST(OptimizerTests, updateStateVelocitiesTests)
 {
   auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("my_node");
@@ -519,6 +610,7 @@ TEST(OptimizerTests, updateStateVelocitiesTests)
   node->declare_parameter("mppic.vx_min", rclcpp::ParameterValue(-1.0));
   node->declare_parameter("mppic.vy_max", rclcpp::ParameterValue(0.60));
   node->declare_parameter("mppic.wz_max", rclcpp::ParameterValue(2.0));
+  declareRelaxedAccelParams(node);
   auto costmap_ros = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
     "dummy_costmap", "", "dummy_costmap");
   ParametersHandler param_handler(node);

@@ -14,6 +14,7 @@
 
 #include "nav2_mppi_controller/optimizer.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -31,6 +32,22 @@ namespace mppi
 
 using namespace xt::placeholders;  // NOLINT
 using xt::evaluation_strategy::immediate;
+
+namespace
+{
+
+void clampVelocityByAccelStep(
+  float & v, const float v_prev,
+  const float max_delta, const float min_delta,
+  const float v_min, const float v_max)
+{
+  float lower = (v_prev > 0.0f) ? (v_prev + min_delta) : (v_prev - max_delta);
+  float upper = (v_prev > 0.0f) ? (v_prev + max_delta) : (v_prev - min_delta);
+  v = std::clamp(v, lower, upper);
+  v = std::clamp(v, v_min, v_max);
+}
+
+}  // namespace
 
 void Optimizer::initialize(
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name,
@@ -76,15 +93,24 @@ void Optimizer::getParams()
   getParam(s.base_constraints.vx_min, "vx_min", -0.35);
   getParam(s.base_constraints.vy, "vy_max", 0.5);
   getParam(s.base_constraints.wz, "wz_max", 1.9);
+  getParam(s.base_constraints.ax_max, "ax_max", 3.0);
+  getParam(s.base_constraints.ax_min, "ax_min", -3.0);
+  getParam(s.base_constraints.ay_max, "ay_max", 3.0);
+  getParam(s.base_constraints.ay_min, "ay_min", -3.0);
+  getParam(s.base_constraints.az_max, "az_max", 3.5);
   getParam(s.sampling_std.vx, "vx_std", 0.2);
   getParam(s.sampling_std.vy, "vy_std", 0.2);
   getParam(s.sampling_std.wz, "wz_std", 0.4);
   getParam(s.retry_attempt_limit, "retry_attempt_limit", 1);
+  getParam(reset_seed_from_speed_, "reset_seed_from_speed", false);
 
   getParam(motion_model_name, "motion_model", std::string("DiffDrive"));
 
   s.constraints = s.base_constraints;
   setMotionModel(motion_model_name);
+  if (motion_model_) {
+    motion_model_->setConstraints(s.constraints, s.model_dt);
+  }
   parameters_handler_->addPostCallback([this]() {reset();});
 
   double controller_frequency;
@@ -113,7 +139,7 @@ void Optimizer::setOffset(double controller_frequency)
   }
 }
 
-void Optimizer::reset()
+void Optimizer::reset(const geometry_msgs::msg::Twist * seed_speed)
 {
   state_.reset(settings_.batch_size, settings_.time_steps);
   control_sequence_.reset(settings_.time_steps);
@@ -123,12 +149,53 @@ void Optimizer::reset()
   control_history_[3] = {0.0, 0.0, 0.0};
 
   settings_.constraints = settings_.base_constraints;
+  if (motion_model_) {
+    motion_model_->setConstraints(settings_.constraints, settings_.model_dt);
+  }
 
   costs_ = xt::zeros<float>({settings_.batch_size});
   generated_trajectories_.reset(settings_.batch_size, settings_.time_steps);
 
   noise_generator_.reset(settings_, isHolonomic());
-  RCLCPP_INFO(logger_, "Optimizer reset");
+
+  if (reset_seed_from_speed_ && seed_speed != nullptr) {
+    seedControlSequenceFromSpeed(*seed_speed);
+  } else {
+    RCLCPP_INFO(logger_, "Optimizer reset");
+  }
+}
+
+void Optimizer::seedControlSequenceFromSpeed(const geometry_msgs::msg::Twist & speed)
+{
+  const auto & c = settings_.constraints;
+  const float vx = std::clamp(
+    static_cast<float>(speed.linear.x),
+    static_cast<float>(c.vx_min), static_cast<float>(c.vx_max));
+  const float wz = std::clamp(
+    static_cast<float>(speed.angular.z),
+    static_cast<float>(-c.wz), static_cast<float>(c.wz));
+  float vy = 0.0f;
+  if (isHolonomic()) {
+    vy = std::clamp(
+      static_cast<float>(speed.linear.y),
+      static_cast<float>(-c.vy), static_cast<float>(c.vy));
+    control_sequence_.vy.fill(vy);
+  }
+
+  control_sequence_.vx.fill(vx);
+  control_sequence_.wz.fill(wz);
+
+  const models::Control seed{vx, vy, wz};
+  for (auto & history : control_history_) {
+    history = seed;
+  }
+
+  state_.speed = speed;
+  applyControlSequenceConstraints();
+
+  RCLCPP_INFO(
+    logger_,
+    "Optimizer reset seeded from speed: vx=%.3f wz=%.3f", vx, wz);
 }
 
 geometry_msgs::msg::TwistStamped Optimizer::evalControl(
@@ -231,6 +298,11 @@ bool Optimizer::isHolonomic() const {return motion_model_->isHolonomic();}
 void Optimizer::applyControlSequenceConstraints()
 {
   auto & s = settings_;
+  const float max_dvx = s.model_dt * s.constraints.ax_max;
+  const float min_dvx = s.model_dt * s.constraints.ax_min;
+  const float max_dvy = s.model_dt * s.constraints.ay_max;
+  const float min_dvy = s.model_dt * s.constraints.ay_min;
+  const float max_dwz = s.model_dt * s.constraints.az_max;
 
   if (isHolonomic()) {
     control_sequence_.vy = xt::clip(control_sequence_.vy, -s.constraints.vy, s.constraints.vy);
@@ -238,6 +310,30 @@ void Optimizer::applyControlSequenceConstraints()
 
   control_sequence_.vx = xt::clip(control_sequence_.vx, s.constraints.vx_min, s.constraints.vx_max);
   control_sequence_.wz = xt::clip(control_sequence_.wz, -s.constraints.wz, s.constraints.wz);
+
+  float v_prev = static_cast<float>(state_.speed.linear.x);
+  float vy_prev = static_cast<float>(state_.speed.linear.y);
+  float w_prev = static_cast<float>(state_.speed.angular.z);
+
+  const size_t n = control_sequence_.vx.size();
+  for (size_t i = 0; i < n; ++i) {
+    clampVelocityByAccelStep(
+      control_sequence_.vx(i), v_prev, max_dvx, min_dvx,
+      s.constraints.vx_min, s.constraints.vx_max);
+    v_prev = control_sequence_.vx(i);
+
+    float & wz = control_sequence_.wz(i);
+    wz = std::clamp(wz, w_prev - max_dwz, w_prev + max_dwz);
+    wz = std::clamp(wz, -s.constraints.wz, s.constraints.wz);
+    w_prev = wz;
+
+    if (isHolonomic()) {
+      clampVelocityByAccelStep(
+        control_sequence_.vy(i), vy_prev, max_dvy, min_dvy,
+        -s.constraints.vy, s.constraints.vy);
+      vy_prev = control_sequence_.vy(i);
+    }
+  }
 
   motion_model_->applyConstraints(control_sequence_);
 }
@@ -417,6 +513,9 @@ void Optimizer::setMotionModel(const std::string & model)
               "Model " + model + " is not valid! Valid options are DiffDrive, Omni, "
               "or Ackermann"));
   }
+  if (motion_model_) {
+    motion_model_->setConstraints(settings_.constraints, settings_.model_dt);
+  }
 }
 
 void Optimizer::setSpeedLimit(double speed_limit, bool percentage)
@@ -443,6 +542,9 @@ void Optimizer::setSpeedLimit(double speed_limit, bool percentage)
       s.constraints.vy = s.base_constraints.vy * ratio;
       s.constraints.wz = s.base_constraints.wz * ratio;
     }
+  }
+  if (motion_model_) {
+    motion_model_->setConstraints(s.constraints, s.model_dt);
   }
 }
 

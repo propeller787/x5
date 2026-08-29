@@ -29,6 +29,7 @@ void CostCritic::initialize()
   getParam(critical_cost_, "critical_cost", 300.0);
   getParam(collision_cost_, "collision_cost", 1000000.0);
   getParam(near_goal_distance_, "near_goal_distance", 0.5);
+  getParam(near_goal_repulsive_cost_enable_, "near_goal_repulsive_cost_enable", false);
   getParam(inflation_layer_name_, "inflation_layer_name", std::string(""));
 
   // Normalized by cost value to put in same regime as other weights
@@ -164,7 +165,9 @@ void CostCritic::score(CriticData & data)
       using namespace nav2_costmap_2d; // NOLINT
       if (pose_cost >= INSCRIBED_INFLATED_OBSTACLE) {
         repulsive_cost[i] += critical_cost_;
-      } else if (!near_goal) {  // Generally prefer trajectories further from obstacles
+      } else if (!near_goal || near_goal_repulsive_cost_enable_) {
+        // Generally prefer trajectories further from obstacles; near goal this is
+        // optional (off by default) so path/goal critics can finish the maneuver.
         repulsive_cost[i] += pose_cost;
       }
     }

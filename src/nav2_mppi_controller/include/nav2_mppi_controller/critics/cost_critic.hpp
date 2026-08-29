@@ -88,6 +88,7 @@ protected:
   float weight_{0};
 
   float near_goal_distance_;
+  bool near_goal_repulsive_cost_enable_{false};
   std::string inflation_layer_name_;
 
   unsigned int power_{0};

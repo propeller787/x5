@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <string>
 
+#include "nav2_mppi_controller/models/constraints.hpp"
 #include "nav2_mppi_controller/models/control_sequence.hpp"
 #include "nav2_mppi_controller/models/state.hpp"
 #include <xtensor/xmath.hpp>
@@ -48,21 +49,67 @@ public:
   virtual ~MotionModel() = default;
 
   /**
+   * @brief Set velocity/acceleration constraints used during rollout prediction
+   */
+  void setConstraints(const models::ControlConstraints & constraints, float model_dt)
+  {
+    constraints_ = constraints;
+    model_dt_ = model_dt;
+  }
+
+  /**
    * @brief With input velocities, find the vehicle's output velocities
    * @param state Contains control velocities to use to populate vehicle velocities
    */
   virtual void predict(models::State & state)
   {
     using namespace xt::placeholders;  // NOLINT
-    xt::noalias(xt::view(state.vx, xt::all(), xt::range(1, _))) =
-      xt::view(state.cvx, xt::all(), xt::range(0, -1));
 
-    xt::noalias(xt::view(state.wz, xt::all(), xt::range(1, _))) =
-      xt::view(state.cwz, xt::all(), xt::range(0, -1));
+    if (model_dt_ <= 0.0f) {
+      xt::noalias(xt::view(state.vx, xt::all(), xt::range(1, _))) =
+        xt::view(state.cvx, xt::all(), xt::range(0, -1));
 
-    if (isHolonomic()) {
-      xt::noalias(xt::view(state.vy, xt::all(), xt::range(1, _))) =
-        xt::view(state.cvy, xt::all(), xt::range(0, -1));
+      xt::noalias(xt::view(state.wz, xt::all(), xt::range(1, _))) =
+        xt::view(state.cwz, xt::all(), xt::range(0, -1));
+
+      if (isHolonomic()) {
+        xt::noalias(xt::view(state.vy, xt::all(), xt::range(1, _))) =
+          xt::view(state.cvy, xt::all(), xt::range(0, -1));
+      }
+      return;
+    }
+
+    const float max_delta_vx = model_dt_ * constraints_.ax_max;
+    const float min_delta_vx = model_dt_ * constraints_.ax_min;
+    const float max_delta_vy = model_dt_ * constraints_.ay_max;
+    const float min_delta_vy = model_dt_ * constraints_.ay_min;
+    const float max_delta_wz = model_dt_ * constraints_.az_max;
+    const bool holonomic = isHolonomic();
+    const size_t n_cols = state.vx.shape()[1];
+
+    for (size_t i = 1; i < n_cols; ++i) {
+      const auto vx_prev = xt::view(state.vx, xt::all(), i - 1);
+      const auto lower_vx = xt::where(
+        vx_prev > 0.0f, vx_prev + min_delta_vx, vx_prev - max_delta_vx);
+      const auto upper_vx = xt::where(
+        vx_prev > 0.0f, vx_prev + max_delta_vx, vx_prev - min_delta_vx);
+      xt::noalias(xt::view(state.vx, xt::all(), i)) = xt::clip(
+        xt::view(state.cvx, xt::all(), i - 1), lower_vx, upper_vx);
+
+      const auto wz_prev = xt::view(state.wz, xt::all(), i - 1);
+      xt::noalias(xt::view(state.wz, xt::all(), i)) = xt::clip(
+        xt::view(state.cwz, xt::all(), i - 1),
+        wz_prev - max_delta_wz, wz_prev + max_delta_wz);
+
+      if (holonomic) {
+        const auto vy_prev = xt::view(state.vy, xt::all(), i - 1);
+        const auto lower_vy = xt::where(
+          vy_prev > 0.0f, vy_prev + min_delta_vy, vy_prev - max_delta_vy);
+        const auto upper_vy = xt::where(
+          vy_prev > 0.0f, vy_prev + max_delta_vy, vy_prev - min_delta_vy);
+        xt::noalias(xt::view(state.vy, xt::all(), i)) = xt::clip(
+          xt::view(state.cvy, xt::all(), i - 1), lower_vy, upper_vy);
+      }
     }
   }
 
@@ -77,6 +124,10 @@ public:
    * @param control_sequence Control sequence to apply constraints to
    */
   virtual void applyConstraints(models::ControlSequence & /*control_sequence*/) {}
+
+protected:
+  models::ControlConstraints constraints_{};
+  float model_dt_{0.0f};
 };
 
 /**

@@ -18,6 +18,7 @@
 #include "gtest/gtest.h"
 #include "rclcpp/rclcpp.hpp"
 #include "nav2_mppi_controller/motion_models.hpp"
+#include "nav2_mppi_controller/models/constraints.hpp"
 #include "nav2_mppi_controller/models/state.hpp"
 #include "nav2_mppi_controller/models/control_sequence.hpp"
 
@@ -254,4 +255,31 @@ TEST(MotionModelTests, AckermannReversingTest)
 
   // Check it cleanly destructs
   model.reset();
+}
+
+TEST(MotionModelTests, AccelConstraintTest)
+{
+  models::State state;
+  const int batches = 4;
+  const int timesteps = 5;
+  state.reset(batches, timesteps);
+  std::unique_ptr<DiffDriveMotionModel> model =
+    std::make_unique<DiffDriveMotionModel>();
+
+  models::ControlConstraints constraints{};
+  constraints.ax_max = 1.0f;
+  constraints.ax_min = -2.0f;
+  constraints.az_max = 2.0f;
+  model->setConstraints(constraints, 0.05f);
+
+  xt::view(state.vx, xt::all(), 0) = 2.0f;
+  xt::view(state.wz, xt::all(), 0) = 0.0f;
+  state.cvx = xt::zeros<float>({batches, timesteps});
+  state.cwz = xt::zeros<float>({batches, timesteps});
+
+  model->predict(state);
+
+  EXPECT_NEAR(state.vx(0, 1), 1.9f, 1e-5);
+  EXPECT_NEAR(state.vx(0, 2), 1.8f, 1e-5);
+  EXPECT_NEAR(state.wz(0, 1), 0.0f, 1e-5);
 }
