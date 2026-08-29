@@ -57,6 +57,12 @@ joystick_local_path_node:
     path_obstacle_limit_skip_pass_mode: true
     path_obstacle_limit_skip_in_place: true
 
+    # 松手软停：摇杆回中 + 半径内无障碍 → 发 mode 并跳过 MPPI；否则 halt（默认关，实车验证后开）
+    release_soft_stop_enable: false
+    release_soft_stop_radius: 0.5
+    release_soft_stop_topic: "/mppi/release_soft_stop_mode"
+    stick_release_halt_topic: "/mppi/stick_release_halt"
+
     # 窄门 detect/track/pass：仅正对（body +x 双侧切片）；斜穿见 gate_side_pass。
     gate_path_enable: true
     obstacle_points_topic: "/perception/obstacle_points"

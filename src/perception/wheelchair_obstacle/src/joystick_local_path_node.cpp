@@ -234,6 +234,13 @@ public:
     path_obstacle_limit_skip_in_place_ = declare_parameter<bool>(
       "path_obstacle_limit_skip_in_place", true);
 
+    release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", false);
+    release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 0.5);
+    release_soft_stop_topic_ = declare_parameter<std::string>(
+      "release_soft_stop_topic", "/mppi/release_soft_stop_mode");
+    stick_release_halt_topic_ = declare_parameter<std::string>(
+      "stick_release_halt_topic", "/mppi/stick_release_halt");
+
     gate_path_enable_ = declare_parameter<bool>("gate_path_enable", true);
     obstacle_points_topic_ = declare_parameter<std::string>(
       "obstacle_points_topic", "/perception/obstacle_points");
@@ -392,7 +399,7 @@ public:
       joystick_sub_ = create_subscription<Joystick>(
         joystick_topic_, 10,
         std::bind(&JoystickLocalPathNode::onJoystick, this, std::placeholders::_1));
-      if (gate_path_enable_) {
+      if (gate_path_enable_ || release_soft_stop_enable_) {
         cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
           obstacle_points_topic_, rclcpp::SensorDataQoS(),
           std::bind(&JoystickLocalPathNode::onCloud, this, std::placeholders::_1));
@@ -414,6 +421,10 @@ public:
       narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local());
     narrow_gate_side_pass_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
       narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local());
+    release_soft_stop_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
+      release_soft_stop_topic_, rclcpp::QoS(1).transient_local());
+    stick_release_halt_pub_ = create_publisher<std_msgs::msg::Bool>(
+      stick_release_halt_topic_, rclcpp::QoS(1).transient_local());
     if (gate_marker_enable_ && gate_path_enable_) {
       gate_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
         gate_marker_topic_, rclcpp::QoS(1).transient_local());
@@ -439,6 +450,8 @@ public:
     pass_mode_init.data = false;
     narrow_gate_pass_mode_pub_->publish(pass_mode_init);
     narrow_gate_side_pass_mode_pub_->publish(pass_mode_init);
+    release_soft_stop_mode_pub_->publish(pass_mode_init);
+    stick_release_halt_pub_->publish(pass_mode_init);
     action_client_ = rclcpp_action::create_client<FollowPath>(this, action_name_);
 
     const double period = 1.0 / std::max(0.1, send_rate_hz_);
@@ -497,6 +510,13 @@ public:
         path_obstacle_stop_margin_m_, path_obstacle_min_keep_m_,
         path_obstacle_limit_skip_pass_mode_ ? "yes" : "no",
         path_obstacle_limit_skip_in_place_ ? "yes" : "no");
+    }
+    if (release_soft_stop_enable_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "release_soft_stop: radius=%.2fm topic=%s halt_topic=%s (skip MPPI, gate lowpass)",
+        release_soft_stop_radius_, release_soft_stop_topic_.c_str(),
+        stick_release_halt_topic_.c_str());
     }
   }
 
@@ -638,6 +658,102 @@ private:
     RCLCPP_INFO(
       get_logger(), "narrow_gate_side_pass_mode -> %s (%s)",
       active ? "ACTIVE (crawl)" : "inactive", src);
+  }
+
+  void publishReleaseSoftStopModeState()
+  {
+    std_msgs::msg::Bool msg;
+    msg.data = release_soft_stop_active_;
+    release_soft_stop_mode_pub_->publish(msg);
+  }
+
+  void publishStickReleaseHaltState()
+  {
+    std_msgs::msg::Bool msg;
+    msg.data = stick_release_halt_active_;
+    stick_release_halt_pub_->publish(msg);
+  }
+
+  void setReleaseSoftStopMode(bool active)
+  {
+    if (active == release_soft_stop_active_) {
+      return;
+    }
+    release_soft_stop_active_ = active;
+    publishReleaseSoftStopModeState();
+    if (active) {
+      cancelActiveGoal();
+      RCLCPP_INFO(
+        get_logger(),
+        "release_soft_stop -> ACTIVE (skip MPPI, clear within %.2fm)",
+        release_soft_stop_radius_);
+    } else {
+      RCLCPP_INFO(get_logger(), "release_soft_stop -> inactive");
+    }
+  }
+
+  void setStickReleaseHalt(bool active)
+  {
+    if (active == stick_release_halt_active_) {
+      return;
+    }
+    stick_release_halt_active_ = active;
+    publishStickReleaseHaltState();
+    if (active) {
+      cancelActiveGoal();
+      RCLCPP_INFO(get_logger(), "stick_release_halt -> ACTIVE (skip MPPI, gate halt)");
+    } else {
+      RCLCPP_INFO(get_logger(), "stick_release_halt -> inactive");
+    }
+  }
+
+  int nearbyObstaclePointCountInRadius(
+    double radius_m, const rclcpp::Time & tnow) const
+  {
+    if (radius_m <= 0.0) {
+      return 0;
+    }
+    std::vector<std::pair<float, float>> pts;
+    {
+      std::lock_guard<std::mutex> lock(cloud_mutex_);
+      if (!have_cloud_ || (tnow - latest_cloud_stamp_).seconds() > obstacle_timeout_) {
+        return -1;
+      }
+      pts = cloud_pts_;
+    }
+    const double r2 = radius_m * radius_m;
+    int count = 0;
+    for (const auto & p : pts) {
+      const double d2 = static_cast<double>(p.first) * p.first +
+        static_cast<double>(p.second) * p.second;
+      if (d2 <= r2) {
+        ++count;
+      }
+    }
+    return count;
+  }
+
+  void updateReleaseSoftStopOnStickIdle(const rclcpp::Time & tnow)
+  {
+    const int nearby = nearbyObstaclePointCountInRadius(release_soft_stop_radius_, tnow);
+    if (nearby < 0) {
+      setReleaseSoftStopMode(false);
+      setStickReleaseHalt(true);
+      return;
+    }
+    if (nearby == 0) {
+      setReleaseSoftStopMode(true);
+      setStickReleaseHalt(false);
+    } else {
+      setReleaseSoftStopMode(false);
+      setStickReleaseHalt(true);
+    }
+  }
+
+  void clearReleaseSoftStopModes()
+  {
+    setReleaseSoftStopMode(false);
+    setStickReleaseHalt(false);
   }
 
   void publishSidePassCrawlModeState()
@@ -1338,6 +1454,7 @@ private:
         "odom stale or missing, cancelling FollowPath goal");
       cancelActiveGoal();
       publishEmptyPath();
+      clearReleaseSoftStopModes();
       return;
     }
 
@@ -1346,6 +1463,11 @@ private:
     if (use_spatial_range_) {
       if (!buildSpatialPath(odom, tnow, path, stick_idle)) {
         if (stick_idle) {
+          if (release_soft_stop_enable_) {
+            updateReleaseSoftStopOnStickIdle(tnow);
+          } else {
+            clearReleaseSoftStopModes();
+          }
           if (!was_stick_idle_) {
             scheduleMppiReset("stick center");
             publishEmptyPath();
@@ -1354,15 +1476,19 @@ private:
           resetGateTracking();
           clearNarrowGatePassMode(tnow);
           clearSidePassCrawlMode(tnow);
+          cancelActiveGoal();
+          publishEmptyPath();
           publishGateMarkers(*odom);
           return;
         }
+        clearReleaseSoftStopModes();
         was_stick_idle_ = false;
         cancelActiveGoal();
         publishEmptyPath();
         publishGateMarkers(*odom);
         return;
       }
+      clearReleaseSoftStopModes();
       was_stick_idle_ = false;
     } else {
       if (!buildVelocityPath(odom, tnow, path)) {
@@ -1391,6 +1517,8 @@ private:
     if (use_spatial_range_ && gate_path_enable_) {
       publishNarrowGatePassModeState();
       publishSidePassCrawlModeState();
+      publishReleaseSoftStopModeState();
+      publishStickReleaseHaltState();
       if (footprint_publish_enable_) {
         int gear = gear_default_index_;
         {
@@ -1406,6 +1534,10 @@ private:
     if (narrow_gate_side_pass_crawl_active_) {
       cancelActiveGoal();
       publishEmptyPath();
+      return;
+    }
+
+    if (release_soft_stop_active_ || stick_release_halt_active_) {
       return;
     }
 
@@ -3402,6 +3534,12 @@ private:
   double path_obstacle_min_keep_m_{0.12};
   bool path_obstacle_limit_skip_pass_mode_{true};
   bool path_obstacle_limit_skip_in_place_{true};
+  bool release_soft_stop_enable_{false};
+  double release_soft_stop_radius_{0.5};
+  std::string release_soft_stop_topic_;
+  std::string stick_release_halt_topic_;
+  bool release_soft_stop_active_{false};
+  bool stick_release_halt_active_{false};
   std::vector<geometry_msgs::msg::Point> footprint_base_pts_;
   double last_footprint_padding_{-1.0};
   bool have_published_footprint_{false};
@@ -3552,6 +3690,8 @@ private:
   rclcpp::Publisher<Path>::SharedPtr path_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_pass_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_side_pass_mode_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr release_soft_stop_mode_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr stick_release_halt_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_memory_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gate_memory_state_pub_;

@@ -11,7 +11,7 @@ cmd_vel_safety_gate_node:
     # 行进意图（proximity 限速方向）：来自固件已按挡位缩放的摇杆速度。
     handle_control_topic: "/handle/control"
     # 原始摇杆（CAN 0x226, interface/msg/Joystick, rocker_x/y in [-100, 100]）。
-    # 松手时：周边 release_soft_stop_radius 内无障碍点云 → 软停车；否则急停。
+    # 松手软/急停：jlp release_soft_stop_enable 时由 jlp 发 topic；否则 gate legacy 判定。
     # /handle/control 来自固件 ramp/滤波，有 100~500 ms 滞后；原始摇杆反映意图更快。
     rocker_topic: "/sensor/joystick"
     # |rocker_x|, |rocker_y| <= rocker_deadband 即视为回正（原始单位）。
@@ -66,17 +66,27 @@ cmd_vel_safety_gate_node:
     gear_default_index: 3
     gear_vx_max_kph: [2.0, 3.0, 4.0, 6.0]   # 1–4 挡对应 kph，内部换算为 m/s
 
-    # --- 松手软停车（周边无障碍时）---
+    # --- 松手软停 legacy（jlp release_soft_stop_enable=false 时 gate 本地判定）---
     release_soft_stop_enable: true
-    # base_link 下该半径(m)内无障碍点时，松手按减速度 ramp 至零；否则急停。
     release_soft_stop_radius: 0.8
     release_soft_stop_decel: 1.0
     release_soft_stop_wz_decel: 2.0
-    release_soft_stop_vel_eps: 0.02
 
-    # MPPI Optimizer fail（/cmd_vel 突变为 0 且摇杆仍出死区）：走松手软停逻辑
-    # 周边 release_soft_stop_radius 内无障碍 → vx/wz 低通至零；否则急停
+    # --- 松手软停 jlp topic（release_soft_stop_enable=true 时 jlp 判定；gate 低通向零）---
+    release_soft_stop_mode_topic: "/mppi/release_soft_stop_mode"
+    stick_release_halt_topic: "/mppi/stick_release_halt"
+    release_soft_stop_time_constant_s: 0.30
+    release_soft_stop_angular_time_constant_s: 0.30
+    release_soft_stop_vel_eps: 0.02
+    release_soft_stop_brake_check_enable: true
+    release_soft_stop_standoff: 0.08
+    release_soft_stop_brake_sector_half_angle: 0.30
+
+    # MPPI fail 软停（/cmd_vel 突变为 0 且摇杆仍出死区）：减速度 ramp
     mppi_fail_soft_stop_enable: false
+    mppi_fail_soft_stop_radius: 0.5
+    mppi_fail_soft_stop_decel: 1.0
+    mppi_fail_soft_stop_wz_decel: 2.0
 
     # --- 按 obstacle_points 周边密度分三档限制角速度（带迟滞）---
     # 调试：/cmd_vel_safety_gate_node/wz_density_tier (0=OPEN, 1=MODERATE, 2=DENSE)

@@ -3,8 +3,10 @@
 // Always forwards MPPI output (with optional gate_enable bypass for testing).
 // Retained safety layers:
 //   - cmd_hold_timeout: hold last /cmd_vel when MPPI is slower than publish_rate_hz
-//   - joystick release / stale -> stop (hard if obstacles nearby or cloud stale;
-//     soft ramp when clear within release_soft_stop_radius)
+//   - joystick stale -> fail-safe stop
+//   - release soft-stop: joystick_local_path may publish /mppi/release_soft_stop_mode
+//     (gate low-pass decel) or /mppi/stick_release_halt; legacy gate rocker release
+//     when jlp topics inactive
 //   - proximity speed cap from obstacle cloud + travel intent
 //   - tiered wz cap from nearby obstacle-point density
 //   - gear vx cap from /vlago/car/info (1-4 gear -> configurable kph limits)
@@ -176,12 +178,37 @@ public:
     wz_density_min_dwell_ = declare_parameter<double>("wz_density_min_dwell", 0.4);
 
     release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", true);
-    release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 1.2);
-    release_soft_stop_decel_ = declare_parameter<double>("release_soft_stop_decel", 1.5);
+    release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 0.8);
+    release_soft_stop_decel_ = declare_parameter<double>("release_soft_stop_decel", 1.0);
     release_soft_stop_wz_decel_ = declare_parameter<double>("release_soft_stop_wz_decel", 2.0);
+    release_soft_stop_mode_topic_ = declare_parameter<std::string>(
+      "release_soft_stop_mode_topic", "/mppi/release_soft_stop_mode");
+    stick_release_halt_topic_ = declare_parameter<std::string>(
+      "stick_release_halt_topic", "/mppi/stick_release_halt");
+    release_soft_stop_time_constant_s_ = declare_parameter<double>(
+      "release_soft_stop_time_constant_s", 0.30);
+    release_soft_stop_angular_time_constant_s_ = declare_parameter<double>(
+      "release_soft_stop_angular_time_constant_s", 0.30);
+    if (release_soft_stop_time_constant_s_ < 1e-3) {
+      release_soft_stop_time_constant_s_ = 0.30;
+    }
+    if (release_soft_stop_angular_time_constant_s_ < 1e-3) {
+      release_soft_stop_angular_time_constant_s_ = release_soft_stop_time_constant_s_;
+    }
     release_soft_stop_vel_eps_ = declare_parameter<double>("release_soft_stop_vel_eps", 0.02);
+    release_soft_stop_brake_check_enable_ = declare_parameter<bool>(
+      "release_soft_stop_brake_check_enable", true);
+    release_soft_stop_standoff_ = declare_parameter<double>(
+      "release_soft_stop_standoff", standoff_);
+    release_soft_stop_brake_sector_half_angle_ = declare_parameter<double>(
+      "release_soft_stop_brake_sector_half_angle", sector_half_angle_);
+    mppi_fail_soft_stop_decel_ = declare_parameter<double>("mppi_fail_soft_stop_decel", 1.0);
+    mppi_fail_soft_stop_wz_decel_ = declare_parameter<double>(
+      "mppi_fail_soft_stop_wz_decel", 2.0);
     mppi_fail_soft_stop_enable_ = declare_parameter<bool>(
       "mppi_fail_soft_stop_enable", false);
+    mppi_fail_soft_stop_radius_ = declare_parameter<double>(
+      "mppi_fail_soft_stop_radius", 0.5);
 
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
@@ -328,6 +355,14 @@ public:
       narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
       std::bind(&CmdVelSafetyGateNode::onNarrowGateSidePassMode, this, std::placeholders::_1));
 
+    release_soft_stop_mode_sub_ = create_subscription<Bool>(
+      release_soft_stop_mode_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&CmdVelSafetyGateNode::onReleaseSoftStopMode, this, std::placeholders::_1));
+
+    stick_release_halt_sub_ = create_subscription<Bool>(
+      stick_release_halt_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&CmdVelSafetyGateNode::onStickReleaseHalt, this, std::placeholders::_1));
+
     out_pub_ = create_publisher<Twist>(out_topic_, 10);
     wz_tier_pub_ = create_publisher<UInt8>(
       std::string(get_name()) + "/wz_density_tier", 10);
@@ -422,6 +457,16 @@ private:
   void onNarrowGateSidePassMode(const Bool::SharedPtr msg)
   {
     narrow_gate_side_pass_crawl_active_.store(msg->data, std::memory_order_relaxed);
+  }
+
+  void onReleaseSoftStopMode(const Bool::SharedPtr msg)
+  {
+    release_soft_stop_active_.store(msg->data, std::memory_order_relaxed);
+  }
+
+  void onStickReleaseHalt(const Bool::SharedPtr msg)
+  {
+    stick_release_halt_active_.store(msg->data, std::memory_order_relaxed);
   }
 
   void onTwist(const Twist::SharedPtr msg)
@@ -842,8 +887,12 @@ private:
 
   void applySoftStopRamp(Twist & out, double dt)
   {
-    const double lin_step = std::max(1e-6, release_soft_stop_decel_) * dt;
-    const double wz_step = std::max(1e-6, release_soft_stop_wz_decel_) * dt;
+    const double lin_decel = soft_stop_ramp_legacy_ ?
+      release_soft_stop_decel_ : mppi_fail_soft_stop_decel_;
+    const double wz_decel = soft_stop_ramp_legacy_ ?
+      release_soft_stop_wz_decel_ : mppi_fail_soft_stop_wz_decel_;
+    const double lin_step = std::max(1e-6, lin_decel) * dt;
+    const double wz_step = std::max(1e-6, wz_decel) * dt;
 
     if (std::abs(soft_stop_vx_) <= release_soft_stop_vel_eps_) {
       soft_stop_vx_ = 0.0;
@@ -859,6 +908,31 @@ private:
       soft_stop_wz_ = std::max(0.0, soft_stop_wz_ - wz_step);
     } else {
       soft_stop_wz_ = std::min(0.0, soft_stop_wz_ + wz_step);
+    }
+
+    out.linear.x = soft_stop_vx_;
+    out.angular.z = soft_stop_wz_;
+    if (out.linear.x < 0.0) {
+      out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
+    }
+  }
+
+  void applySoftStopLowPass(Twist & out, double dt)
+  {
+    const double valid_dt = std::max(1e-3, std::isfinite(dt) ? dt : 0.0);
+    const double alpha = std::exp(
+      -valid_dt / release_soft_stop_time_constant_s_);
+    const double alpha_wz = std::exp(
+      -valid_dt / release_soft_stop_angular_time_constant_s_);
+
+    soft_stop_vx_ *= alpha;
+    soft_stop_wz_ *= alpha_wz;
+
+    if (std::abs(soft_stop_vx_) <= release_soft_stop_vel_eps_) {
+      soft_stop_vx_ = 0.0;
+    }
+    if (std::abs(soft_stop_wz_) <= release_soft_stop_vel_eps_) {
+      soft_stop_wz_ = 0.0;
     }
 
     out.linear.x = soft_stop_vx_;
@@ -899,6 +973,80 @@ private:
            nearbyObstaclePointCountInRadius(release_soft_stop_radius_) == 0;
   }
 
+  bool canSoftStopOnMppiFail(bool cloud_ok) const
+  {
+    return mppi_fail_soft_stop_enable_ && cloud_ok &&
+           nearbyObstaclePointCountInRadius(mppi_fail_soft_stop_radius_) == 0;
+  }
+
+  double minRangeInSectorHalf(double center_angle, double half_angle) const
+  {
+    double best = std::numeric_limits<double>::infinity();
+    std::lock_guard<std::mutex> lock(cloud_mutex_);
+    for (const auto & p : cloud_pts_) {
+      const double ang = std::atan2(p.second, p.first);
+      if (angleDiff(ang, center_angle) <= half_angle) {
+        const double r = std::hypot(p.first, p.second);
+        if (r < best) {
+          best = r;
+        }
+      }
+    }
+    return best;
+  }
+
+  double softStopBrakeDistance(double vx) const
+  {
+    const double speed = std::abs(vx);
+    if (speed <= release_soft_stop_vel_eps_) {
+      return 0.0;
+    }
+    return speed * release_soft_stop_time_constant_s_;
+  }
+
+  bool softStopBrakeClearanceOk(double vx) const
+  {
+    if (!release_soft_stop_brake_check_enable_) {
+      return true;
+    }
+
+    const double stop_dist = softStopBrakeDistance(vx);
+    if (stop_dist <= 1e-6) {
+      return true;
+    }
+
+    double overhang = front_overhang_;
+    double center_angle = 0.0;
+    if (vx > release_soft_stop_vel_eps_) {
+      overhang = front_overhang_;
+      center_angle = 0.0;
+    } else if (vx < -release_soft_stop_vel_eps_) {
+      overhang = rear_overhang_;
+      center_angle = M_PI;
+    } else {
+      return true;
+    }
+
+    const double d = minRangeInSectorHalf(
+      center_angle, release_soft_stop_brake_sector_half_angle_);
+    if (!std::isfinite(d)) {
+      return true;
+    }
+
+    const double clearance = d - overhang - release_soft_stop_standoff_;
+    return stop_dist <= clearance;
+  }
+
+  bool canSoftStopOnReleaseLowPass(bool cloud_ok) const
+  {
+    return cloud_ok && softStopBrakeClearanceOk(last_out_.linear.x);
+  }
+
+  bool canContinueSoftStopLowPass() const
+  {
+    return softStopBrakeClearanceOk(soft_stop_vx_);
+  }
+
   bool isTwistNearZero(const Twist & twist) const
   {
     return std::abs(twist.linear.x) <= release_soft_stop_vel_eps_ &&
@@ -909,7 +1057,7 @@ private:
     bool cloud_ok, bool & halted, std::string & reason, const char * context)
   {
     if (canSoftStopOnRelease(cloud_ok)) {
-      beginSoftStop();
+      beginSoftStopRampLegacy();
       return;
     }
     halted = true;
@@ -917,6 +1065,24 @@ private:
     if (!cloud_ok) {
       reason = std::string(context) + " (cloud stale)";
     } else if (nearbyObstaclePointCountInRadius(release_soft_stop_radius_) > 0) {
+      reason = std::string(context) + " (obstacles nearby)";
+    } else {
+      reason = std::string(context) + " (soft-stop brake clearance)";
+    }
+  }
+
+  void applyMppiFailSoftStop(
+    bool cloud_ok, bool & halted, std::string & reason, const char * context)
+  {
+    if (canSoftStopOnMppiFail(cloud_ok)) {
+      beginSoftStopRampMppiFail();
+      return;
+    }
+    halted = true;
+    endSoftStop();
+    if (!cloud_ok) {
+      reason = std::string(context) + " (cloud stale)";
+    } else if (nearbyObstaclePointCountInRadius(mppi_fail_soft_stop_radius_) > 0) {
       reason = std::string(context) + " (obstacles nearby)";
     } else {
       reason = std::string(context) + " (soft-stop brake clearance)";
@@ -963,24 +1129,73 @@ private:
       target.linear.x, target.angular.z);
   }
 
-  void beginSoftStop()
+  void beginSoftStopRampLegacy()
   {
     if (!soft_stopping_) {
+      soft_stop_ramp_mode_ = true;
+      soft_stop_ramp_legacy_ = true;
       soft_stop_vx_ = last_out_.linear.x;
       soft_stop_wz_ = last_out_.angular.z;
       soft_stopping_ = true;
       RCLCPP_INFO(
         get_logger(),
-        "release soft-stop: v0=%.2f wz0=%.2f (clear within %.1fm)",
+        "release soft-stop ramp: v0=%.2f wz0=%.2f (clear within %.1fm)",
         soft_stop_vx_, soft_stop_wz_, release_soft_stop_radius_);
+    }
+  }
+
+  void beginSoftStopRampMppiFail()
+  {
+    if (!soft_stopping_) {
+      soft_stop_ramp_mode_ = true;
+      soft_stop_ramp_legacy_ = false;
+      soft_stop_vx_ = last_out_.linear.x;
+      soft_stop_wz_ = last_out_.angular.z;
+      soft_stopping_ = true;
+      RCLCPP_INFO(
+        get_logger(),
+        "mppi fail soft-stop ramp: v0=%.2f wz0=%.2f decel=%.2f/%.2f",
+        soft_stop_vx_, soft_stop_wz_,
+        mppi_fail_soft_stop_decel_, mppi_fail_soft_stop_wz_decel_);
+    }
+  }
+
+  void beginSoftStopLowPass()
+  {
+    if (!soft_stopping_) {
+      soft_stop_ramp_mode_ = false;
+      soft_stop_ramp_legacy_ = false;
+      soft_stop_vx_ = last_out_.linear.x;
+      soft_stop_wz_ = last_out_.angular.z;
+      soft_stopping_ = true;
+      RCLCPP_INFO(
+        get_logger(),
+        "release soft-stop lowpass: v0=%.2f wz0=%.2f tau=%.2fs/%.2fs",
+        soft_stop_vx_, soft_stop_wz_,
+        release_soft_stop_time_constant_s_,
+        release_soft_stop_angular_time_constant_s_);
     }
   }
 
   void endSoftStop()
   {
     soft_stopping_ = false;
+    soft_stop_ramp_mode_ = false;
+    soft_stop_ramp_legacy_ = false;
     soft_stop_vx_ = 0.0;
     soft_stop_wz_ = 0.0;
+  }
+
+  void finishSoftStopIfDecayed()
+  {
+    if (!soft_stopping_ || soft_stop_ramp_mode_) {
+      return;
+    }
+    if (std::abs(soft_stop_vx_) <= release_soft_stop_vel_eps_ &&
+      std::abs(soft_stop_wz_) <= release_soft_stop_vel_eps_)
+    {
+      endSoftStop();
+    }
   }
 
   void updateWzDensityTier(int nearby_count, const rclcpp::Time & tnow)
@@ -1106,6 +1321,12 @@ private:
       d = minRangeInSector(M_PI);
     }
 
+    const bool release_soft_stop =
+      release_soft_stop_active_.load(std::memory_order_relaxed);
+    const bool stick_release_halt =
+      stick_release_halt_active_.load(std::memory_order_relaxed);
+    const bool jlp_release_active = release_soft_stop || stick_release_halt;
+
     if (have_rocker_.load(std::memory_order_relaxed)) {
       const auto rocker_age_ns =
         tnow.nanoseconds() -
@@ -1118,7 +1339,23 @@ private:
         halted = true;
         reason = "joystick stale";
         endSoftStop();
-      } else if (rocker_released) {
+      } else if (stick_release_halt) {
+        mppi_fail_soft_stop_ = false;
+        halted = true;
+        endSoftStop();
+        reason = "stick released (halt)";
+      } else if (release_soft_stop) {
+        mppi_fail_soft_stop_ = false;
+        if (!soft_stopping_) {
+          if (canSoftStopOnReleaseLowPass(cloud_ok)) {
+            beginSoftStopLowPass();
+          } else {
+            halted = true;
+            endSoftStop();
+            reason = "stick released (soft-stop brake clearance)";
+          }
+        }
+      } else if (!jlp_release_active && rocker_released) {
         mppi_fail_soft_stop_ = false;
         applyReleaseLikeStop(cloud_ok, halted, reason, "joystick released");
       } else if (!mppi_fail_soft_stop_) {
@@ -1131,7 +1368,7 @@ private:
     if (side_pass_crawl) {
       Twist out;
       if (!halted && !soft_stopping_ && cloud_ok && rockerFresh(tnow) &&
-        !rocker_released)
+        !stick_release_halt && !release_soft_stop && !rocker_released)
       {
         out = computeSidePassCrawlTwist(tnow);
       } else if (!reason.empty()) {
@@ -1155,37 +1392,54 @@ private:
 
     if (mppi_fail_soft_stop_enable_ && !side_pass_crawl && !halted && !soft_stopping_ &&
       input_ok && have_rocker_.load(std::memory_order_relaxed) &&
-      !rocker_stale && !rocker_released && isTwistNearZero(target))
+      !rocker_stale && !stick_release_halt && !release_soft_stop && !rocker_released &&
+      isTwistNearZero(target))
     {
       const bool was_moving =
         std::abs(last_out_.linear.x) > release_soft_stop_vel_eps_ ||
         std::abs(last_out_.angular.z) > release_soft_stop_vel_eps_;
       if (was_moving) {
-        applyReleaseLikeStop(cloud_ok, halted, reason, "mppi fail");
+        applyMppiFailSoftStop(cloud_ok, halted, reason, "mppi fail");
         if (!halted) {
           mppi_fail_soft_stop_ = true;
           RCLCPP_INFO(
             get_logger(),
             "mppi fail: release soft-stop (rocker active, cmd_vel=0, radius=%.1fm)",
-            release_soft_stop_radius_);
+            mppi_fail_soft_stop_radius_);
         }
       }
     }
 
-    if (soft_stopping_ && (!cloud_ok ||
-      nearbyObstaclePointCountInRadius(release_soft_stop_radius_) > 0))
-    {
-      const char * context =
-        mppi_fail_soft_stop_ ? "mppi fail" : "soft-stop aborted";
-      halted = true;
-      mppi_fail_soft_stop_ = false;
-      endSoftStop();
-      if (!cloud_ok) {
-        reason = std::string(context) + " (cloud stale)";
-      } else if (nearbyObstaclePointCountInRadius(release_soft_stop_radius_) > 0) {
-        reason = std::string(context) + " (obstacles nearby)";
-      } else {
-        reason = std::string(context) + " (soft-stop brake clearance)";
+    if (soft_stopping_ && !halted) {
+      if (mppi_fail_soft_stop_) {
+        if (!cloud_ok ||
+          nearbyObstaclePointCountInRadius(mppi_fail_soft_stop_radius_) > 0)
+        {
+          halted = true;
+          mppi_fail_soft_stop_ = false;
+          endSoftStop();
+          reason = !cloud_ok ?
+            "mppi fail (cloud stale)" : "mppi fail (obstacles nearby)";
+        }
+      } else if (soft_stop_ramp_mode_ && soft_stop_ramp_legacy_) {
+        if (!cloud_ok ||
+          nearbyObstaclePointCountInRadius(release_soft_stop_radius_) > 0)
+        {
+          halted = true;
+          endSoftStop();
+          reason = !cloud_ok ?
+            "release soft-stop (cloud stale)" : "release soft-stop (obstacles nearby)";
+        }
+      } else if (!cloud_ok || stick_release_halt || !canContinueSoftStopLowPass()) {
+        halted = true;
+        endSoftStop();
+        if (!cloud_ok) {
+          reason = "soft-stop aborted (cloud stale)";
+        } else if (stick_release_halt) {
+          reason = "soft-stop aborted (stick release halt)";
+        } else {
+          reason = "soft-stop aborted (brake clearance)";
+        }
       }
     }
 
@@ -1216,7 +1470,12 @@ private:
     Twist out;
     if (soft_stopping_ && !halted) {
       const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
-      applySoftStopRamp(out, dt);
+      if (soft_stop_ramp_mode_) {
+        applySoftStopRamp(out, dt);
+      } else {
+        applySoftStopLowPass(out, dt);
+        finishSoftStopIfDecayed();
+      }
       applyGearVxCap(out);
     } else if (!halted && input_ok) {
       out = target;
@@ -1329,10 +1588,20 @@ private:
   int obstacle_count_release_moderate_{28};
   double wz_density_min_dwell_{0.4};
   bool release_soft_stop_enable_{true};
-  double release_soft_stop_radius_{1.2};
-  double release_soft_stop_decel_{1.5};
+  double release_soft_stop_radius_{0.8};
+  double release_soft_stop_decel_{1.0};
   double release_soft_stop_wz_decel_{2.0};
+  double release_soft_stop_time_constant_s_{0.30};
+  double release_soft_stop_angular_time_constant_s_{0.30};
   double release_soft_stop_vel_eps_{0.02};
+  bool release_soft_stop_brake_check_enable_{true};
+  double release_soft_stop_standoff_{0.08};
+  double release_soft_stop_brake_sector_half_angle_{0.30};
+  double mppi_fail_soft_stop_decel_{1.0};
+  double mppi_fail_soft_stop_wz_decel_{2.0};
+  double mppi_fail_soft_stop_radius_{0.5};
+  std::string release_soft_stop_mode_topic_;
+  std::string stick_release_halt_topic_;
   bool mppi_fail_soft_stop_enable_{false};
 
   std::string narrow_gate_pass_mode_topic_;
@@ -1363,6 +1632,8 @@ private:
   double vx_accel_max_mps2_{1.0};
   std::atomic<bool> narrow_gate_pass_active_{false};
   std::atomic<bool> narrow_gate_side_pass_crawl_active_{false};
+  std::atomic<bool> release_soft_stop_active_{false};
+  std::atomic<bool> stick_release_halt_active_{false};
   bool narrow_gate_pass_prev_{false};
   bool narrow_gate_exit_ramp_active_{false};
   rclcpp::Time narrow_gate_exit_ramp_start_{0, 0, RCL_ROS_TIME};
@@ -1375,6 +1646,8 @@ private:
   rclcpp::Subscription<PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_pass_mode_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_side_pass_mode_sub_;
+  rclcpp::Subscription<Bool>::SharedPtr release_soft_stop_mode_sub_;
+  rclcpp::Subscription<Bool>::SharedPtr stick_release_halt_sub_;
   rclcpp::Publisher<Twist>::SharedPtr out_pub_;
   rclcpp::Publisher<UInt8>::SharedPtr wz_tier_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
@@ -1409,6 +1682,8 @@ private:
   Twist last_out_;
   rclcpp::Time last_pub_stamp_{0, 0, RCL_ROS_TIME};
   bool soft_stopping_{false};
+  bool soft_stop_ramp_mode_{false};
+  bool soft_stop_ramp_legacy_{false};
   double soft_stop_vx_{0.0};
   double soft_stop_wz_{0.0};
   bool mppi_fail_soft_stop_{false};
