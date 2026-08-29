@@ -411,6 +411,11 @@ public:
       "proximity_side_pass_exit_margin_m", 0.15);
     proximity_side_pass_max_speed_mps_ = declare_parameter<double>(
       "proximity_side_pass_max_speed_mps", 0.10);
+    proximity_side_pass_max_wz_rps_ = declare_parameter<double>(
+      "proximity_side_pass_max_wz_rps", 0.20);
+    if (proximity_side_pass_max_wz_rps_ < 0.0) {
+      proximity_side_pass_max_wz_rps_ = 0.0;
+    }
     proximity_side_pass_confirm_frames_ = declare_parameter<int>(
       "proximity_side_pass_confirm_frames", 10);
     proximity_side_pass_exit_confirm_frames_ = declare_parameter<int>(
@@ -1267,9 +1272,11 @@ private:
 
     const bool speed_ok =
       vehiclePlanarSpeedMps(*odom) < proximity_side_pass_max_speed_mps_;
+    const bool wz_ok =
+      std::abs(odom->twist.twist.angular.z) < proximity_side_pass_max_wz_rps_;
     const bool blocked = proximitySidePassEnterRegionHasCloud(local_pts);
     const bool rocker_ok = isRockerOutOfDeadband(tnow);
-    if (!speed_ok || !blocked || !rocker_ok) {
+    if (!speed_ok || !wz_ok || !blocked || !rocker_ok) {
       proximity_side_pass_enter_streak_ = 0;
       return;
     }
@@ -1279,8 +1286,9 @@ private:
       setSidePassCrawlMode(true, tnow, -1, SidePassSource::Proximity);
       RCLCPP_INFO(
         get_logger(),
-        "proximity side_pass crawl enter: |v|<%.2f blocked %.0fcm rocker active x%d frames",
+        "proximity side_pass crawl enter: |v|<%.2f |wz|<%.2f blocked %.0fcm rocker active x%d frames",
         proximity_side_pass_max_speed_mps_,
+        proximity_side_pass_max_wz_rps_,
         proximity_side_pass_enter_depth_m_ * 100.0,
         proximity_side_pass_confirm_frames_);
       proximity_side_pass_enter_streak_ = 0;
@@ -4231,6 +4239,7 @@ private:
   double proximity_side_pass_enter_depth_m_{0.10};
   double proximity_side_pass_exit_margin_m_{0.15};
   double proximity_side_pass_max_speed_mps_{0.10};
+  double proximity_side_pass_max_wz_rps_{0.20};
   int proximity_side_pass_confirm_frames_{10};
   int proximity_side_pass_exit_confirm_frames_{5};
   int proximity_side_pass_enter_streak_{0};
