@@ -163,6 +163,12 @@ cmd_vel_safety_gate_node:
     side_speed_limit_decel_mps2: 0.60
     side_speed_limit_wz_tighten_enable: false
 
+    # --- 摇杆幅度比例限速（|rocker|/100 → 挡位 vx/wz 上限比例）---
+    # 出死区后最小比例 stick_vx_min_ratio；推满杆为 1.0。MPPI 仍可在比例以下减速避障。
+    stick_vx_scale_enable: true
+    stick_vx_min_ratio: 0.15
+    stick_wz_scale_enable: true
+
     # --- 线速度加速限制（仅限制加速；减速/急停/软停车逻辑不变）---
     vx_accel_limit_enable: true
     vx_accel_max_mps2: 1.0

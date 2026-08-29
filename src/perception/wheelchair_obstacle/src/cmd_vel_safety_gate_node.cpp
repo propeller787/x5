@@ -9,6 +9,7 @@
 //   - proximity speed cap from obstacle cloud + travel intent
 //   - tiered wz cap from nearby obstacle-point density
 //   - gear vx cap from /vlago/car/info (1-4 gear -> configurable kph limits)
+//   - stick deflection speed scale: cap vx/wz by |rocker|/100 (min ratio configurable)
 //   - rocker sector intent filter: forward half-plane split into front / left-front /
 //     right-front sectors; block reverse in front, opposite turn in lateral-forward sectors
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
@@ -433,6 +434,11 @@ public:
       vx_accel_max_mps2_ = 0.05;
     }
 
+    stick_vx_scale_enable_ = declare_parameter<bool>("stick_vx_scale_enable", true);
+    stick_vx_min_ratio_ = declare_parameter<double>("stick_vx_min_ratio", 0.15);
+    stick_wz_scale_enable_ = declare_parameter<bool>("stick_wz_scale_enable", true);
+    stick_vx_min_ratio_ = std::clamp(stick_vx_min_ratio_, 0.0, 1.0);
+
     if (input_type_ == "twist") {
       twist_sub_ = create_subscription<Twist>(
         in_stamped_topic_, 10,
@@ -504,7 +510,7 @@ public:
       "vx_reverse_max=%.2f release_soft_stop_topic=%s wz_density_cap=%d gear_vx_cap=%d "
       "gear_vx_kph=[%.0f,%.0f,%.0f,%.0f] narrow_gate_vx_max=%.2f "
       "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s) side_speed_limit=%d(gear_only=%d) "
-      "vx_accel_limit=%d(%.1fm/s^2) side_pass_crawl_enable=%d "
+      "stick_vx_scale=%d(min_ratio=%.2f wz=%d) vx_accel_limit=%d(%.1fm/s^2) side_pass_crawl_enable=%d "
       "side_pass_crawl=%.2fm/s/%.2frps forward_strips=%zu depth=%.0fmm",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
@@ -522,6 +528,8 @@ public:
       narrow_gate_exit_ramp_enable_ ? 1 : 0,
       narrow_gate_exit_ramp_sec_, narrow_gate_exit_ramp_vx_target_,
       side_speed_limit_enable_ ? 1 : 0, side_speed_limit_gear_only_,
+      stick_vx_scale_enable_ ? 1 : 0, stick_vx_min_ratio_,
+      stick_wz_scale_enable_ ? 1 : 0,
       vx_accel_limit_enable_ ? 1 : 0, vx_accel_max_mps2_,
       side_pass_crawl_enable_ ? 1 : 0,
       side_pass_crawl_vx_mps_, side_pass_crawl_wz_rps_,
@@ -862,6 +870,56 @@ private:
     return (std::abs(axis) <= rocker_deadband_) ? 0.0 : axis;
   }
 
+  double stickDeflectionR(const rclcpp::Time & tnow) const
+  {
+    if (!rockerFresh(tnow)) {
+      return 1.0;
+    }
+    const double rx = applyRockerDeadbandAxis(static_cast<double>(
+      latest_rocker_x_.load(std::memory_order_relaxed)));
+    const double ry = applyRockerDeadbandAxis(static_cast<double>(
+      latest_rocker_y_.load(std::memory_order_relaxed)));
+    return std::min(1.0, std::hypot(rx / 100.0, ry / 100.0));
+  }
+
+  double stickSpeedRatio(const rclcpp::Time & tnow) const
+  {
+    const double r = stickDeflectionR(tnow);
+    return stick_vx_min_ratio_ + (1.0 - stick_vx_min_ratio_) * r;
+  }
+
+  double stickVxCapBase(bool narrow_gate_pass) const
+  {
+    double cap = gear_vx_cap_enable_ ? gearVxMaxMps() : std::numeric_limits<double>::infinity();
+    if (narrow_gate_pass) {
+      cap = std::min(cap, narrow_gate_vx_max_);
+    }
+    return cap;
+  }
+
+  void applyStickSpeedScale(Twist & out, const rclcpp::Time & tnow, bool narrow_gate_pass) const
+  {
+    if (!stick_vx_scale_enable_ || !rockerFresh(tnow)) {
+      return;
+    }
+    const double ratio = stickSpeedRatio(tnow);
+    if (ratio >= 1.0 - 1e-6) {
+      return;
+    }
+    const double cap = stickVxCapBase(narrow_gate_pass);
+    if (std::isfinite(cap) && cap > 0.0) {
+      const double scaled_cap = cap * ratio;
+      if (out.linear.x > 0.0) {
+        out.linear.x = std::min(out.linear.x, scaled_cap);
+      } else if (out.linear.x < 0.0) {
+        out.linear.x = std::max(out.linear.x, -scaled_cap);
+      }
+    }
+    if (stick_wz_scale_enable_) {
+      out.angular.z *= ratio;
+    }
+  }
+
   bool rockerFresh(const rclcpp::Time & tnow) const
   {
     if (!have_rocker_.load(std::memory_order_relaxed)) {
@@ -1190,7 +1248,9 @@ private:
       return out;
     }
 
-    const double target_vx = sign * openCorridorCruiseVxMax(gear);
+    const double speed_ratio =
+      stick_vx_scale_enable_ ? stickSpeedRatio(tnow) : 1.0;
+    const double target_vx = sign * openCorridorCruiseVxMax(gear) * speed_ratio;
     const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
     const double max_accel = open_corridor_cruise_accel_mps2_;
     const double jerk = open_corridor_cruise_jerk_mps3_;
@@ -1992,6 +2052,7 @@ private:
         applyNarrowGateExitVxRamp(out, tnow);
       }
       applyGearVxCap(out);
+      applyStickSpeedScale(out, tnow, narrow_gate_pass);
       if (!halted && out.linear.x < 0.0) {
         out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
       }
@@ -2153,6 +2214,9 @@ private:
   int open_cruise_exit_frames_{0};
   bool vx_accel_limit_enable_{true};
   double vx_accel_max_mps2_{1.0};
+  bool stick_vx_scale_enable_{true};
+  double stick_vx_min_ratio_{0.15};
+  bool stick_wz_scale_enable_{true};
   bool side_speed_limit_enable_{false};
   int side_speed_limit_gear_only_{1};
   double side_speed_limit_body_half_width_m_{0.34};
