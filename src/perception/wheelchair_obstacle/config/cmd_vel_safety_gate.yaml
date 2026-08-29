@@ -129,7 +129,9 @@ cmd_vel_safety_gate_node:
     narrow_gate_exit_ramp_sec: 2.0          # 从 narrow_gate_vx_max 爬升到 target 的时长
     narrow_gate_exit_ramp_vx_target: 1.50   # 爬升结束时的 vx 上限；之后不再额外限速
 
-    # --- 侧身穿行 crawl（订阅 /mppi/narrow_gate_side_pass_mode，跳过 MPPI）---
+    # --- 侧身穿行 crawl legacy（side_pass_crawl_enable=false 时 gate 处理）---
+    # true 时 crawl 由 jlp 发布 /cmd_vel，本节 legacy 逻辑不生效
+    side_pass_crawl_enable: false
     narrow_gate_side_pass_mode_topic: "/mppi/narrow_gate_side_pass_mode"
     # 前向：footprint 前三段 y 带，x 基准 0.685/0.935/0.685 各向 +x 延伸 check_depth
     side_pass_crawl_check_depth_m: 0.06
@@ -149,6 +151,17 @@ cmd_vel_safety_gate_node:
     side_pass_crawl_wz_rps: 0.10
     side_pass_crawl_rocker_forward_min: 5.0
     side_pass_crawl_rocker_lateral_min: 5.0
+
+    # --- 侧边障碍平滑限速（点云 base_link；仅 1 档生效，默认关）---
+    side_speed_limit_enable: false
+    side_speed_limit_gear_only: 1
+    side_speed_limit_body_half_width_m: 0.34
+    side_speed_limit_x_min_m: 0.33
+    side_speed_limit_x_max_m: 1.00
+    side_speed_limit_dist_m: [0.05, 0.10, 0.20, 0.40]
+    side_speed_limit_vx_mps: [0.28, 0.60, 1.20, 2.40]
+    side_speed_limit_decel_mps2: 0.60
+    side_speed_limit_wz_tighten_enable: false
 
     # --- 线速度加速限制（仅限制加速；减速/急停/软停车逻辑不变）---
     vx_accel_limit_enable: true

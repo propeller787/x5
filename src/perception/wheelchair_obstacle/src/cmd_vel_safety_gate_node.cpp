@@ -230,6 +230,8 @@ public:
 
     narrow_gate_side_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_side_pass_mode_topic", "/mppi/narrow_gate_side_pass_mode");
+    // true: crawl 由 jlp 发布 /cmd_vel；false: gate legacy crawl（默认关 jlp、开 gate）
+    side_pass_crawl_enable_ = declare_parameter<bool>("side_pass_crawl_enable", false);
     side_pass_crawl_check_depth_m_ = declare_parameter<double>(
       "side_pass_crawl_check_depth_m", 0.06);
     side_pass_crawl_forward_strip_x_ = declare_parameter<std::vector<double>>(
@@ -388,6 +390,43 @@ public:
       narrow_gate_exit_ramp_vx_target_ = narrow_gate_vx_max_;
     }
 
+    side_speed_limit_enable_ = declare_parameter<bool>("side_speed_limit_enable", false);
+    side_speed_limit_gear_only_ = declare_parameter<int>("side_speed_limit_gear_only", 1);
+    side_speed_limit_body_half_width_m_ = declare_parameter<double>(
+      "side_speed_limit_body_half_width_m", 0.34);
+    side_speed_limit_x_min_m_ = declare_parameter<double>("side_speed_limit_x_min_m", 0.33);
+    side_speed_limit_x_max_m_ = declare_parameter<double>("side_speed_limit_x_max_m", 1.00);
+    side_speed_limit_dist_m_ = declare_parameter<std::vector<double>>(
+      "side_speed_limit_dist_m", std::vector<double>{0.05, 0.10, 0.20, 0.40});
+    side_speed_limit_vx_mps_ = declare_parameter<std::vector<double>>(
+      "side_speed_limit_vx_mps", std::vector<double>{0.28, 0.60, 1.20, 2.40});
+    side_speed_limit_decel_mps2_ = declare_parameter<double>(
+      "side_speed_limit_decel_mps2", 0.60);
+    side_speed_limit_wz_tighten_enable_ = declare_parameter<bool>(
+      "side_speed_limit_wz_tighten_enable", false);
+    if (side_speed_limit_dist_m_.size() != side_speed_limit_vx_mps_.size() ||
+      side_speed_limit_dist_m_.size() < 2)
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "side_speed_limit dist/vx table invalid; using 5/10/20/40cm -> 0.28/0.60/1.20/2.40 m/s");
+      side_speed_limit_dist_m_ = {0.05, 0.10, 0.20, 0.40};
+      side_speed_limit_vx_mps_ = {0.28, 0.60, 1.20, 2.40};
+    }
+    for (size_t i = 1; i < side_speed_limit_dist_m_.size(); ++i) {
+      if (side_speed_limit_dist_m_[i] <= side_speed_limit_dist_m_[i - 1]) {
+        RCLCPP_WARN(
+          get_logger(),
+          "side_speed_limit_dist_m not strictly increasing; using defaults");
+        side_speed_limit_dist_m_ = {0.05, 0.10, 0.20, 0.40};
+        side_speed_limit_vx_mps_ = {0.28, 0.60, 1.20, 2.40};
+        break;
+      }
+    }
+    if (side_speed_limit_decel_mps2_ < 0.05) {
+      side_speed_limit_decel_mps2_ = 0.05;
+    }
+
     vx_accel_limit_enable_ = declare_parameter<bool>("vx_accel_limit_enable", true);
     vx_accel_max_mps2_ = declare_parameter<double>("vx_accel_max_mps2", 1.0);
     if (vx_accel_max_mps2_ < 0.05) {
@@ -464,7 +503,8 @@ public:
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
       "vx_reverse_max=%.2f release_soft_stop_topic=%s wz_density_cap=%d gear_vx_cap=%d "
       "gear_vx_kph=[%.0f,%.0f,%.0f,%.0f] narrow_gate_vx_max=%.2f "
-      "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s) vx_accel_limit=%d(%.1fm/s^2) "
+      "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s) side_speed_limit=%d(gear_only=%d) "
+      "vx_accel_limit=%d(%.1fm/s^2) side_pass_crawl_enable=%d "
       "side_pass_crawl=%.2fm/s/%.2frps forward_strips=%zu depth=%.0fmm",
       gate_enable_ ? 1 : 0, bypass_source_.c_str(),
       in_stamped_topic_.c_str(), handle_topic_.c_str(), rocker_topic_.c_str(),
@@ -481,7 +521,9 @@ public:
       narrow_gate_vx_max_,
       narrow_gate_exit_ramp_enable_ ? 1 : 0,
       narrow_gate_exit_ramp_sec_, narrow_gate_exit_ramp_vx_target_,
+      side_speed_limit_enable_ ? 1 : 0, side_speed_limit_gear_only_,
       vx_accel_limit_enable_ ? 1 : 0, vx_accel_max_mps2_,
+      side_pass_crawl_enable_ ? 1 : 0,
       side_pass_crawl_vx_mps_, side_pass_crawl_wz_rps_,
       side_pass_crawl_forward_strip_x_.size(),
       side_pass_crawl_check_depth_m_ * 1000.0);
@@ -697,6 +739,112 @@ private:
     }
 
     out.angular.z *= (new_vx / original_vx);
+  }
+
+  static double tighterSideLimitWz(double scaled_from_mppi, double upstream_capped)
+  {
+    constexpr double eps = 1e-4;
+    if (std::abs(scaled_from_mppi) <= eps) {
+      return scaled_from_mppi;
+    }
+    if (std::abs(upstream_capped) <= eps) {
+      return upstream_capped;
+    }
+    if (scaled_from_mppi > eps && upstream_capped > eps) {
+      return std::min(scaled_from_mppi, upstream_capped);
+    }
+    if (scaled_from_mppi < -eps && upstream_capped < -eps) {
+      return std::max(scaled_from_mppi, upstream_capped);
+    }
+    return std::abs(scaled_from_mppi) <= std::abs(upstream_capped)
+      ? scaled_from_mppi : upstream_capped;
+  }
+
+  double minSideObstacleClearanceM() const
+  {
+    double best = std::numeric_limits<double>::infinity();
+    std::lock_guard<std::mutex> lock(cloud_mutex_);
+    for (const auto & p : cloud_pts_) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x < side_speed_limit_x_min_m_ || x > side_speed_limit_x_max_m_) {
+        continue;
+      }
+      const double edge_clearance = std::abs(y) - side_speed_limit_body_half_width_m_;
+      if (edge_clearance < best) {
+        best = edge_clearance;
+      }
+    }
+    return best;
+  }
+
+  double sideObstacleTargetVx(double clearance_m) const
+  {
+    if (!std::isfinite(clearance_m) ||
+      clearance_m > side_speed_limit_dist_m_.back())
+    {
+      return std::numeric_limits<double>::infinity();
+    }
+
+    const double d = std::max(0.0, clearance_m);
+    if (d <= side_speed_limit_dist_m_.front()) {
+      return side_speed_limit_vx_mps_.front();
+    }
+
+    for (size_t i = 1; i < side_speed_limit_dist_m_.size(); ++i) {
+      if (d <= side_speed_limit_dist_m_[i]) {
+        const double span = side_speed_limit_dist_m_[i] - side_speed_limit_dist_m_[i - 1];
+        const double t = (d - side_speed_limit_dist_m_[i - 1]) / span;
+        return side_speed_limit_vx_mps_[i - 1] +
+          t * (side_speed_limit_vx_mps_[i] - side_speed_limit_vx_mps_[i - 1]);
+      }
+    }
+    return side_speed_limit_vx_mps_.back();
+  }
+
+  void applySideObstacleSpeedLimit(
+    Twist & out, double dt, bool cloud_ok, double mppi_raw_vx, double mppi_raw_wz)
+  {
+    if (!side_speed_limit_enable_ || !cloud_ok || dt <= 0.0 ||
+      out.linear.x <= intent_eps_)
+    {
+      return;
+    }
+    if (side_speed_limit_gear_only_ > 0 &&
+      currentGearIndex() != side_speed_limit_gear_only_)
+    {
+      return;
+    }
+
+    const double clearance = minSideObstacleClearanceM();
+    const double v_cap = sideObstacleTargetVx(clearance);
+    if (!std::isfinite(v_cap)) {
+      return;
+    }
+
+    const double original_vx = out.linear.x;
+    const double upstream_wz = out.angular.z;
+    double desired = std::min(original_vx, v_cap);
+    const double prev_vx = last_out_.linear.x;
+    if (prev_vx > desired) {
+      desired = std::max(desired, prev_vx - side_speed_limit_decel_mps2_ * dt);
+    }
+    if (desired < original_vx - 1e-4) {
+      out.linear.x = desired;
+      const double scaled_wz =
+        std::abs(mppi_raw_vx) > intent_eps_
+        ? mppi_raw_wz * (desired / mppi_raw_vx)
+        : mppi_raw_wz;
+      out.angular.z = side_speed_limit_wz_tighten_enable_
+        ? tighterSideLimitWz(scaled_wz, upstream_wz)
+        : scaled_wz;
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "side_speed_limit: clearance=%.0fcm vx %.2f -> %.2f "
+        "wz mppi=%.2f@vx=%.2f scaled=%.2f upstream=%.2f -> %.2f (cap=%.2f m/s)",
+        clearance * 100.0, original_vx, desired,
+        mppi_raw_wz, mppi_raw_vx, scaled_wz, upstream_wz, out.angular.z, v_cap);
+    }
   }
 
   void applyLeftTurnWzTrick(Twist & out) const
@@ -1649,6 +1797,7 @@ private:
     }
 
     const bool side_pass_crawl =
+      !side_pass_crawl_enable_ &&
       narrow_gate_side_pass_crawl_active_.load(std::memory_order_relaxed);
     if (side_pass_crawl) {
       Twist out;
@@ -1745,6 +1894,8 @@ private:
     Twist target;
     bool input_ok = false;
     readCmdVelInput(tnow, target, input_ok, halted, reason);
+    const double mppi_raw_vx = target.linear.x;
+    const double mppi_raw_wz = target.angular.z;
     tryRecoverFromMppiFailSoftStop(target, input_ok);
 
     if (mppi_fail_soft_stop_enable_ && !side_pass_crawl && !halted && !soft_stopping_ &&
@@ -1856,6 +2007,7 @@ private:
       applyRockerSectorIntentFilter(out, tnow);
       if (!soft_stopping_) {
         const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+        applySideObstacleSpeedLimit(out, dt, cloud_ok, mppi_raw_vx, mppi_raw_wz);
         applyVxAccelLimit(out, dt);
       }
     } else {
@@ -1970,6 +2122,7 @@ private:
   bool narrow_gate_exit_ramp_enable_{true};
   double narrow_gate_exit_ramp_sec_{2.0};
   double narrow_gate_exit_ramp_vx_target_{1.50};
+  bool side_pass_crawl_enable_{false};
   double side_pass_crawl_check_depth_m_{0.06};
   std::vector<double> side_pass_crawl_forward_strip_x_{0.685, 0.935, 0.685};
   std::vector<double> side_pass_crawl_forward_strip_y_min_{0.2, -0.2, -0.34};
@@ -2005,6 +2158,15 @@ private:
   int open_cruise_exit_frames_{0};
   bool vx_accel_limit_enable_{true};
   double vx_accel_max_mps2_{1.0};
+  bool side_speed_limit_enable_{false};
+  int side_speed_limit_gear_only_{1};
+  double side_speed_limit_body_half_width_m_{0.34};
+  double side_speed_limit_x_min_m_{0.33};
+  double side_speed_limit_x_max_m_{1.00};
+  std::vector<double> side_speed_limit_dist_m_{0.05, 0.10, 0.20, 0.40};
+  std::vector<double> side_speed_limit_vx_mps_{0.28, 0.60, 1.20, 2.40};
+  double side_speed_limit_decel_mps2_{0.60};
+  bool side_speed_limit_wz_tighten_enable_{false};
   std::atomic<bool> narrow_gate_pass_active_{false};
   std::atomic<bool> narrow_gate_side_pass_crawl_active_{false};
   std::atomic<bool> open_corridor_cruise_active_{false};

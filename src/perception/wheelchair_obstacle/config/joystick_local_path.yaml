@@ -86,6 +86,7 @@ joystick_local_path_node:
     gate_scan_dist_min_m: 0.15        # 允许 x≈0.20m 贴脸门框
     gate_pillar_mode_enable: true
     gate_min_side_boundary_m: 0.38   # pillar_mode 下不生效
+    gate_pillar_symmetry_ratio_min: 0.55  # pillar_mode 下 min/max(左右柱 inward 距) 须 >= 此比，拒非对称假门
     gate_min_side_points: 1
     gate_stick_forward_min: 0.20
     gate_lateral_stick_forward_min: 0.08   # 侧身穿行 intent 用
@@ -124,6 +125,27 @@ joystick_local_path_node:
     # 每次通过后加权更新门框/中心：0=按 1/pass_count（第2次0.5，第3次0.33…），>0=固定新样本权重
     gate_memory_update_alpha: 0.0
 
+    # --- 侧身穿行 crawl（记忆门 / proximity；默认关，实车验证后开）---
+    # false: jlp 仅发 mode topic，crawl 仍由 safety_gate legacy 处理
+    # true: jlp 发布 side_pass_crawl_cmd_vel_topic 并跳过 MPPI
+    side_pass_crawl_enable: false
+    side_pass_crawl_cmd_vel_topic: "/cmd_vel"
+    side_pass_crawl_check_depth_m: 0.06
+    side_pass_crawl_forward_strip_x: [0.685, 0.935, 0.685]
+    side_pass_crawl_forward_strip_y_min: [0.2, -0.2, -0.34]
+    side_pass_crawl_forward_strip_y_max: [0.34, 0.2, -0.2]
+    side_pass_crawl_rear_strip_x: [-0.2, -0.2, -0.2]
+    side_pass_crawl_rear_strip_y_min: [0.2, -0.2, -0.34]
+    side_pass_crawl_rear_strip_y_max: [0.34, 0.2, -0.2]
+    side_pass_crawl_lateral_strip_x_min: [-0.2, 0.685, 0.7]
+    side_pass_crawl_lateral_strip_x_max: [0.685, 0.7, 0.935]
+    side_pass_crawl_lateral_strip_y_edge: [0.33, 0.34, 0.20]
+    side_pass_crawl_vx_mps: 0.10
+    side_pass_crawl_wz_rps: 0.10
+    side_pass_crawl_rocker_forward_min: 5.0
+    side_pass_crawl_rocker_lateral_min: 5.0
+    narrow_gate_side_pass_mode_topic: "/mppi/narrow_gate_side_pass_mode"
+
     # 侧身穿行 crawl：边框距记忆门中心 < trigger_dist + 摇杆指向穿行方向
     # 匹配记忆门时：中心取 odom 记忆，门宽/左右柱取记忆中心 x 附近当前点云双侧切片
     gate_side_pass_enable: true
@@ -147,7 +169,6 @@ joystick_local_path_node:
     gate_side_pass_exit_forward_strip_x: [0.685, 0.685]
     gate_side_pass_exit_forward_strip_y_min: [0.2, -0.34]
     gate_side_pass_exit_forward_strip_y_max: [0.34, -0.2]
-    narrow_gate_side_pass_mode_topic: "/mppi/narrow_gate_side_pass_mode"
 
     # 贴障侧穿：不依赖记忆窄门；左/右/前 10cm 有障 + |v|<0.1 + 摇杆出死区，点云 10 帧（~1s@10Hz）进入
     # 退出：footprint 含后向外扩 15cm 内无障碍，连续 5 帧后回 MPPI

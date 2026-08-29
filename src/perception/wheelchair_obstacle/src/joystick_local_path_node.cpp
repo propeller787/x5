@@ -7,11 +7,12 @@
 //   Optional backward_reverse_lateral_invert flips stick lateral for reverse crawl goals.
 //   Pure lateral (|rx| deadbanded) -> in-place turn.
 //   Forward + narrow gate (head-on): bilateral cloud scan along body +x only;
-//     oblique/side crossing uses gate_side_pass crawl (safety_gate direct vx/wz, skip MPPI).
-//     proximity_side_pass: no memory gate; enter on left/right/front 10cm + slow; exit 15cm shell.
+//     oblique/side crossing uses side_pass crawl (this node publishes /cmd_vel, skip MPPI).
+//     proximity side_pass (no separate enable): enter on left/right/front + slow; exit shell -> hot MPPI.
 //     pass_mode enters ONLY when |odom|<=gate_creep_speed_max_mps; once active, keeps until
-//     body clear / intent timeout / front_to_gate (not odom overspeed). In pass_mode:
-//     gate distance refreshed from odom anchor + cloud; zero footprint padding;
+//     body clear (latch default); intent/front_to_gate exits optional via yaml.
+//     gate distance refreshed from odom anchor + cloud; zero footprint padding (all gears
+//     normally use 1 cm padding via gear_footprint_padding_m outside pass/side_pass);
 //     side_pass memory match: center from odom memory, width from live bilateral cloud slice.
 //
 // MPPI warm-start reset (stick enters dead zone only):
@@ -236,8 +237,8 @@ public:
       "path_obstacle_limit_skip_pass_mode", true);
     path_obstacle_limit_skip_in_place_ = declare_parameter<bool>(
       "path_obstacle_limit_skip_in_place", true);
-    path_open_cruise_enable_ = declare_parameter<bool>("path_open_cruise_enable", false);
-    path_open_cruise_min_gear_ = declare_parameter<int>("path_open_cruise_min_gear", 4);
+    path_open_cruise_enable_ = declare_parameter<bool>("path_open_cruise_enable", true);
+    path_open_cruise_min_gear_ = declare_parameter<int>("path_open_cruise_min_gear", 3);
     path_open_cruise_gear_front_half_deg_ = declare_parameter<std::vector<double>>(
       "path_open_cruise_gear_front_half_deg", {45.0, 45.0, 45.0, 30.0});
     path_open_cruise_gear_extra_padding_m_ = declare_parameter<std::vector<double>>(
@@ -251,6 +252,11 @@ public:
       "path_open_cruise_pre_exit_confirm_frames", 2);
     if (path_open_cruise_pre_exit_confirm_frames_ < 1) {
       path_open_cruise_pre_exit_confirm_frames_ = 1;
+    }
+    path_open_cruise_pre_exit_exit_speed_kph_ = declare_parameter<double>(
+      "path_open_cruise_pre_exit_exit_speed_kph", 2.0);
+    if (path_open_cruise_pre_exit_exit_speed_kph_ < 0.0) {
+      path_open_cruise_pre_exit_exit_speed_kph_ = 0.0;
     }
     path_open_cruise_confirm_frames_ = declare_parameter<int>(
       "path_open_cruise_confirm_frames", 10);
@@ -269,7 +275,7 @@ public:
     path_open_cruise_pre_exit_topic_ = declare_parameter<std::string>(
       "path_open_cruise_pre_exit_topic", "/mppi/open_corridor_cruise_pre_exit_mode");
 
-    release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", false);
+    release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", true);
     release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 0.8);
     release_soft_stop_topic_ = declare_parameter<std::string>(
       "release_soft_stop_topic", "/mppi/release_soft_stop_mode");
@@ -286,10 +292,16 @@ public:
     gate_detect_mode_ = declare_parameter<std::string>("gate_detect_mode", "bilateral");
     gate_scan_dist_min_m_ = declare_parameter<double>("gate_scan_dist_min_m", 0.15);
     gate_scan_dist_step_m_ = declare_parameter<double>("gate_scan_dist_step_m", 0.05);
-    gate_slice_half_width_m_ = declare_parameter<double>("gate_slice_half_width_m", 0.06);
     gate_opening_depth_m_ = declare_parameter<double>("gate_opening_depth_m", 0.25);
     gate_pillar_mode_enable_ = declare_parameter<bool>("gate_pillar_mode_enable", true);
     gate_min_side_boundary_m_ = declare_parameter<double>("gate_min_side_boundary_m", 0.38);
+    gate_pillar_symmetry_ratio_min_ = declare_parameter<double>(
+      "gate_pillar_symmetry_ratio_min", 0.55);
+    if (gate_pillar_symmetry_ratio_min_ < 0.0) {
+      gate_pillar_symmetry_ratio_min_ = 0.0;
+    } else if (gate_pillar_symmetry_ratio_min_ > 1.0) {
+      gate_pillar_symmetry_ratio_min_ = 1.0;
+    }
     gate_min_side_points_ = declare_parameter<int>("gate_min_side_points", 1);
     gate_center_clear_half_width_m_ = declare_parameter<double>(
       "gate_center_clear_half_width_m", 0.12);
@@ -300,8 +312,6 @@ public:
     gate_stick_lateral_min_ = declare_parameter<double>("gate_stick_lateral_min", 0.08);
     gate_intent_lateral_ratio_min_ = declare_parameter<double>(
       "gate_intent_lateral_ratio_min", 0.20);
-    gate_stick_wedge_half_deg_ = declare_parameter<double>(
-      "gate_stick_wedge_half_deg", 55.0);
     gate_intent_cross_slack_m_ = declare_parameter<double>("gate_intent_cross_slack_m", 0.18);
     gate_intent_angle_delta_max_ = declare_parameter<double>(
       "gate_intent_angle_delta_max", 0.45);
@@ -395,7 +405,6 @@ public:
       gate_side_pass_exit_forward_strip_y_min_ = {0.2, -0.34};
       gate_side_pass_exit_forward_strip_y_max_ = {0.34, -0.2};
     }
-    proximity_side_pass_enable_ = declare_parameter<bool>("proximity_side_pass_enable", true);
     proximity_side_pass_enter_depth_m_ = declare_parameter<double>(
       "proximity_side_pass_enter_depth_m", 0.10);
     proximity_side_pass_exit_margin_m_ = declare_parameter<double>(
@@ -410,12 +419,83 @@ public:
     gate_pass_front_center_x_m_ = declare_parameter<double>("gate_pass_front_center_x_m", 0.85);
     gate_pass_mode_exit_m_ = declare_parameter<double>("gate_pass_mode_exit_m", 0.95);
     gate_pass_mode_body_clear_x_m_ = declare_parameter<double>(
-      "gate_pass_mode_body_clear_x_m", -0.45);
+      "gate_pass_mode_body_clear_x_m", -0.55);
     gate_pass_mode_hold_sec_ = declare_parameter<double>("gate_pass_mode_hold_sec", 0.25);
+    gate_pass_mode_latch_until_body_clear_ = declare_parameter<bool>(
+      "gate_pass_mode_latch_until_body_clear", true);
+    gate_pass_mode_intent_timeout_enable_ = declare_parameter<bool>(
+      "gate_pass_mode_intent_timeout_enable", false);
+    gate_pass_mode_front_to_gate_exit_enable_ = declare_parameter<bool>(
+      "gate_pass_mode_front_to_gate_exit_enable", false);
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
     narrow_gate_side_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_side_pass_mode_topic", "/mppi/narrow_gate_side_pass_mode");
+    side_pass_crawl_enable_ = declare_parameter<bool>("side_pass_crawl_enable", false);
+    side_pass_crawl_cmd_vel_topic_ = declare_parameter<std::string>(
+      "side_pass_crawl_cmd_vel_topic", "/cmd_vel");
+    side_pass_crawl_check_depth_m_ = declare_parameter<double>(
+      "side_pass_crawl_check_depth_m", 0.06);
+    side_pass_crawl_forward_strip_x_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_forward_strip_x", {0.685, 0.935, 0.685});
+    side_pass_crawl_forward_strip_y_min_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_forward_strip_y_min", {0.2, -0.2, -0.34});
+    side_pass_crawl_forward_strip_y_max_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_forward_strip_y_max", {0.34, 0.2, -0.2});
+    if (side_pass_crawl_forward_strip_x_.size() !=
+      side_pass_crawl_forward_strip_y_min_.size() ||
+      side_pass_crawl_forward_strip_x_.size() !=
+      side_pass_crawl_forward_strip_y_max_.size())
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "side_pass_crawl forward strip array size mismatch; using defaults");
+      side_pass_crawl_forward_strip_x_ = {0.685, 0.935, 0.685};
+      side_pass_crawl_forward_strip_y_min_ = {0.2, -0.2, -0.34};
+      side_pass_crawl_forward_strip_y_max_ = {0.34, 0.2, -0.2};
+    }
+    side_pass_crawl_rear_strip_x_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_rear_strip_x", {-0.2, -0.2, -0.2});
+    side_pass_crawl_rear_strip_y_min_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_rear_strip_y_min", {0.2, -0.2, -0.34});
+    side_pass_crawl_rear_strip_y_max_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_rear_strip_y_max", {0.34, 0.2, -0.2});
+    if (side_pass_crawl_rear_strip_x_.size() !=
+      side_pass_crawl_rear_strip_y_min_.size() ||
+      side_pass_crawl_rear_strip_x_.size() !=
+      side_pass_crawl_rear_strip_y_max_.size())
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "side_pass_crawl rear strip array size mismatch; using defaults");
+      side_pass_crawl_rear_strip_x_ = {-0.2, -0.2, -0.2};
+      side_pass_crawl_rear_strip_y_min_ = {0.2, -0.2, -0.34};
+      side_pass_crawl_rear_strip_y_max_ = {0.34, 0.2, -0.2};
+    }
+    side_pass_crawl_lateral_strip_x_min_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_lateral_strip_x_min", {-0.2, 0.685, 0.7});
+    side_pass_crawl_lateral_strip_x_max_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_lateral_strip_x_max", {0.685, 0.7, 0.935});
+    side_pass_crawl_lateral_strip_y_edge_ = declare_parameter<std::vector<double>>(
+      "side_pass_crawl_lateral_strip_y_edge", {0.33, 0.34, 0.20});
+    if (side_pass_crawl_lateral_strip_x_min_.size() !=
+      side_pass_crawl_lateral_strip_x_max_.size() ||
+      side_pass_crawl_lateral_strip_x_min_.size() !=
+      side_pass_crawl_lateral_strip_y_edge_.size())
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "side_pass_crawl lateral strip array size mismatch; using defaults");
+      side_pass_crawl_lateral_strip_x_min_ = {-0.2, 0.685, 0.7};
+      side_pass_crawl_lateral_strip_x_max_ = {0.685, 0.7, 0.935};
+      side_pass_crawl_lateral_strip_y_edge_ = {0.33, 0.34, 0.20};
+    }
+    side_pass_crawl_vx_mps_ = declare_parameter<double>("side_pass_crawl_vx_mps", 0.10);
+    side_pass_crawl_wz_rps_ = declare_parameter<double>("side_pass_crawl_wz_rps", 0.10);
+    side_pass_crawl_rocker_forward_min_ = declare_parameter<double>(
+      "side_pass_crawl_rocker_forward_min", 5.0);
+    side_pass_crawl_rocker_lateral_min_ = declare_parameter<double>(
+      "side_pass_crawl_rocker_lateral_min", 5.0);
     gate_marker_enable_ = declare_parameter<bool>("gate_marker_enable", true);
     gate_marker_topic_ = declare_parameter<std::string>(
       "gate_marker_topic", "/mppi/gate_markers");
@@ -456,6 +536,8 @@ public:
       narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local());
     narrow_gate_side_pass_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
       narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local());
+    side_pass_crawl_cmd_vel_pub_ = create_publisher<Twist>(
+      side_pass_crawl_cmd_vel_topic_, 10);
     open_corridor_cruise_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
       path_open_cruise_topic_, rclcpp::QoS(1).transient_local());
     open_corridor_cruise_pre_exit_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
@@ -556,7 +638,7 @@ public:
     if (path_open_cruise_enable_) {
       RCLCPP_INFO(
         get_logger(),
-        "path_open_cruise: gear>=%d front_half_deg=[%.0f,%.0f,%.0f,%.0f] extra_pad_cm=[%.0f,%.0f,%.0f,%.0f] outer_far=%.2fm pre_exit=%d enter=%d exit_inner=%d reenter_cd=%d topic=%s pre_exit_topic=%s",
+        "path_open_cruise: gear>=%d front_half_deg=[%.0f,%.0f,%.0f,%.0f] extra_pad_cm=[%.0f,%.0f,%.0f,%.0f] outer_far=%.2fm pre_exit=%d pre_exit_exit_kph=%.1f enter=%d exit_inner=%d reenter_cd=%d topic=%s pre_exit_topic=%s",
         path_open_cruise_min_gear_,
         path_open_cruise_gear_front_half_deg_.size() > 0 ?
         path_open_cruise_gear_front_half_deg_[0] : 0.0,
@@ -575,6 +657,7 @@ public:
         path_open_cruise_gear_extra_padding_m_.size() > 3 ?
         path_open_cruise_gear_extra_padding_m_[3] * 100.0 : 0.0,
         path_open_cruise_outer_far_m_, path_open_cruise_pre_exit_confirm_frames_,
+        path_open_cruise_pre_exit_exit_speed_kph_,
         path_open_cruise_confirm_frames_, path_open_cruise_exit_confirm_frames_,
         path_open_cruise_reenter_cooldown_frames_, path_open_cruise_topic_.c_str(),
         path_open_cruise_pre_exit_topic_.c_str());
@@ -620,9 +703,7 @@ private:
     cloud_pts_ = std::move(pts);
     latest_cloud_stamp_ = now();
     have_cloud_ = true;
-    if (proximity_side_pass_enable_) {
-      updateProximitySidePassCrawlModeFromCloud();
-    }
+    updateProximitySidePassCrawlModeFromCloud();
   }
 
   void onCarInfo(const CarInfo::SharedPtr msg)
@@ -714,6 +795,7 @@ private:
       side_pass_memory_gate_idx_ = -1;
       proximity_side_pass_enter_streak_ = 0;
       proximity_side_pass_exit_streak_ = 0;
+      scheduleMppiReset("side_pass exit");
     }
 
     std_msgs::msg::Bool msg;
@@ -733,6 +815,11 @@ private:
     std_msgs::msg::Bool msg;
     msg.data = open_corridor_cruise_pre_exit_active_;
     open_corridor_cruise_pre_exit_mode_pub_->publish(msg);
+  }
+
+  void resetOpenCruisePreExitState()
+  {
+    path_open_cruise_pre_exit_streak_ = 0;
   }
 
   void setOpenCorridorCruisePreExitMode(bool active)
@@ -764,13 +851,14 @@ private:
     publishOpenCorridorCruiseModeState();
     if (active) {
       cancelActiveGoal();
+      resetOpenCruisePreExitState();
       RCLCPP_INFO(
         get_logger(),
         "open_corridor_cruise -> ACTIVE (skip MPPI, gear cruise, confirm=%d frames)",
         path_open_cruise_confirm_frames_);
     } else {
       setOpenCorridorCruisePreExitMode(false);
-      path_open_cruise_pre_exit_streak_ = 0;
+      resetOpenCruisePreExitState();
       RCLCPP_INFO(get_logger(), "open_corridor_cruise -> inactive (MPPI resume)");
       path_open_cruise_enter_streak_ = 0;
       path_open_cruise_exit_streak_ = 0;
@@ -855,7 +943,8 @@ private:
   void updateReleaseSoftStopOnStickIdle(const rclcpp::Time & tnow)
   {
     if (!release_soft_stop_enable_) {
-      clearReleaseSoftStopModes();
+      setReleaseSoftStopMode(false);
+      setStickReleaseHalt(true);
       return;
     }
     const int nearby = nearbyObstaclePointCountInRadius(release_soft_stop_radius_, tnow);
@@ -891,6 +980,141 @@ private:
     setSidePassCrawlMode(false, tnow);
   }
 
+  bool cloudFresh(const rclcpp::Time & tnow) const
+  {
+    std::lock_guard<std::mutex> lock(cloud_mutex_);
+    return have_cloud_ &&
+      (tnow - latest_cloud_stamp_).seconds() <= obstacle_timeout_;
+  }
+
+  int countObstaclePointsInBox(
+    double x_min, double x_max, double y_min, double y_max)
+  {
+    int count = 0;
+    std::lock_guard<std::mutex> lock(cloud_mutex_);
+    for (const auto & p : cloud_pts_) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x >= x_min && x <= x_max && y >= y_min && y <= y_max) {
+        ++count;
+      }
+    }
+    return count;
+  }
+
+  bool sidePassCrawlRoiClear(
+    double x_min, double x_max, double y_min, double y_max)
+  {
+    return countObstaclePointsInBox(x_min, x_max, y_min, y_max) == 0;
+  }
+
+  bool sidePassCrawlForwardStripsClear()
+  {
+    const double depth = side_pass_crawl_check_depth_m_;
+    for (size_t i = 0; i < side_pass_crawl_forward_strip_x_.size(); ++i) {
+      const double x0 = side_pass_crawl_forward_strip_x_[i];
+      if (!sidePassCrawlRoiClear(
+          x0, x0 + depth,
+          side_pass_crawl_forward_strip_y_min_[i],
+          side_pass_crawl_forward_strip_y_max_[i]))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool sidePassCrawlRearStripsClear()
+  {
+    const double depth = side_pass_crawl_check_depth_m_;
+    for (size_t i = 0; i < side_pass_crawl_rear_strip_x_.size(); ++i) {
+      const double x0 = side_pass_crawl_rear_strip_x_[i];
+      if (!sidePassCrawlRoiClear(
+          x0 - depth, x0,
+          side_pass_crawl_rear_strip_y_min_[i],
+          side_pass_crawl_rear_strip_y_max_[i]))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool sidePassCrawlLateralStripsClear(bool left)
+  {
+    const double depth = side_pass_crawl_check_depth_m_;
+    for (size_t i = 0; i < side_pass_crawl_lateral_strip_x_min_.size(); ++i) {
+      const double ye = side_pass_crawl_lateral_strip_y_edge_[i];
+      const double x0 = side_pass_crawl_lateral_strip_x_min_[i];
+      const double x1 = side_pass_crawl_lateral_strip_x_max_[i];
+      if (left) {
+        if (!sidePassCrawlRoiClear(x0, x1, ye, ye + depth)) {
+          return false;
+        }
+      } else if (!sidePassCrawlRoiClear(x0, x1, -(ye + depth), -ye)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Twist computeSidePassCrawlTwist(const rclcpp::Time & tnow)
+  {
+    Twist out;
+    Joystick::SharedPtr joy;
+    rclcpp::Time joy_stamp;
+    {
+      std::lock_guard<std::mutex> lock(joystick_mutex_);
+      joy = latest_joystick_;
+      joy_stamp = latest_joystick_stamp_;
+    }
+    if (!joy || (tnow - joy_stamp).seconds() > joystick_timeout_) {
+      return out;
+    }
+
+    const double rx = static_cast<double>(joy->rocker_x);
+    const double ry = static_cast<double>(joy->rocker_y);
+
+    if (rx > side_pass_crawl_rocker_forward_min_ &&
+      sidePassCrawlForwardStripsClear())
+    {
+      out.linear.x = side_pass_crawl_vx_mps_;
+    } else if (rx < -side_pass_crawl_rocker_forward_min_ &&
+      sidePassCrawlRearStripsClear())
+    {
+      out.linear.x = -side_pass_crawl_vx_mps_;
+    }
+
+    if (ry > side_pass_crawl_rocker_lateral_min_ &&
+      sidePassCrawlLateralStripsClear(true))
+    {
+      out.angular.z = side_pass_crawl_wz_rps_;
+    } else if (ry < -side_pass_crawl_rocker_lateral_min_ &&
+      sidePassCrawlLateralStripsClear(false))
+    {
+      out.angular.z = -side_pass_crawl_wz_rps_;
+    }
+
+    return out;
+  }
+
+  void publishSidePassCrawlCmdVel(const rclcpp::Time & tnow)
+  {
+    Twist out;
+    if (cloudFresh(tnow) &&
+      !release_soft_stop_active_ && !stick_release_halt_active_)
+    {
+      out = computeSidePassCrawlTwist(tnow);
+    } else if (!cloudFresh(tnow)) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "side_pass crawl halted: cloud stale");
+    }
+    side_pass_crawl_cmd_vel_pub_->publish(out);
+  }
+
+  // Forward-strip ROI helpers (footprint_base x/y; no gear padding in cloud checks).
+  // Enter/exit depths differ: side_pass 15/10 cm, proximity 10 cm, crawl 6 cm.
   bool forwardCornerStripHasPoint(
     const std::vector<std::pair<float, float>> & local_pts,
     double x0, double depth, double y0, double y1) const
@@ -1484,20 +1708,15 @@ private:
     return along >= gate_side_pass_body_clear_m_;
   }
 
-  bool gatePassBodyCleared(const NarrowGateInfo & gate) const
-  {
-    return gateBodyCleared(gate);
-  }
-
   void updateNarrowGatePassMode(
     const NarrowGateInfo & gate, double norm_x, double norm_y,
     const Odometry & odom, const rclcpp::Time & tnow)
   {
     const bool intent_ok = intentMatchesGate(gate, norm_x, norm_y, odom) &&
-      intentMatchesTrackDirection(norm_x, norm_y, odom);
+      intentMatchesTrackDirection(norm_x, norm_y, odom, &gate);
     const double front_to_gate = gateFrontCenterToGateM(gate);
 
-    if (gatePassBodyCleared(gate)) {
+    if (gateBodyCleared(gate)) {
       setNarrowGatePassMode(false, tnow);
       RCLCPP_INFO(
         get_logger(),
@@ -1509,7 +1728,9 @@ private:
     if (narrow_gate_pass_active_) {
       if (intent_ok) {
         narrow_gate_pass_last_intent_stamp_ = tnow;
-      } else if ((tnow - narrow_gate_pass_last_intent_stamp_).seconds() >
+      } else if (gate_pass_mode_intent_timeout_enable_ &&
+        !gate_pass_mode_latch_until_body_clear_ &&
+        (tnow - narrow_gate_pass_last_intent_stamp_).seconds() >
         gate_pass_mode_hold_sec_)
       {
         setNarrowGatePassMode(false, tnow);
@@ -1520,7 +1741,10 @@ private:
           gate_pass_mode_hold_sec_);
         return;
       }
-      if (front_to_gate > gate_pass_mode_exit_m_) {
+      if (gate_pass_mode_front_to_gate_exit_enable_ &&
+        !gate_pass_mode_latch_until_body_clear_ &&
+        front_to_gate > gate_pass_mode_exit_m_)
+      {
         setNarrowGatePassMode(false, tnow);
         RCLCPP_INFO(
           get_logger(),
@@ -1535,6 +1759,9 @@ private:
     }
 
     if (intent_ok && front_to_gate <= gate_pass_mode_enter_m_) {
+      if (!gate.confirmed) {
+        return;
+      }
       setNarrowGatePassMode(true, tnow);
       RCLCPP_INFO(
         get_logger(),
@@ -1587,11 +1814,7 @@ private:
     if (use_spatial_range_) {
       if (!buildSpatialPath(odom, tnow, path, stick_idle)) {
         if (stick_idle) {
-          if (release_soft_stop_enable_) {
-            updateReleaseSoftStopOnStickIdle(tnow);
-          } else {
-            clearReleaseSoftStopModes();
-          }
+          updateReleaseSoftStopOnStickIdle(tnow);
           if (!was_stick_idle_) {
             scheduleMppiReset("stick center");
             publishEmptyPath();
@@ -1664,11 +1887,44 @@ private:
       } else {
         path_open_cruise_pre_exit_streak_ = 0;
       }
-      const bool pre_exit =
+
+      bool pre_exit =
         path_open_cruise_pre_exit_streak_ >= path_open_cruise_pre_exit_confirm_frames_;
+
+      if (pre_exit) {
+        const double speed_kph = vehiclePlanarSpeedMps(*odom) * 3.6;
+        const bool outer_occupied = isOpenCruiseOuterRegionOccupied(gear, tnow);
+        if (speed_kph <= path_open_cruise_pre_exit_exit_speed_kph_) {
+          const auto inner = checkOpenCruiseForwardRegionClear(
+            gear, tnow, openCruiseInnerCorridorHalfWidth(gear));
+          const bool inner_clear = inner.valid && inner.clear;
+          if (!inner_clear) {
+            path_open_cruise_pre_exit_streak_ = 0;
+            pre_exit = false;
+            path_open_cruise_exit_streak_ = path_open_cruise_exit_confirm_frames_;
+            RCLCPP_INFO(
+              get_logger(),
+              "open_corridor_cruise: pre_exit speed %.2f kph <= %.2f, inner occupied -> formal exit (MPPI resume)",
+              speed_kph, path_open_cruise_pre_exit_exit_speed_kph_);
+          } else if (!outer_occupied) {
+            path_open_cruise_pre_exit_streak_ = 0;
+            pre_exit = false;
+            RCLCPP_INFO(
+              get_logger(),
+              "open_corridor_cruise: pre_exit speed %.2f kph <= %.2f, inner+outer clear -> resume cruise",
+              speed_kph, path_open_cruise_pre_exit_exit_speed_kph_);
+          } else {
+            RCLCPP_INFO_THROTTLE(
+              get_logger(), *get_clock(), 2000,
+              "open_corridor_cruise: pre_exit speed %.2f kph <= %.2f, inner clear outer occupied -> hold pre_exit",
+              speed_kph, path_open_cruise_pre_exit_exit_speed_kph_);
+          }
+        }
+      }
+
       setOpenCorridorCruisePreExitMode(pre_exit);
     } else {
-      path_open_cruise_pre_exit_streak_ = 0;
+      resetOpenCruisePreExitState();
       setOpenCorridorCruisePreExitMode(false);
     }
 
@@ -1733,6 +1989,9 @@ private:
     if (narrow_gate_side_pass_crawl_active_) {
       cancelActiveGoal();
       publishEmptyPath();
+      if (side_pass_crawl_enable_) {
+        publishSidePassCrawlCmdVel(tnow);
+      }
       return;
     }
 
@@ -1935,8 +2194,11 @@ private:
 
         if (!narrow_gate_side_pass_crawl_active_ && narrow_gate_pass_active_) {
           std::lock_guard<std::mutex> lock(gate_mutex_);
-          if (have_last_gate_ &&
-            refreshPassModeGateUnlocked(tnow, *odom, norm_x, norm_y))
+          const bool refresh_ok = have_last_gate_ &&
+            refreshPassModeGateUnlocked(tnow, *odom, norm_x, norm_y);
+          if (refresh_ok ||
+            (gate_pass_mode_latch_until_body_clear_ && have_last_gate_ &&
+            !gateBodyCleared(last_gate_)))
           {
             updateNarrowGatePassMode(last_gate_, norm_x, norm_y, *odom, tnow);
             if (narrow_gate_pass_active_) {
@@ -2489,11 +2751,17 @@ private:
     return isVehicleCreepOrStopped(odom);
   }
 
+  bool useCreepGateIntent(const Odometry & odom) const
+  {
+    return narrow_gate_pass_active_ || isGateCreepSpeed(odom);
+  }
+
   double effectiveStickForwardMin(double norm_x, double norm_y, const Odometry & odom) const
   {
     (void)norm_x;
     (void)norm_y;
-    return isGateCreepSpeed(odom) ? gate_creep_stick_forward_min_ : gate_stick_forward_min_;
+    return useCreepGateIntent(odom) ?
+      gate_creep_stick_forward_min_ : gate_stick_forward_min_;
   }
 
   bool intentForwardTowardGate(
@@ -2503,13 +2771,13 @@ private:
     if (isStickLateralIntent(norm_x, norm_y)) {
       return false;
     }
-    const double fwd_min = isGateCreepSpeed(odom) ?
+    const double fwd_min = useCreepGateIntent(odom) ?
       gate_creep_stick_forward_min_ : gate_stick_forward_min_;
     if (norm_x < fwd_min) {
       return false;
     }
     const double stick_r = std::hypot(norm_x, norm_y);
-    const double stick_min = isGateCreepSpeed(odom) ? gate_creep_stick_min_ : 1e-3;
+    const double stick_min = useCreepGateIntent(odom) ? gate_creep_stick_min_ : 1e-3;
     if (stick_r < stick_min) {
       return false;
     }
@@ -2519,14 +2787,14 @@ private:
       return false;
     }
 
-    const double slack = isGateCreepSpeed(odom) ?
+    const double slack = useCreepGateIntent(odom) ?
       gate_creep_intent_cross_slack_m_ : gate_intent_cross_slack_m_;
     const double half_w = 0.5 * gate.width_m + slack;
     if (std::abs(gate.center_y_m) > half_w) {
       return false;
     }
 
-    const double max_angle = isGateCreepSpeed(odom) ?
+    const double max_angle = useCreepGateIntent(odom) ?
       gate_creep_intent_angle_max_ : gate_intent_angle_delta_max_;
     const double stick_angle = std::atan2(norm_y, norm_x);
     const double gate_angle = std::atan2(
@@ -2590,6 +2858,16 @@ private:
     }
     if (!gate_pillar_mode_enable_) {
       if (left_y < gate_min_side_boundary_m_ || (-right_y) < gate_min_side_boundary_m_) {
+        return false;
+      }
+    } else {
+      const double left_in = static_cast<double>(left_y);
+      const double right_in = -static_cast<double>(right_y);
+      const double min_in = std::min(left_in, right_in);
+      const double max_in = std::max(left_in, right_in);
+      if (max_in < 1e-3 ||
+        min_in / max_in < gate_pillar_symmetry_ratio_min_)
+      {
         return false;
       }
     }
@@ -2710,6 +2988,7 @@ private:
     return best;
   }
 
+  // Head-on gate detect: bilateral cloud slices along body +x; intent via intentForwardTowardGate.
   std::optional<NarrowGateInfo> scanOpeningBilateral(
     const std::vector<std::pair<float, float>> & local_pts,
     double norm_x, double norm_y, const Odometry & odom) const
@@ -2748,88 +3027,20 @@ private:
     return best;
   }
 
-  std::optional<NarrowGateInfo> scanForwardGateFromLocalCloud(
-    const std::vector<std::pair<float, float>> & local_pts,
-    double norm_x, double norm_y, const Odometry & odom) const
-  {
-    return scanOpeningBilateral(local_pts, norm_x, norm_y, odom);
-  }
-
-  bool intentCrossesOpening(
-    const NarrowGateInfo & gate, double norm_x, double norm_y) const
-  {
-    if (norm_x < gate_lateral_stick_forward_min_) {
-      return false;
-    }
-    const double stick_r = std::hypot(norm_x, norm_y);
-    if (stick_r < 1e-3) {
-      return false;
-    }
-    const double ux = norm_x / stick_r;
-    const double uy = norm_y / stick_r;
-
-    const double half_w = 0.5 * gate.width_m + gate_intent_cross_slack_m_;
-    const double half_d = 0.5 * gate_opening_depth_m_;
-    const double cx = gate.distance_m;
-    const double cy = gate.center_y_m;
-
-    if (std::abs(cy) <= gate_center_y_deadband_m_) {
-      if (ux <= 1e-3) {
-        return false;
-      }
-      const double t = cx / ux;
-      if (t < 0.0 || t > gate_local_radius_m_) {
-        return false;
-      }
-      const double y_at = t * uy;
-      return std::abs(y_at - cy) <= half_w;
-    }
-
-    if (std::abs(norm_y) < gate_stick_lateral_min_) {
-      return false;
-    }
-    if (cy * norm_y < 0.0) {
-      return false;
-    }
-    const double lateral_ratio =
-      std::abs(norm_y) / std::max(std::abs(norm_x), 1e-3);
-    if (lateral_ratio < gate_intent_lateral_ratio_min_) {
-      return false;
-    }
-
-    if (std::abs(ux) > 1e-3) {
-      const double t = cx / ux;
-      if (t >= 0.0 && t <= gate_local_radius_m_) {
-        const double y_at = t * uy;
-        if (std::abs(y_at - cy) <= half_w) {
-          return true;
-        }
-      }
-    }
-
-    if (std::abs(uy) > 1e-3) {
-      const double t = cy / uy;
-      if (t >= 0.0 && t <= gate_local_radius_m_) {
-        const double x_at = t * ux;
-        if (std::abs(x_at - cx) <= half_d) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
   bool intentMatchesTrackDirection(
-    double norm_x, double norm_y, const Odometry & odom) const
+    double norm_x, double norm_y, const Odometry & odom,
+    const NarrowGateInfo * live_gate = nullptr) const
   {
-    if (!gate_tracking_active_) {
+    if (!gate_tracking_active_ && !live_gate) {
       return true;
     }
-    const double max_delta = isGateCreepSpeed(odom) ?
+    const double max_delta = useCreepGateIntent(odom) ?
       gate_creep_intent_angle_delta_max_ : gate_intent_angle_delta_max_;
     const double cur = std::atan2(norm_y, norm_x);
+    const double track_x = live_gate ? live_gate->distance_m : gate_track_distance_m_;
+    const double track_y = live_gate ? live_gate->center_y_m : gate_track_center_y_m_;
     const double tracked = std::atan2(
-      gate_track_center_y_m_, std::max(gate_track_distance_m_, 1e-3));
+      track_y, std::max(track_x, 1e-3));
     const double delta = std::abs(normalizeAngle(cur - tracked));
     return delta <= max_delta;
   }
@@ -3402,7 +3613,7 @@ private:
       return std::nullopt;
     }
 
-    return scanForwardGateFromLocalCloud(local_pts, norm_x, norm_y, odom);
+    return scanOpeningBilateral(local_pts, norm_x, norm_y, odom);
   }
 
   std::optional<NarrowGateInfo> scanPassModeGateFromCloud(
@@ -3439,7 +3650,7 @@ private:
       return std::nullopt;
     }
 
-    return scanForwardGateFromLocalCloud(local_pts, norm_x, norm_y, odom);
+    return scanOpeningBilateral(local_pts, norm_x, norm_y, odom);
   }
 
   bool refreshPassModeGateUnlocked(
@@ -3516,7 +3727,7 @@ private:
     const auto candidate = cloud_candidate;
     const bool intent_ok = candidate &&
       intentMatchesGate(*candidate, norm_x, norm_y, odom) &&
-      intentMatchesTrackDirection(norm_x, norm_y, odom);
+      intentMatchesTrackDirection(norm_x, norm_y, odom, &(*candidate));
 
     if (intent_ok) {
       if (!gate_tracking_active_ || !gateCandidateMatchesTrack(*candidate)) {
@@ -3533,7 +3744,7 @@ private:
 
     if (gate_tracking_active_ && have_last_gate_ &&
       intentMatchesGate(last_gate_, norm_x, norm_y, odom) &&
-      intentMatchesTrackDirection(norm_x, norm_y, odom))
+      intentMatchesTrackDirection(norm_x, norm_y, odom, &last_gate_))
     {
       const double hold_limit = gate_confirmed_ ? gate_confirmed_hold_sec_ :
         (isGateCreepSpeed(odom) ? gate_hold_sec_ : gate_detect_hold_sec_);
@@ -3919,12 +4130,13 @@ private:
   double path_obstacle_min_keep_m_{0.12};
   bool path_obstacle_limit_skip_pass_mode_{true};
   bool path_obstacle_limit_skip_in_place_{true};
-  bool path_open_cruise_enable_{false};
-  int path_open_cruise_min_gear_{4};
+  bool path_open_cruise_enable_{true};
+  int path_open_cruise_min_gear_{3};
   std::vector<double> path_open_cruise_gear_front_half_deg_;
   std::vector<double> path_open_cruise_gear_extra_padding_m_;
   double path_open_cruise_outer_far_m_{0.5};
   int path_open_cruise_pre_exit_confirm_frames_{2};
+  double path_open_cruise_pre_exit_exit_speed_kph_{2.0};
   int path_open_cruise_pre_exit_streak_{0};
   bool open_corridor_cruise_pre_exit_active_{false};
   std::string path_open_cruise_pre_exit_topic_;
@@ -3937,7 +4149,7 @@ private:
   bool open_cruise_mppi_resume_{false};
   std::string path_open_cruise_topic_;
   bool open_corridor_cruise_active_{false};
-  bool release_soft_stop_enable_{false};
+  bool release_soft_stop_enable_{true};
   double release_soft_stop_radius_{0.8};
   std::string release_soft_stop_topic_;
   std::string stick_release_halt_topic_;
@@ -3956,10 +4168,10 @@ private:
   std::string gate_detect_mode_{"bilateral"};
   double gate_scan_dist_min_m_{0.15};
   double gate_scan_dist_step_m_{0.05};
-  double gate_slice_half_width_m_{0.06};
   double gate_opening_depth_m_{0.25};
   bool gate_pillar_mode_enable_{true};
   double gate_min_side_boundary_m_{0.38};
+  double gate_pillar_symmetry_ratio_min_{0.55};
   int gate_min_side_points_{1};
   double gate_center_clear_half_width_m_{0.12};
   double gate_stick_forward_min_{0.20};
@@ -3967,7 +4179,6 @@ private:
   double gate_center_y_deadband_m_{0.18};
   double gate_stick_lateral_min_{0.08};
   double gate_intent_lateral_ratio_min_{0.20};
-  double gate_stick_wedge_half_deg_{55.0};
   double gate_intent_cross_slack_m_{0.18};
   double gate_intent_angle_delta_max_{0.45};
   double gate_creep_speed_max_mps_{0.20};
@@ -3998,6 +4209,7 @@ private:
   int gate_memory_rearm_frames_{3};
   double gate_memory_update_alpha_{0.0};
   bool gate_side_pass_enable_{true};
+  bool side_pass_crawl_enable_{false};
   int gate_side_pass_min_pass_count_{2};
   double gate_side_pass_trigger_dist_m_{0.20};
   double gate_side_pass_stick_forward_min_{0.08};
@@ -4016,7 +4228,6 @@ private:
   std::vector<double> gate_side_pass_exit_forward_strip_x_{0.685, 0.685};
   std::vector<double> gate_side_pass_exit_forward_strip_y_min_{0.2, -0.34};
   std::vector<double> gate_side_pass_exit_forward_strip_y_max_{0.34, -0.2};
-  bool proximity_side_pass_enable_{true};
   double proximity_side_pass_enter_depth_m_{0.10};
   double proximity_side_pass_exit_margin_m_{0.15};
   double proximity_side_pass_max_speed_mps_{0.10};
@@ -4032,10 +4243,28 @@ private:
   double gate_pass_mode_enter_m_{0.80};
   double gate_pass_front_center_x_m_{0.85};
   double gate_pass_mode_exit_m_{0.95};
-  double gate_pass_mode_body_clear_x_m_{-0.45};
+  double gate_pass_mode_body_clear_x_m_{-0.55};
   double gate_pass_mode_hold_sec_{0.25};
+  bool gate_pass_mode_latch_until_body_clear_{true};
+  bool gate_pass_mode_intent_timeout_enable_{false};
+  bool gate_pass_mode_front_to_gate_exit_enable_{false};
   std::string narrow_gate_pass_mode_topic_;
   std::string narrow_gate_side_pass_mode_topic_;
+  std::string side_pass_crawl_cmd_vel_topic_;
+  double side_pass_crawl_check_depth_m_{0.06};
+  std::vector<double> side_pass_crawl_forward_strip_x_{0.685, 0.935, 0.685};
+  std::vector<double> side_pass_crawl_forward_strip_y_min_{0.2, -0.2, -0.34};
+  std::vector<double> side_pass_crawl_forward_strip_y_max_{0.34, 0.2, -0.2};
+  std::vector<double> side_pass_crawl_rear_strip_x_{-0.2, -0.2, -0.2};
+  std::vector<double> side_pass_crawl_rear_strip_y_min_{0.2, -0.2, -0.34};
+  std::vector<double> side_pass_crawl_rear_strip_y_max_{0.34, 0.2, -0.2};
+  std::vector<double> side_pass_crawl_lateral_strip_x_min_{-0.2, 0.685, 0.7};
+  std::vector<double> side_pass_crawl_lateral_strip_x_max_{0.685, 0.7, 0.935};
+  std::vector<double> side_pass_crawl_lateral_strip_y_edge_{0.33, 0.34, 0.20};
+  double side_pass_crawl_vx_mps_{0.10};
+  double side_pass_crawl_wz_rps_{0.10};
+  double side_pass_crawl_rocker_forward_min_{5.0};
+  double side_pass_crawl_rocker_lateral_min_{5.0};
   bool gate_marker_enable_{true};
   std::string gate_marker_topic_;
   bool gate_memory_publish_enable_{true};
@@ -4093,6 +4322,7 @@ private:
   rclcpp::Publisher<Path>::SharedPtr path_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_pass_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_side_pass_mode_pub_;
+  rclcpp::Publisher<Twist>::SharedPtr side_pass_crawl_cmd_vel_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr open_corridor_cruise_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr open_corridor_cruise_pre_exit_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr release_soft_stop_mode_pub_;
