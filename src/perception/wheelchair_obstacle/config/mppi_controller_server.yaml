@@ -144,7 +144,7 @@ controller_server:
         trajectory_point_step: 8
         threshold_to_consider: 0.4
         offset_from_furthest: 6
-        use_path_orientations: false  # gate Hermite 弯道：不强制对齐 path yaw
+        use_path_orientations: true
 
       PathFollowCritic:
         enabled: true
