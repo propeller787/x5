@@ -57,6 +57,19 @@ joystick_local_path_node:
     path_obstacle_limit_skip_pass_mode: true
     path_obstacle_limit_skip_in_place: true
 
+    # 4 挡且 base_link 前方走廊净空：跳过 MPPI，由 safety_gate 按挡位 vx 巡航（默认关）
+    path_open_cruise_enable: false
+    path_open_cruise_min_gear: 4
+    path_open_cruise_gear_front_half_deg: [45.0, 45.0, 40.0, 30.0]
+    path_open_cruise_gear_extra_padding_m: [0.0, 0.0, 0.20, 0.30]
+    path_open_cruise_outer_far_m: 2.5
+    path_open_cruise_pre_exit_confirm_frames: 2
+    path_open_cruise_confirm_frames: 3
+    path_open_cruise_reenter_cooldown_frames: 20
+    path_open_cruise_exit_confirm_frames: 2
+    path_open_cruise_topic: "/mppi/open_corridor_cruise_mode"
+    path_open_cruise_pre_exit_topic: "/mppi/open_corridor_cruise_pre_exit_mode"
+
     # 松手软停：摇杆回中 + 半径内无障碍 → 发 mode 并跳过 MPPI；否则 halt（默认关，实车验证后开）
     release_soft_stop_enable: false
     release_soft_stop_radius: 0.5

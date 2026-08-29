@@ -4,9 +4,8 @@
 // Retained safety layers:
 //   - cmd_hold_timeout: hold last /cmd_vel when MPPI is slower than publish_rate_hz
 //   - joystick stale -> fail-safe stop
-//   - release soft-stop: joystick_local_path may publish /mppi/release_soft_stop_mode
-//     (gate low-pass decel) or /mppi/stick_release_halt; legacy gate rocker release
-//     when jlp topics inactive
+//   - release soft-stop: joystick_local_path publishes /mppi/release_soft_stop_mode;
+//     gate ramps vx/wz down (skip MPPI while active); /mppi/stick_release_halt -> hard stop
 //   - proximity speed cap from obstacle cloud + travel intent
 //   - tiered wz cap from nearby obstacle-point density
 //   - gear vx cap from /vlago/car/info (1-4 gear -> configurable kph limits)
@@ -15,6 +14,9 @@
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
 //   - side pass crawl (/mppi/narrow_gate_side_pass_mode): skip MPPI; footprint strips + crawl
 //     (forward/backward vx and lateral wz when corresponding strips clear)
+//   - open corridor cruise (/mppi/open_corridor_cruise_mode): skip MPPI; jerk-limited
+//     vx ramp (open_corridor_cruise_jerk_mps3, cap open_corridor_cruise_accel_mps2)
+//     toward gear vx cap when path corridor is clear
 //   - after narrow gate exit: linear vx ramp-up to avoid sudden acceleration
 //   - vx accel limit: max 1 m/s^2 when speeding up forward/reverse; decel/brake unchanged
 //   - mppi fail soft-stop: /cmd_vel -> 0 while rocker active -> release logic (obstacle check);
@@ -202,13 +204,13 @@ public:
       "release_soft_stop_standoff", standoff_);
     release_soft_stop_brake_sector_half_angle_ = declare_parameter<double>(
       "release_soft_stop_brake_sector_half_angle", sector_half_angle_);
-    mppi_fail_soft_stop_decel_ = declare_parameter<double>("mppi_fail_soft_stop_decel", 1.0);
+    mppi_fail_soft_stop_decel_ = declare_parameter<double>("mppi_fail_soft_stop_decel", 1.5);
     mppi_fail_soft_stop_wz_decel_ = declare_parameter<double>(
       "mppi_fail_soft_stop_wz_decel", 2.0);
     mppi_fail_soft_stop_enable_ = declare_parameter<bool>(
       "mppi_fail_soft_stop_enable", false);
     mppi_fail_soft_stop_radius_ = declare_parameter<double>(
-      "mppi_fail_soft_stop_radius", 0.5);
+      "mppi_fail_soft_stop_radius", 0.8);
 
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
@@ -253,8 +255,6 @@ public:
       side_pass_crawl_forward_strip_y_min_ = {0.2, -0.2, -0.34};
       side_pass_crawl_forward_strip_y_max_ = {0.34, 0.2, -0.2};
     }
-    side_pass_crawl_reverse_enable_ = declare_parameter<bool>(
-      "side_pass_crawl_reverse_enable", false);
     side_pass_crawl_rear_strip_x_ = declare_parameter<std::vector<double>>(
       "side_pass_crawl_rear_strip_x", {-0.2, -0.2, -0.2});
     side_pass_crawl_rear_strip_y_min_ = declare_parameter<std::vector<double>>(
@@ -308,6 +308,79 @@ public:
     side_pass_crawl_rocker_lateral_min_ = declare_parameter<double>(
       "side_pass_crawl_rocker_lateral_min", 5.0);
 
+    open_corridor_cruise_mode_topic_ = declare_parameter<std::string>(
+      "open_corridor_cruise_mode_topic", "/mppi/open_corridor_cruise_mode");
+    open_corridor_cruise_min_gear_ = declare_parameter<int>("open_corridor_cruise_min_gear", 4);
+    open_corridor_cruise_jerk_mps3_ = declare_parameter<double>(
+      "open_corridor_cruise_jerk_mps3", 0.1);
+    if (open_corridor_cruise_jerk_mps3_ < 0.01) {
+      open_corridor_cruise_jerk_mps3_ = 0.01;
+    }
+    open_corridor_cruise_accel_mps2_ = declare_parameter<double>(
+      "open_corridor_cruise_accel_mps2", 0.5);
+    if (open_corridor_cruise_accel_mps2_ < 0.05) {
+      open_corridor_cruise_accel_mps2_ = 0.05;
+    }
+    open_corridor_cruise_front_half_deg_ = declare_parameter<double>(
+      "open_corridor_cruise_front_half_deg", 30.0);
+    if (open_corridor_cruise_front_half_deg_ < 0.0) {
+      open_corridor_cruise_front_half_deg_ = 0.0;
+    }
+    open_corridor_cruise_exit_hold_frames_ = declare_parameter<int>(
+      "open_corridor_cruise_exit_hold_frames", 20);
+    open_corridor_cruise_pre_exit_jerk_mps3_ = declare_parameter<double>(
+      "open_corridor_cruise_pre_exit_jerk_mps3", 0.2);
+    if (open_corridor_cruise_pre_exit_jerk_mps3_ < 0.01) {
+      open_corridor_cruise_pre_exit_jerk_mps3_ = 0.01;
+    }
+    open_corridor_cruise_pre_exit_decel_mps2_ = declare_parameter<double>(
+      "open_corridor_cruise_pre_exit_decel_mps2", 0.4);
+    if (open_corridor_cruise_pre_exit_decel_mps2_ < 0.05) {
+      open_corridor_cruise_pre_exit_decel_mps2_ = 0.05;
+    }
+    open_corridor_cruise_pre_exit_mode_topic_ = declare_parameter<std::string>(
+      "open_corridor_cruise_pre_exit_mode_topic",
+      "/mppi/open_corridor_cruise_pre_exit_mode");
+    open_corridor_cruise_exit_jerk_mps3_ = declare_parameter<double>(
+      "open_corridor_cruise_exit_jerk_mps3", 0.2);
+    if (open_corridor_cruise_exit_jerk_mps3_ < 0.01) {
+      open_corridor_cruise_exit_jerk_mps3_ = 0.01;
+    }
+    open_corridor_cruise_exit_decel_mps2_ = declare_parameter<double>(
+      "open_corridor_cruise_exit_decel_mps2", 0.8);
+    if (open_corridor_cruise_exit_decel_mps2_ < 0.05) {
+      open_corridor_cruise_exit_decel_mps2_ = 0.05;
+    }
+    open_corridor_cruise_exit_early_speed_kph_ = declare_parameter<double>(
+      "open_corridor_cruise_exit_early_speed_kph", 2.0);
+    if (open_corridor_cruise_exit_early_speed_kph_ < 0.0) {
+      open_corridor_cruise_exit_early_speed_kph_ = 0.0;
+    }
+    open_corridor_cruise_exit_early_below_mppi_enable_ = declare_parameter<bool>(
+      "open_corridor_cruise_exit_early_below_mppi_enable", true);
+    const auto open_cruise_wz = declare_parameter<std::vector<double>>(
+      "open_corridor_cruise_gear_wz_max_rps",
+      std::vector<double>{0.55, 0.75, 0.95, 1.15});
+    open_corridor_cruise_gear_wz_max_rps_.clear();
+    open_corridor_cruise_gear_wz_max_rps_.reserve(open_cruise_wz.size());
+    for (const double wz : open_cruise_wz) {
+      open_corridor_cruise_gear_wz_max_rps_.push_back(std::max(0.0, wz));
+    }
+    if (open_corridor_cruise_gear_wz_max_rps_.empty()) {
+      open_corridor_cruise_gear_wz_max_rps_ = {0.55, 0.75, 0.95, 1.15};
+    }
+    const auto open_cruise_kph = declare_parameter<std::vector<double>>(
+      "open_corridor_cruise_gear_vx_max_kph",
+      std::vector<double>{2.0, 3.0, 4.0, 6.0});
+    open_corridor_cruise_gear_vx_max_mps_.clear();
+    open_corridor_cruise_gear_vx_max_mps_.reserve(open_cruise_kph.size());
+    for (const double kph : open_cruise_kph) {
+      open_corridor_cruise_gear_vx_max_mps_.push_back(std::max(0.0, kph) / 3.6);
+    }
+    if (open_corridor_cruise_gear_vx_max_mps_.empty()) {
+      open_corridor_cruise_gear_vx_max_mps_ = {2.0 / 3.6, 3.0 / 3.6, 4.0 / 3.6, 6.0 / 3.6};
+    }
+
     if (narrow_gate_exit_ramp_sec_ < 0.05) {
       narrow_gate_exit_ramp_sec_ = 0.05;
     }
@@ -355,6 +428,16 @@ public:
       narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
       std::bind(&CmdVelSafetyGateNode::onNarrowGateSidePassMode, this, std::placeholders::_1));
 
+    open_corridor_cruise_mode_sub_ = create_subscription<Bool>(
+      open_corridor_cruise_mode_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&CmdVelSafetyGateNode::onOpenCorridorCruiseMode, this, std::placeholders::_1));
+
+    open_corridor_cruise_pre_exit_mode_sub_ = create_subscription<Bool>(
+      open_corridor_cruise_pre_exit_mode_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(
+        &CmdVelSafetyGateNode::onOpenCorridorCruisePreExitMode, this,
+        std::placeholders::_1));
+
     release_soft_stop_mode_sub_ = create_subscription<Bool>(
       release_soft_stop_mode_topic_, rclcpp::QoS(1).transient_local(),
       std::bind(&CmdVelSafetyGateNode::onReleaseSoftStopMode, this, std::placeholders::_1));
@@ -379,7 +462,7 @@ public:
       "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s "
       "car_info=%s out=%s "
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
-      "vx_reverse_max=%.2f release_soft_stop=%d(r=%.1fm) wz_density_cap=%d gear_vx_cap=%d "
+      "vx_reverse_max=%.2f release_soft_stop_topic=%s wz_density_cap=%d gear_vx_cap=%d "
       "gear_vx_kph=[%.0f,%.0f,%.0f,%.0f] narrow_gate_vx_max=%.2f "
       "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s) vx_accel_limit=%d(%.1fm/s^2) "
       "side_pass_crawl=%.2fm/s/%.2frps forward_strips=%zu depth=%.0fmm",
@@ -389,7 +472,7 @@ public:
       input_type_.c_str(),
       cmd_timeout_, cmd_hold_timeout_, rocker_deadband_,
       proximity_speed_cap_ ? 1 : 0, vx_reverse_max_,
-      release_soft_stop_enable_ ? 1 : 0, release_soft_stop_radius_,
+      release_soft_stop_mode_topic_.c_str(),
       wz_density_cap_enable_ ? 1 : 0, gear_vx_cap_enable_ ? 1 : 0,
       gear_vx_max_mps_.size() > 0 ? gear_vx_max_mps_[0] * 3.6 : 0.0,
       gear_vx_max_mps_.size() > 1 ? gear_vx_max_mps_[1] * 3.6 : 0.0,
@@ -446,6 +529,23 @@ public:
         "left_turn_wz_trick: +%.2f deg/s (%.4f rad/s) when |output wz|>%.3f",
         left_turn_wz_trick_offset_deg_s_, left_turn_wz_trick_offset_rps_, intent_eps_);
     }
+    RCLCPP_INFO(
+      get_logger(),
+      "open_corridor_cruise: topic=%s gear>=%d front_half=%.0fdeg jerk=%.2f accel=%.2f pre_exit@jerk=%.2f decel=%.2f exit=%d@jerk=%.2f decel=%.2f vx_kph=[%.0f,%.0f,%.0f,%.0f]",
+      open_corridor_cruise_mode_topic_.c_str(), open_corridor_cruise_min_gear_,
+      open_corridor_cruise_front_half_deg_, open_corridor_cruise_jerk_mps3_,
+      open_corridor_cruise_accel_mps2_,
+      open_corridor_cruise_pre_exit_jerk_mps3_, open_corridor_cruise_pre_exit_decel_mps2_,
+      open_corridor_cruise_exit_hold_frames_, open_corridor_cruise_exit_jerk_mps3_,
+      open_corridor_cruise_exit_decel_mps2_,
+      open_corridor_cruise_gear_vx_max_mps_.size() > 0 ?
+      open_corridor_cruise_gear_vx_max_mps_[0] * 3.6 : 0.0,
+      open_corridor_cruise_gear_vx_max_mps_.size() > 1 ?
+      open_corridor_cruise_gear_vx_max_mps_[1] * 3.6 : 0.0,
+      open_corridor_cruise_gear_vx_max_mps_.size() > 2 ?
+      open_corridor_cruise_gear_vx_max_mps_[2] * 3.6 : 0.0,
+      open_corridor_cruise_gear_vx_max_mps_.size() > 3 ?
+      open_corridor_cruise_gear_vx_max_mps_[3] * 3.6 : 0.0);
   }
 
 private:
@@ -454,9 +554,36 @@ private:
     narrow_gate_pass_active_.store(msg->data, std::memory_order_relaxed);
   }
 
+  void onOpenCorridorCruisePreExitMode(const Bool::SharedPtr msg)
+  {
+    open_corridor_cruise_pre_exit_active_.store(
+      msg->data, std::memory_order_relaxed);
+  }
+
   void onNarrowGateSidePassMode(const Bool::SharedPtr msg)
   {
     narrow_gate_side_pass_crawl_active_.store(msg->data, std::memory_order_relaxed);
+  }
+
+  void onOpenCorridorCruiseMode(const Bool::SharedPtr msg)
+  {
+    const bool active = msg->data;
+    const bool was = open_corridor_cruise_active_.exchange(active, std::memory_order_relaxed);
+    if (!was && active) {
+      open_cruise_exiting_ = false;
+      open_cruise_exit_frames_ = 0;
+      open_cruise_vx_ = last_out_.linear.x;
+      open_cruise_ax_ = 0.0;
+    } else if (was && !active) {
+      open_corridor_cruise_pre_exit_active_.store(false, std::memory_order_relaxed);
+      open_cruise_exiting_ = true;
+      open_cruise_exit_frames_ = 0;
+      RCLCPP_INFO(
+        get_logger(),
+        "open_corridor_cruise exit: hold %d frames @ jerk=%.2f decel=%.2fm/s^2",
+        open_corridor_cruise_exit_hold_frames_, open_corridor_cruise_exit_jerk_mps3_,
+        open_corridor_cruise_exit_decel_mps2_);
+    }
   }
 
   void onReleaseSoftStopMode(const Bool::SharedPtr msg)
@@ -595,6 +722,23 @@ private:
     const auto age_ns = tnow.nanoseconds() -
       latest_rocker_stamp_ns_.load(std::memory_order_relaxed);
     return age_ns <= static_cast<int64_t>(rocker_timeout_ * 1e9);
+  }
+
+  bool isStickInOpenCruiseForwardSector(const rclcpp::Time & tnow) const
+  {
+    if (!rockerFresh(tnow)) {
+      return false;
+    }
+    const double rx = static_cast<double>(
+      latest_rocker_x_.load(std::memory_order_relaxed));
+    const double ry = static_cast<double>(
+      latest_rocker_y_.load(std::memory_order_relaxed));
+    if (std::hypot(rx, ry) <= rocker_deadband_) {
+      return false;
+    }
+    const double theta = std::atan2(ry, rx);
+    const double half_rad = open_corridor_cruise_front_half_deg_ * M_PI / 180.0;
+    return std::abs(theta) <= half_rad;
   }
 
   RockerForwardZone classifyRockerForwardZone(double rx, double ry) const
@@ -814,8 +958,7 @@ private:
       sidePassForwardStripsClear())
     {
       out.linear.x = side_pass_crawl_vx_mps_;
-    } else if (side_pass_crawl_reverse_enable_ &&
-      rx < -side_pass_crawl_rocker_forward_min_ &&
+    } else if (rx < -side_pass_crawl_rocker_forward_min_ &&
       sidePassRearStripsClear())
     {
       out.linear.x = -side_pass_crawl_vx_mps_;
@@ -832,6 +975,150 @@ private:
     }
 
     return out;
+  }
+
+  double openCorridorCruiseVxMax(int gear) const
+  {
+    return pickGearTable(
+      open_corridor_cruise_gear_vx_max_mps_, gear, gear_default_index_);
+  }
+
+  int currentGearIndex() const
+  {
+    int gear = gear_default_index_;
+    {
+      std::lock_guard<std::mutex> lock(gear_mutex_);
+      if (have_gear_ && latest_gear_ >= 1) {
+        gear = latest_gear_;
+      }
+    }
+    return gear;
+  }
+
+  double openCorridorCruiseWzFromRocker(const rclcpp::Time & tnow, int gear) const
+  {
+    if (!rockerFresh(tnow)) {
+      return 0.0;
+    }
+    const double ry = static_cast<double>(
+      latest_rocker_y_.load(std::memory_order_relaxed));
+    if (std::abs(ry) <= rocker_deadband_) {
+      return 0.0;
+    }
+    const double norm_y = clamp(ry / 100.0, -1.0, 1.0);
+    const double wz_max = pickGearTable(
+      open_corridor_cruise_gear_wz_max_rps_, gear, gear_default_index_);
+    return norm_y * wz_max;
+  }
+
+  Twist computeOpenCorridorCruiseTwist(
+    const rclcpp::Time & tnow, const Twist & handle, bool handle_valid)
+  {
+    Twist out;
+    if (!handle_valid) {
+      return out;
+    }
+
+    const int gear = currentGearIndex();
+    if (gear < open_corridor_cruise_min_gear_) {
+      return out;
+    }
+
+    double sign = 0.0;
+    if (handle.linear.x > intent_eps_) {
+      sign = 1.0;
+    } else if (handle.linear.x < -intent_eps_) {
+      sign = -1.0;
+    } else if (rockerFresh(tnow)) {
+      const double rx = static_cast<double>(
+        latest_rocker_x_.load(std::memory_order_relaxed));
+      if (rx > rocker_deadband_) {
+        sign = 1.0;
+      } else if (rx < -rocker_deadband_) {
+        sign = -1.0;
+      }
+    }
+    if (sign == 0.0) {
+      return out;
+    }
+
+    const double target_vx = sign * openCorridorCruiseVxMax(gear);
+    const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+    const double max_accel = open_corridor_cruise_accel_mps2_;
+    const double jerk = open_corridor_cruise_jerk_mps3_;
+    const double max_da = jerk * dt;
+    if (target_vx > open_cruise_vx_ + 1e-6) {
+      // 匀 jerk 提速，加速度上限 max_accel
+      open_cruise_ax_ = std::min(max_accel, open_cruise_ax_ + max_da);
+      open_cruise_vx_ += open_cruise_ax_ * dt;
+      if (open_cruise_vx_ >= target_vx) {
+        open_cruise_vx_ = target_vx;
+        open_cruise_ax_ = 0.0;
+      }
+    } else if (target_vx < open_cruise_vx_ - 1e-6) {
+      // 降速仍用恒定减速度
+      open_cruise_ax_ = 0.0;
+      const double max_step = max_accel * dt;
+      open_cruise_vx_ = std::max(target_vx, open_cruise_vx_ - max_step);
+    } else {
+      open_cruise_vx_ = target_vx;
+      if (open_cruise_ax_ > 0.0) {
+        open_cruise_ax_ = std::max(0.0, open_cruise_ax_ - max_da);
+      } else {
+        open_cruise_ax_ = 0.0;
+      }
+    }
+    out.linear.x = open_cruise_vx_;
+    out.angular.z = openCorridorCruiseWzFromRocker(tnow, gear);
+    return out;
+  }
+
+  Twist applyOpenCruiseJerkDecelTwist(
+    const rclcpp::Time & tnow, double max_decel, double jerk)
+  {
+    Twist out;
+    const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+    const double max_da = jerk * dt;
+    if (open_cruise_vx_ > 1e-6) {
+      const double desired_a = -max_decel;
+      if (open_cruise_ax_ > desired_a) {
+        open_cruise_ax_ = std::max(desired_a, open_cruise_ax_ - max_da);
+      }
+      open_cruise_vx_ += open_cruise_ax_ * dt;
+      if (open_cruise_vx_ <= 0.0) {
+        open_cruise_vx_ = 0.0;
+        open_cruise_ax_ = 0.0;
+      }
+    } else if (open_cruise_vx_ < -1e-6) {
+      const double desired_a = max_decel;
+      if (open_cruise_ax_ < desired_a) {
+        open_cruise_ax_ = std::min(desired_a, open_cruise_ax_ + max_da);
+      }
+      open_cruise_vx_ += open_cruise_ax_ * dt;
+      if (open_cruise_vx_ >= 0.0) {
+        open_cruise_vx_ = 0.0;
+        open_cruise_ax_ = 0.0;
+      }
+    } else {
+      open_cruise_vx_ = 0.0;
+      open_cruise_ax_ = 0.0;
+    }
+    out.linear.x = open_cruise_vx_;
+    out.angular.z = openCorridorCruiseWzFromRocker(tnow, currentGearIndex());
+    return out;
+  }
+
+  Twist computeOpenCorridorCruiseExitTwist(const rclcpp::Time & tnow)
+  {
+    return applyOpenCruiseJerkDecelTwist(
+      tnow, open_corridor_cruise_exit_decel_mps2_, open_corridor_cruise_exit_jerk_mps3_);
+  }
+
+  Twist computeOpenCorridorCruisePreExitTwist(const rclcpp::Time & tnow)
+  {
+    return applyOpenCruiseJerkDecelTwist(
+      tnow, open_corridor_cruise_pre_exit_decel_mps2_,
+      open_corridor_cruise_pre_exit_jerk_mps3_);
   }
 
   void beginNarrowGateExitRamp(const rclcpp::Time & tnow)
@@ -1082,10 +1369,8 @@ private:
     endSoftStop();
     if (!cloud_ok) {
       reason = std::string(context) + " (cloud stale)";
-    } else if (nearbyObstaclePointCountInRadius(mppi_fail_soft_stop_radius_) > 0) {
-      reason = std::string(context) + " (obstacles nearby)";
     } else {
-      reason = std::string(context) + " (soft-stop brake clearance)";
+      reason = std::string(context) + " (obstacles nearby)";
     }
   }
 
@@ -1280,8 +1565,8 @@ private:
 
     bool halted = false;
     std::string reason;
-    bool rocker_released = false;
     bool rocker_stale = false;
+    bool rocker_released = false;
 
     Twist handle;
     bool handle_valid;
@@ -1377,6 +1662,78 @@ private:
       } else if (!cloud_ok) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
           "side_pass crawl halted: cloud stale");
+      }
+      applyLeftTurnWzTrick(out);
+      out_pub_->publish(out);
+      last_pub_stamp_ = tnow;
+      last_out_ = out;
+      return;
+    }
+
+    const bool open_corridor_cruise =
+      open_corridor_cruise_active_.load(std::memory_order_relaxed);
+    if (open_corridor_cruise || open_cruise_exiting_) {
+      Twist out;
+      if (halted || soft_stopping_) {
+        open_cruise_exiting_ = false;
+        open_cruise_exit_frames_ = 0;
+        open_cruise_vx_ = 0.0;
+        open_cruise_ax_ = 0.0;
+      } else if (open_cruise_exiting_) {
+        out = computeOpenCorridorCruiseExitTwist(tnow);
+        ++open_cruise_exit_frames_;
+        const double early_exit_mps =
+          open_corridor_cruise_exit_early_speed_kph_ / 3.6;
+        const bool speed_low =
+          std::abs(open_cruise_vx_) <= early_exit_mps + 1e-6;
+        bool below_mppi = false;
+        double mppi_vx = 0.0;
+        if (open_corridor_cruise_exit_early_below_mppi_enable_) {
+          Twist mppi_target;
+          bool mppi_ok = false;
+          bool halted_tmp = false;
+          std::string reason_tmp;
+          readCmdVelInput(tnow, mppi_target, mppi_ok, halted_tmp, reason_tmp);
+          if (mppi_ok) {
+            mppi_vx = mppi_target.linear.x;
+            if (open_cruise_vx_ >= 0.0 && mppi_vx > 0.0) {
+              below_mppi = open_cruise_vx_ < mppi_vx - 1e-6;
+            } else if (open_cruise_vx_ <= 0.0 && mppi_vx < 0.0) {
+              below_mppi = open_cruise_vx_ > mppi_vx + 1e-6;
+            }
+          }
+        }
+        if (open_cruise_exit_frames_ >= open_corridor_cruise_exit_hold_frames_ ||
+          speed_low || below_mppi)
+        {
+          open_cruise_exiting_ = false;
+          open_cruise_exit_frames_ = 0;
+          open_cruise_vx_ = 0.0;
+          open_cruise_ax_ = 0.0;
+          const char * exit_reason = "hold frames elapsed";
+          if (below_mppi) {
+            exit_reason = "vx below mppi cmd";
+          } else if (speed_low) {
+            exit_reason = "speed<=early threshold";
+          }
+          RCLCPP_INFO(
+            get_logger(),
+            "open_corridor_cruise exit complete (%s, cruise_vx=%.2f mppi_vx=%.2f)",
+            exit_reason, out.linear.x, mppi_vx);
+        }
+      } else if (open_corridor_cruise_pre_exit_active_.load(std::memory_order_relaxed) &&
+        cloud_ok && rockerFresh(tnow))
+      {
+        out = computeOpenCorridorCruisePreExitTwist(tnow);
+      } else if (cloud_ok && handle_valid && !stick_release_halt &&
+        !release_soft_stop && !rocker_released && rockerFresh(tnow)) {
+        out = computeOpenCorridorCruiseTwist(tnow, handle, handle_valid);
+      } else if (!reason.empty()) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+          "open_corridor_cruise halted: %s", reason.c_str());
+      } else if (!cloud_ok) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+          "open_corridor_cruise halted: cloud stale");
       }
       applyLeftTurnWzTrick(out);
       out_pub_->publish(out);
@@ -1597,12 +1954,12 @@ private:
   bool release_soft_stop_brake_check_enable_{true};
   double release_soft_stop_standoff_{0.08};
   double release_soft_stop_brake_sector_half_angle_{0.30};
-  double mppi_fail_soft_stop_decel_{1.0};
+  double mppi_fail_soft_stop_decel_{1.5};
   double mppi_fail_soft_stop_wz_decel_{2.0};
-  double mppi_fail_soft_stop_radius_{0.5};
+  double mppi_fail_soft_stop_radius_{0.8};
   std::string release_soft_stop_mode_topic_;
   std::string stick_release_halt_topic_;
-  bool mppi_fail_soft_stop_enable_{false};
+  bool mppi_fail_soft_stop_enable_{true};
 
   std::string narrow_gate_pass_mode_topic_;
   std::string narrow_gate_side_pass_mode_topic_;
@@ -1625,13 +1982,33 @@ private:
   std::vector<double> side_pass_crawl_lateral_strip_y_edge_{0.33, 0.34, 0.20};
   double side_pass_crawl_vx_mps_{0.10};
   double side_pass_crawl_wz_rps_{0.10};
-  bool side_pass_crawl_reverse_enable_{false};
   double side_pass_crawl_rocker_forward_min_{5.0};
   double side_pass_crawl_rocker_lateral_min_{5.0};
+  std::string open_corridor_cruise_mode_topic_;
+  int open_corridor_cruise_min_gear_{4};
+  double open_corridor_cruise_jerk_mps3_{0.1};
+  double open_corridor_cruise_accel_mps2_{0.5};
+  double open_corridor_cruise_front_half_deg_{30.0};
+  int open_corridor_cruise_exit_hold_frames_{20};
+  double open_corridor_cruise_pre_exit_jerk_mps3_{0.2};
+  double open_corridor_cruise_pre_exit_decel_mps2_{0.4};
+  std::string open_corridor_cruise_pre_exit_mode_topic_;
+  double open_corridor_cruise_exit_jerk_mps3_{0.2};
+  double open_corridor_cruise_exit_decel_mps2_{0.8};
+  double open_corridor_cruise_exit_early_speed_kph_{2.0};
+  bool open_corridor_cruise_exit_early_below_mppi_enable_{true};
+  std::vector<double> open_corridor_cruise_gear_wz_max_rps_;
+  std::vector<double> open_corridor_cruise_gear_vx_max_mps_;
+  double open_cruise_vx_{0.0};
+  double open_cruise_ax_{0.0};
+  bool open_cruise_exiting_{false};
+  int open_cruise_exit_frames_{0};
   bool vx_accel_limit_enable_{true};
   double vx_accel_max_mps2_{1.0};
   std::atomic<bool> narrow_gate_pass_active_{false};
   std::atomic<bool> narrow_gate_side_pass_crawl_active_{false};
+  std::atomic<bool> open_corridor_cruise_active_{false};
+  std::atomic<bool> open_corridor_cruise_pre_exit_active_{false};
   std::atomic<bool> release_soft_stop_active_{false};
   std::atomic<bool> stick_release_halt_active_{false};
   bool narrow_gate_pass_prev_{false};
@@ -1646,6 +2023,8 @@ private:
   rclcpp::Subscription<PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_pass_mode_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_side_pass_mode_sub_;
+  rclcpp::Subscription<Bool>::SharedPtr open_corridor_cruise_mode_sub_;
+  rclcpp::Subscription<Bool>::SharedPtr open_corridor_cruise_pre_exit_mode_sub_;
   rclcpp::Subscription<Bool>::SharedPtr release_soft_stop_mode_sub_;
   rclcpp::Subscription<Bool>::SharedPtr stick_release_halt_sub_;
   rclcpp::Publisher<Twist>::SharedPtr out_pub_;

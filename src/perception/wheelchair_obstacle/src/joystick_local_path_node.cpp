@@ -4,6 +4,7 @@
 //   Forward sector: goal on arc, path yaw lerps toward stick_theta.
 //   Backward sector (60 deg + hysteresis): Cartesian goal behind vehicle,
 //   path yaw fixed at current heading -> MPPI drives vx<0 (reverse avoid, no U-turn).
+//   Optional backward_reverse_lateral_invert flips stick lateral for reverse crawl goals.
 //   Pure lateral (|rx| deadbanded) -> in-place turn.
 //   Forward + narrow gate (head-on): bilateral cloud scan along body +x only;
 //     oblique/side crossing uses gate_side_pass crawl (safety_gate direct vx/wz, skip MPPI).
@@ -204,6 +205,8 @@ public:
     backward_sector_deg_ = declare_parameter<double>("backward_sector_deg", 60.0);
     sector_hysteresis_deg_ = declare_parameter<double>("sector_hysteresis_deg", 10.0);
     backward_reverse_path_enable_ = declare_parameter<bool>("backward_reverse_path_enable", true);
+    backward_reverse_lateral_invert_ = declare_parameter<bool>(
+      "backward_reverse_lateral_invert", false);
     gear_default_index_ = declare_parameter<int>("gear_default_index", 3);
     path_interpolation_steps_ = declare_parameter<int>("path_interpolation_steps", 20);
     min_goal_distance_m_ = declare_parameter<double>("min_goal_distance_m", 0.12);
@@ -226,16 +229,48 @@ public:
       "[[0.935, 0.34], [0.935, -0.34], [-0.2, -0.34], [-0.2, 0.34]]");
     gear_footprint_padding_m_ = declare_parameter<std::vector<double>>(
       "gear_footprint_padding_m", {0.01, 0.02, 0.03, 0.04});
-    path_obstacle_limit_enable_ = declare_parameter<bool>("path_obstacle_limit_enable", false);
+    path_obstacle_limit_enable_ = declare_parameter<bool>("path_obstacle_limit_enable", true);
     path_obstacle_stop_margin_m_ = declare_parameter<double>("path_obstacle_stop_margin_m", 0.20);
     path_obstacle_min_keep_m_ = declare_parameter<double>("path_obstacle_min_keep_m", 0.12);
     path_obstacle_limit_skip_pass_mode_ = declare_parameter<bool>(
       "path_obstacle_limit_skip_pass_mode", true);
     path_obstacle_limit_skip_in_place_ = declare_parameter<bool>(
       "path_obstacle_limit_skip_in_place", true);
+    path_open_cruise_enable_ = declare_parameter<bool>("path_open_cruise_enable", false);
+    path_open_cruise_min_gear_ = declare_parameter<int>("path_open_cruise_min_gear", 4);
+    path_open_cruise_gear_front_half_deg_ = declare_parameter<std::vector<double>>(
+      "path_open_cruise_gear_front_half_deg", {45.0, 45.0, 45.0, 30.0});
+    path_open_cruise_gear_extra_padding_m_ = declare_parameter<std::vector<double>>(
+      "path_open_cruise_gear_extra_padding_m", {0.0, 0.0, 0.0, 0.05});
+    path_open_cruise_outer_far_m_ = declare_parameter<double>(
+      "path_open_cruise_outer_far_m", 0.5);
+    if (path_open_cruise_outer_far_m_ < 0.0) {
+      path_open_cruise_outer_far_m_ = 0.0;
+    }
+    path_open_cruise_pre_exit_confirm_frames_ = declare_parameter<int>(
+      "path_open_cruise_pre_exit_confirm_frames", 2);
+    if (path_open_cruise_pre_exit_confirm_frames_ < 1) {
+      path_open_cruise_pre_exit_confirm_frames_ = 1;
+    }
+    path_open_cruise_confirm_frames_ = declare_parameter<int>(
+      "path_open_cruise_confirm_frames", 10);
+    path_open_cruise_exit_confirm_frames_ = declare_parameter<int>(
+      "path_open_cruise_exit_confirm_frames", 3);
+    if (path_open_cruise_exit_confirm_frames_ < 1) {
+      path_open_cruise_exit_confirm_frames_ = 1;
+    }
+    path_open_cruise_reenter_cooldown_frames_ = declare_parameter<int>(
+      "path_open_cruise_reenter_cooldown_frames", 30);
+    if (path_open_cruise_reenter_cooldown_frames_ < 0) {
+      path_open_cruise_reenter_cooldown_frames_ = 0;
+    }
+    path_open_cruise_topic_ = declare_parameter<std::string>(
+      "path_open_cruise_topic", "/mppi/open_corridor_cruise_mode");
+    path_open_cruise_pre_exit_topic_ = declare_parameter<std::string>(
+      "path_open_cruise_pre_exit_topic", "/mppi/open_corridor_cruise_pre_exit_mode");
 
     release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", false);
-    release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 0.5);
+    release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 0.8);
     release_soft_stop_topic_ = declare_parameter<std::string>(
       "release_soft_stop_topic", "/mppi/release_soft_stop_mode");
     stick_release_halt_topic_ = declare_parameter<std::string>(
@@ -399,7 +434,7 @@ public:
       joystick_sub_ = create_subscription<Joystick>(
         joystick_topic_, 10,
         std::bind(&JoystickLocalPathNode::onJoystick, this, std::placeholders::_1));
-      if (gate_path_enable_ || release_soft_stop_enable_) {
+      if (gate_path_enable_ || path_open_cruise_enable_ || release_soft_stop_enable_) {
         cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
           obstacle_points_topic_, rclcpp::SensorDataQoS(),
           std::bind(&JoystickLocalPathNode::onCloud, this, std::placeholders::_1));
@@ -421,6 +456,10 @@ public:
       narrow_gate_pass_mode_topic_, rclcpp::QoS(1).transient_local());
     narrow_gate_side_pass_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
       narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local());
+    open_corridor_cruise_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
+      path_open_cruise_topic_, rclcpp::QoS(1).transient_local());
+    open_corridor_cruise_pre_exit_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
+      path_open_cruise_pre_exit_topic_, rclcpp::QoS(1).transient_local());
     release_soft_stop_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
       release_soft_stop_topic_, rclcpp::QoS(1).transient_local());
     stick_release_halt_pub_ = create_publisher<std_msgs::msg::Bool>(
@@ -450,6 +489,8 @@ public:
     pass_mode_init.data = false;
     narrow_gate_pass_mode_pub_->publish(pass_mode_init);
     narrow_gate_side_pass_mode_pub_->publish(pass_mode_init);
+    open_corridor_cruise_mode_pub_->publish(pass_mode_init);
+    open_corridor_cruise_pre_exit_mode_pub_->publish(pass_mode_init);
     release_soft_stop_mode_pub_->publish(pass_mode_init);
     stick_release_halt_pub_->publish(pass_mode_init);
     action_client_ = rclcpp_action::create_client<FollowPath>(this, action_name_);
@@ -469,10 +510,11 @@ public:
       RCLCPP_INFO(
         get_logger(),
         "spatial_range: joystick=%s forward=%.0fdeg back=%.0fdeg hysteresis=%.0fdeg "
-        "boundary=%.0fdeg steps=%d backward_reverse=%s",
+        "boundary=%.0fdeg steps=%d backward_reverse=%s lateral_invert=%s",
         joystick_topic_.c_str(), forward_sector_deg_, backward_sector_deg_,
         sector_hysteresis_deg_, 180.0 - half_back, path_interpolation_steps_,
-        backward_reverse_path_enable_ ? "on" : "off");
+        backward_reverse_path_enable_ ? "on" : "off",
+        backward_reverse_lateral_invert_ ? "on" : "off");
       if (gate_path_enable_) {
         RCLCPP_INFO(
           get_logger(),
@@ -511,10 +553,36 @@ public:
         path_obstacle_limit_skip_pass_mode_ ? "yes" : "no",
         path_obstacle_limit_skip_in_place_ ? "yes" : "no");
     }
+    if (path_open_cruise_enable_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "path_open_cruise: gear>=%d front_half_deg=[%.0f,%.0f,%.0f,%.0f] extra_pad_cm=[%.0f,%.0f,%.0f,%.0f] outer_far=%.2fm pre_exit=%d enter=%d exit_inner=%d reenter_cd=%d topic=%s pre_exit_topic=%s",
+        path_open_cruise_min_gear_,
+        path_open_cruise_gear_front_half_deg_.size() > 0 ?
+        path_open_cruise_gear_front_half_deg_[0] : 0.0,
+        path_open_cruise_gear_front_half_deg_.size() > 1 ?
+        path_open_cruise_gear_front_half_deg_[1] : 0.0,
+        path_open_cruise_gear_front_half_deg_.size() > 2 ?
+        path_open_cruise_gear_front_half_deg_[2] : 0.0,
+        path_open_cruise_gear_front_half_deg_.size() > 3 ?
+        path_open_cruise_gear_front_half_deg_[3] : 0.0,
+        path_open_cruise_gear_extra_padding_m_.size() > 0 ?
+        path_open_cruise_gear_extra_padding_m_[0] * 100.0 : 0.0,
+        path_open_cruise_gear_extra_padding_m_.size() > 1 ?
+        path_open_cruise_gear_extra_padding_m_[1] * 100.0 : 0.0,
+        path_open_cruise_gear_extra_padding_m_.size() > 2 ?
+        path_open_cruise_gear_extra_padding_m_[2] * 100.0 : 0.0,
+        path_open_cruise_gear_extra_padding_m_.size() > 3 ?
+        path_open_cruise_gear_extra_padding_m_[3] * 100.0 : 0.0,
+        path_open_cruise_outer_far_m_, path_open_cruise_pre_exit_confirm_frames_,
+        path_open_cruise_confirm_frames_, path_open_cruise_exit_confirm_frames_,
+        path_open_cruise_reenter_cooldown_frames_, path_open_cruise_topic_.c_str(),
+        path_open_cruise_pre_exit_topic_.c_str());
+    }
     if (release_soft_stop_enable_) {
       RCLCPP_INFO(
         get_logger(),
-        "release_soft_stop: radius=%.2fm topic=%s halt_topic=%s (skip MPPI, gate lowpass)",
+        "release_soft_stop: radius=%.2fm topic=%s halt_topic=%s (skip MPPI, gate ramps)",
         release_soft_stop_radius_, release_soft_stop_topic_.c_str(),
         stick_release_halt_topic_.c_str());
     }
@@ -660,6 +728,57 @@ private:
       active ? "ACTIVE (crawl)" : "inactive", src);
   }
 
+  void publishOpenCorridorCruisePreExitModeState()
+  {
+    std_msgs::msg::Bool msg;
+    msg.data = open_corridor_cruise_pre_exit_active_;
+    open_corridor_cruise_pre_exit_mode_pub_->publish(msg);
+  }
+
+  void setOpenCorridorCruisePreExitMode(bool active)
+  {
+    if (active == open_corridor_cruise_pre_exit_active_) {
+      return;
+    }
+    open_corridor_cruise_pre_exit_active_ = active;
+    publishOpenCorridorCruisePreExitModeState();
+    RCLCPP_INFO(
+      get_logger(), "open_corridor_cruise_pre_exit -> %s",
+      active ? "ACTIVE (jerk decel)" : "inactive");
+  }
+
+  void publishOpenCorridorCruiseModeState()
+  {
+    std_msgs::msg::Bool msg;
+    msg.data = open_corridor_cruise_active_;
+    open_corridor_cruise_mode_pub_->publish(msg);
+  }
+
+  void setOpenCorridorCruiseMode(bool active, const rclcpp::Time & tnow)
+  {
+    (void)tnow;
+    if (active == open_corridor_cruise_active_) {
+      return;
+    }
+    open_corridor_cruise_active_ = active;
+    publishOpenCorridorCruiseModeState();
+    if (active) {
+      cancelActiveGoal();
+      RCLCPP_INFO(
+        get_logger(),
+        "open_corridor_cruise -> ACTIVE (skip MPPI, gear cruise, confirm=%d frames)",
+        path_open_cruise_confirm_frames_);
+    } else {
+      setOpenCorridorCruisePreExitMode(false);
+      path_open_cruise_pre_exit_streak_ = 0;
+      RCLCPP_INFO(get_logger(), "open_corridor_cruise -> inactive (MPPI resume)");
+      path_open_cruise_enter_streak_ = 0;
+      path_open_cruise_exit_streak_ = 0;
+      path_open_cruise_frames_since_exit_ = 0;
+      open_cruise_mppi_resume_ = true;
+    }
+  }
+
   void publishReleaseSoftStopModeState()
   {
     std_msgs::msg::Bool msg;
@@ -735,6 +854,10 @@ private:
 
   void updateReleaseSoftStopOnStickIdle(const rclcpp::Time & tnow)
   {
+    if (!release_soft_stop_enable_) {
+      clearReleaseSoftStopModes();
+      return;
+    }
     const int nearby = nearbyObstaclePointCountInRadius(release_soft_stop_radius_, tnow);
     if (nearby < 0) {
       setReleaseSoftStopMode(false);
@@ -1454,6 +1577,7 @@ private:
         "odom stale or missing, cancelling FollowPath goal");
       cancelActiveGoal();
       publishEmptyPath();
+      setOpenCorridorCruiseMode(false, tnow);
       clearReleaseSoftStopModes();
       return;
     }
@@ -1476,6 +1600,7 @@ private:
           resetGateTracking();
           clearNarrowGatePassMode(tnow);
           clearSidePassCrawlMode(tnow);
+          setOpenCorridorCruiseMode(false, tnow);
           cancelActiveGoal();
           publishEmptyPath();
           publishGateMarkers(*odom);
@@ -1485,6 +1610,7 @@ private:
         was_stick_idle_ = false;
         cancelActiveGoal();
         publishEmptyPath();
+        setOpenCorridorCruiseMode(false, tnow);
         publishGateMarkers(*odom);
         return;
       }
@@ -1494,6 +1620,7 @@ private:
       if (!buildVelocityPath(odom, tnow, path)) {
         cancelActiveGoal();
         publishEmptyPath();
+        setOpenCorridorCruiseMode(false, tnow);
         publishGateMarkers(*odom);
         return;
       }
@@ -1508,6 +1635,76 @@ private:
     }
     applyPathObstacleLimit(path, *odom, gear, tnow);
 
+    bool open_cruise_base_ok = false;
+    if (path_open_cruise_enable_ && use_spatial_range_ &&
+      gear >= path_open_cruise_min_gear_ &&
+      drive_sector_ == DriveSector::Forward &&
+      isStickInOpenCruiseForwardSector(gear, tnow) &&
+      !narrow_gate_pass_active_ && !narrow_gate_side_pass_crawl_active_)
+    {
+      open_cruise_base_ok = true;
+    }
+
+    bool open_cruise_conditions = false;
+    if (open_cruise_base_ok) {
+      if (open_corridor_cruise_active_) {
+        const auto inner = checkOpenCruiseForwardRegionClear(
+          gear, tnow, openCruiseInnerCorridorHalfWidth(gear));
+        open_cruise_conditions = inner.valid && inner.clear;
+      } else {
+        const auto full = checkOpenCruiseForwardRegionClear(
+          gear, tnow, openCruiseCorridorHalfWidth(gear), path_open_cruise_outer_far_m_);
+        open_cruise_conditions = full.valid && full.clear;
+      }
+    }
+
+    if (open_corridor_cruise_active_ && open_cruise_base_ok) {
+      if (isOpenCruiseOuterRegionOccupied(gear, tnow)) {
+        ++path_open_cruise_pre_exit_streak_;
+      } else {
+        path_open_cruise_pre_exit_streak_ = 0;
+      }
+      const bool pre_exit =
+        path_open_cruise_pre_exit_streak_ >= path_open_cruise_pre_exit_confirm_frames_;
+      setOpenCorridorCruisePreExitMode(pre_exit);
+    } else {
+      path_open_cruise_pre_exit_streak_ = 0;
+      setOpenCorridorCruisePreExitMode(false);
+    }
+
+    if (!open_corridor_cruise_active_) {
+      if (path_open_cruise_frames_since_exit_ <
+        path_open_cruise_reenter_cooldown_frames_ + 1)
+      {
+        ++path_open_cruise_frames_since_exit_;
+      }
+    }
+
+    if (open_cruise_conditions) {
+      path_open_cruise_exit_streak_ = 0;
+      if (!open_corridor_cruise_active_ &&
+        path_open_cruise_frames_since_exit_ > path_open_cruise_reenter_cooldown_frames_)
+      {
+        ++path_open_cruise_enter_streak_;
+      }
+    } else {
+      path_open_cruise_enter_streak_ = 0;
+      if (open_corridor_cruise_active_) {
+        ++path_open_cruise_exit_streak_;
+      }
+    }
+
+    bool open_cruise = false;
+    if (open_corridor_cruise_active_) {
+      open_cruise =
+        path_open_cruise_exit_streak_ < path_open_cruise_exit_confirm_frames_;
+    } else {
+      open_cruise = open_cruise_conditions &&
+        path_open_cruise_enter_streak_ >= path_open_cruise_confirm_frames_ &&
+        path_open_cruise_frames_since_exit_ > path_open_cruise_reenter_cooldown_frames_;
+    }
+    setOpenCorridorCruiseMode(open_cruise, tnow);
+
     path_pub_->publish(path);
     publishGateMarkers(*odom);
     publishGateMemorySnapshot();
@@ -1517,6 +1714,8 @@ private:
     if (use_spatial_range_ && gate_path_enable_) {
       publishNarrowGatePassModeState();
       publishSidePassCrawlModeState();
+      publishOpenCorridorCruiseModeState();
+      publishOpenCorridorCruisePreExitModeState();
       publishReleaseSoftStopModeState();
       publishStickReleaseHaltState();
       if (footprint_publish_enable_) {
@@ -1537,7 +1736,18 @@ private:
       return;
     }
 
+    if (open_corridor_cruise_active_) {
+      return;
+    }
+
     if (release_soft_stop_active_ || stick_release_halt_active_) {
+      return;
+    }
+
+    if (open_cruise_mppi_resume_) {
+      resend_after_reset_ = false;
+      sendGoal(path, true);
+      open_cruise_mppi_resume_ = false;
       return;
     }
 
@@ -1783,6 +1993,9 @@ private:
       const double norm_y_clamped = clampNorm(norm_y, -1.0, 1.0);
       dx_body = std::min(0.0, norm_x_clamped) * max_back;
       dy_body = norm_y_clamped * max_lateral;
+      if (backward_reverse_lateral_invert_) {
+        dy_body = -dy_body;
+      }
       const double goal_dist = std::hypot(dx_body, dy_body);
       if (goal_dist < 1e-4) {
         return false;
@@ -1800,6 +2013,33 @@ private:
   double applyRockerDeadbandAxis(double axis) const
   {
     return (std::abs(axis) <= rocker_deadband_) ? 0.0 : axis;
+  }
+
+  double pathOpenCruiseFrontHalfDeg(int gear) const
+  {
+    return pickGearTable(path_open_cruise_gear_front_half_deg_, gear, gear_default_index_);
+  }
+
+  bool isStickInOpenCruiseForwardSector(int gear, const rclcpp::Time & tnow)
+  {
+    Joystick::SharedPtr joy;
+    rclcpp::Time joy_stamp;
+    {
+      std::lock_guard<std::mutex> lock(joystick_mutex_);
+      joy = latest_joystick_;
+      joy_stamp = latest_joystick_stamp_;
+    }
+    if (!joy || (tnow - joy_stamp).seconds() > joystick_timeout_) {
+      return false;
+    }
+    const double rx = applyRockerDeadbandAxis(static_cast<double>(joy->rocker_x));
+    const double ry = applyRockerDeadbandAxis(static_cast<double>(joy->rocker_y));
+    if (std::abs(rx) < 1e-6 && std::abs(ry) < 1e-6) {
+      return false;
+    }
+    const double theta = std::atan2(ry, rx);
+    const double half_rad = pathOpenCruiseFrontHalfDeg(gear) * M_PI / 180.0;
+    return std::abs(theta) <= half_rad;
   }
 
   bool isRockerOutOfDeadband(const rclcpp::Time & tnow)
@@ -1846,6 +2086,21 @@ private:
     return pickGearTable(gear_footprint_padding_m_, gear, gear_default_index_);
   }
 
+  double openCruiseInnerCorridorHalfWidth(int gear) const
+  {
+    return footprintHalfWidthM() + gearFootprintPadding(gear);
+  }
+
+  double openCruiseExtraPadding(int gear) const
+  {
+    return pickGearTable(path_open_cruise_gear_extra_padding_m_, gear, gear_default_index_);
+  }
+
+  double openCruiseCorridorHalfWidth(int gear) const
+  {
+    return openCruiseInnerCorridorHalfWidth(gear) + openCruiseExtraPadding(gear);
+  }
+
   double footprintHalfWidthM() const
   {
     if (!footprint_base_pts_.empty()) {
@@ -1856,6 +2111,113 @@ private:
       return hw;
     }
     return footprint_body_y_max_;
+  }
+
+  struct OpenCruiseForwardRegionResult
+  {
+    bool valid{false};
+    bool clear{false};
+  };
+
+  OpenCruiseForwardRegionResult checkOpenCruiseForwardRegionClear(
+    int gear, const rclcpp::Time & tnow, double corridor_half,
+    double forward_far_extra_m = 0.0) const
+  {
+    OpenCruiseForwardRegionResult result;
+    const double forward_range_m =
+      pickGearTable(gear_forward_range_m_, gear, gear_default_index_) + forward_far_extra_m;
+    if (forward_range_m <= 1e-6) {
+      return result;
+    }
+    if (corridor_half <= 0.0) {
+      return result;
+    }
+
+    std::vector<std::pair<float, float>> cloud_body;
+    {
+      std::lock_guard<std::mutex> lock(cloud_mutex_);
+      if (!have_cloud_ || (tnow - latest_cloud_stamp_).seconds() > obstacle_timeout_) {
+        return result;
+      }
+      cloud_body = cloud_pts_;
+    }
+
+    result.valid = true;
+    if (cloud_body.empty()) {
+      result.clear = true;
+      return result;
+    }
+
+    const double half_rad = pathOpenCruiseFrontHalfDeg(gear) * M_PI / 180.0;
+    for (const auto & bp : cloud_body) {
+      const double px = static_cast<double>(bp.first);
+      const double py = static_cast<double>(bp.second);
+      if (px < 0.0 || px > forward_range_m) {
+        continue;
+      }
+      if (std::abs(py) > corridor_half) {
+        continue;
+      }
+      if (std::abs(std::atan2(py, px)) > half_rad + 1e-6) {
+        continue;
+      }
+      result.clear = false;
+      return result;
+    }
+    result.clear = true;
+    return result;
+  }
+
+  bool isOpenCruiseOuterRegionOccupied(int gear, const rclcpp::Time & tnow) const
+  {
+    const double forward_range_m =
+      pickGearTable(gear_forward_range_m_, gear, gear_default_index_);
+    if (forward_range_m <= 1e-6) {
+      return false;
+    }
+    const double inner_half = openCruiseInnerCorridorHalfWidth(gear);
+    const double extra = openCruiseExtraPadding(gear);
+    const double outer_half = inner_half + extra;
+    if (extra <= 1e-6 && path_open_cruise_outer_far_m_ <= 1e-6) {
+      return false;
+    }
+
+    std::vector<std::pair<float, float>> cloud_body;
+    {
+      std::lock_guard<std::mutex> lock(cloud_mutex_);
+      if (!have_cloud_ || (tnow - latest_cloud_stamp_).seconds() > obstacle_timeout_) {
+        return false;
+      }
+      cloud_body = cloud_pts_;
+    }
+    if (cloud_body.empty()) {
+      return false;
+    }
+
+    const double half_rad = pathOpenCruiseFrontHalfDeg(gear) * M_PI / 180.0;
+    const double far_end = forward_range_m + path_open_cruise_outer_far_m_;
+    for (const auto & bp : cloud_body) {
+      const double px = static_cast<double>(bp.first);
+      const double py = static_cast<double>(bp.second);
+      if (px < 0.0 || px > far_end) {
+        continue;
+      }
+      if (std::abs(std::atan2(py, px)) > half_rad + 1e-6) {
+        continue;
+      }
+      const double abs_py = std::abs(py);
+      if (extra > 1e-6 && px <= forward_range_m + 1e-6 &&
+        abs_py > inner_half + 1e-6 && abs_py <= outer_half + 1e-6)
+      {
+        return true;
+      }
+      if (path_open_cruise_outer_far_m_ > 1e-6 && px > forward_range_m + 1e-6 &&
+        abs_py <= outer_half + 1e-6)
+      {
+        return true;
+      }
+    }
+    return false;
   }
 
   void truncatePathAtArcLength(Path & path, double max_arc_m) const
@@ -1904,23 +2266,31 @@ private:
     }
   }
 
-  void applyPathObstacleLimit(
-    Path & path, const Odometry & odom, int gear, const rclcpp::Time & tnow)
+  struct PathCorridorObstacleResult
   {
-    if (!path_obstacle_limit_enable_ || path.poses.size() < 2) {
-      return;
+    bool valid{false};
+    double full_len{0.0};
+    double nearest_block_s{std::numeric_limits<double>::infinity()};
+  };
+
+  PathCorridorObstacleResult computePathCorridorObstacle(
+    const Path & path, const Odometry & odom, int gear, const rclcpp::Time & tnow) const
+  {
+    PathCorridorObstacleResult result;
+    if (path.poses.size() < 2) {
+      return result;
     }
     if (path_obstacle_limit_skip_pass_mode_ &&
       (narrow_gate_pass_active_ || narrow_gate_side_pass_crawl_active_))
     {
-      return;
+      return result;
     }
 
     if (path_obstacle_limit_skip_in_place_) {
       const auto & a = path.poses.front().pose.position;
       const auto & b = path.poses.back().pose.position;
       if (std::hypot(b.x - a.x, b.y - a.y) < min_goal_distance_m_ * 0.5) {
-        return;
+        return result;
       }
     }
 
@@ -1928,12 +2298,9 @@ private:
     {
       std::lock_guard<std::mutex> lock(cloud_mutex_);
       if (!have_cloud_ || (tnow - latest_cloud_stamp_).seconds() > obstacle_timeout_) {
-        return;
+        return result;
       }
       cloud_body = cloud_pts_;
-    }
-    if (cloud_body.empty()) {
-      return;
     }
 
     const double x0 = odom.pose.pose.position.x;
@@ -1954,7 +2321,7 @@ private:
 
     const double corridor_half = footprintHalfWidthM() + gearFootprintPadding(gear);
     if (corridor_half <= 0.0) {
-      return;
+      return result;
     }
 
     std::vector<double> arc_s(path.poses.size(), 0.0);
@@ -1963,9 +2330,14 @@ private:
       const auto & cur = path.poses[i].pose.position;
       arc_s[i] = arc_s[i - 1] + std::hypot(cur.x - prev.x, cur.y - prev.y);
     }
-    const double full_len = arc_s.back();
-    if (full_len < path_obstacle_min_keep_m_) {
-      return;
+    result.full_len = arc_s.back();
+    if (result.full_len < path_obstacle_min_keep_m_) {
+      return result;
+    }
+
+    result.valid = true;
+    if (cloud_odom.empty()) {
+      return result;
     }
 
     double min_block_s = std::numeric_limits<double>::infinity();
@@ -1997,17 +2369,29 @@ private:
         min_block_s = std::min(min_block_s, s_block);
       }
     }
+    result.nearest_block_s = min_block_s;
+    return result;
+  }
 
-    if (!std::isfinite(min_block_s) || min_block_s >= full_len - 1e-3) {
+  void applyPathObstacleLimit(
+    Path & path, const Odometry & odom, int gear, const rclcpp::Time & tnow)
+  {
+    if (!path_obstacle_limit_enable_) {
+      return;
+    }
+    const auto corridor = computePathCorridorObstacle(path, odom, gear, tnow);
+    if (!corridor.valid ||
+      corridor.nearest_block_s >= corridor.full_len - 1e-3)
+    {
       return;
     }
 
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 500,
-      "path_obstacle_limit: truncate %.2fm -> %.2fm corridor_half=%.2fm gear=%d",
-      full_len, min_block_s, corridor_half, gear);
+      "path_obstacle_limit: truncate %.2fm -> %.2fm gear=%d",
+      corridor.full_len, corridor.nearest_block_s, gear);
 
-    truncatePathAtArcLength(path, min_block_s);
+    truncatePathAtArcLength(path, corridor.nearest_block_s);
   }
 
   double gearLateralWzMax(int gear) const
@@ -3513,6 +3897,7 @@ private:
   double backward_sector_deg_{60.0};
   double sector_hysteresis_deg_{10.0};
   bool backward_reverse_path_enable_{true};
+  bool backward_reverse_lateral_invert_{false};
   int gear_default_index_{3};
   int path_interpolation_steps_{20};
   double min_goal_distance_m_{0.12};
@@ -3529,13 +3914,31 @@ private:
   std::string footprint_topic_;
   std::string footprint_base_;
   std::vector<double> gear_footprint_padding_m_;
-  bool path_obstacle_limit_enable_{false};
+  bool path_obstacle_limit_enable_{true};
   double path_obstacle_stop_margin_m_{0.20};
   double path_obstacle_min_keep_m_{0.12};
   bool path_obstacle_limit_skip_pass_mode_{true};
   bool path_obstacle_limit_skip_in_place_{true};
+  bool path_open_cruise_enable_{false};
+  int path_open_cruise_min_gear_{4};
+  std::vector<double> path_open_cruise_gear_front_half_deg_;
+  std::vector<double> path_open_cruise_gear_extra_padding_m_;
+  double path_open_cruise_outer_far_m_{0.5};
+  int path_open_cruise_pre_exit_confirm_frames_{2};
+  int path_open_cruise_pre_exit_streak_{0};
+  bool open_corridor_cruise_pre_exit_active_{false};
+  std::string path_open_cruise_pre_exit_topic_;
+  int path_open_cruise_confirm_frames_{10};
+  int path_open_cruise_exit_confirm_frames_{3};
+  int path_open_cruise_reenter_cooldown_frames_{30};
+  int path_open_cruise_enter_streak_{0};
+  int path_open_cruise_exit_streak_{0};
+  int path_open_cruise_frames_since_exit_{1000000};
+  bool open_cruise_mppi_resume_{false};
+  std::string path_open_cruise_topic_;
+  bool open_corridor_cruise_active_{false};
   bool release_soft_stop_enable_{false};
-  double release_soft_stop_radius_{0.5};
+  double release_soft_stop_radius_{0.8};
   std::string release_soft_stop_topic_;
   std::string stick_release_halt_topic_;
   bool release_soft_stop_active_{false};
@@ -3690,6 +4093,8 @@ private:
   rclcpp::Publisher<Path>::SharedPtr path_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_pass_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr narrow_gate_side_pass_mode_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr open_corridor_cruise_mode_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr open_corridor_cruise_pre_exit_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr release_soft_stop_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr stick_release_halt_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_marker_pub_;
