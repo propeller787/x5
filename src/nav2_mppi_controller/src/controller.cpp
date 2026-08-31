@@ -40,6 +40,16 @@ void MPPIController::configure(
   auto getParam = parameters_handler_->getParamGetter(name_);
   getParam(visualize_, "visualize", false);
   getParam(reset_period_, "reset_period", 1.0);
+  getParam(
+    reset_seed_min_vx_after_side_pass_enable_,
+    "reset_seed_min_vx_after_side_pass_enable", false);
+  getParam(reset_seed_min_vx_mps_, "reset_seed_min_vx_mps", 0.0);
+  if (reset_seed_min_vx_mps_ < 0.0) {
+    reset_seed_min_vx_mps_ = 0.0;
+  }
+  getParam(
+    narrow_gate_side_pass_mode_topic_,
+    "narrow_gate_side_pass_mode_topic", std::string("/mppi/narrow_gate_side_pass_mode"));
 
   // Configure composed objects
   optimizer_.initialize(parent_, name_, costmap_ros_, parameters_handler_.get());
@@ -63,11 +73,22 @@ void MPPIController::activate()
 {
   trajectory_visualizer_.on_activate();
   parameters_handler_->start();
+  if (reset_seed_min_vx_after_side_pass_enable_) {
+    auto node = parent_.lock();
+    side_pass_mode_sub_ = node->create_subscription<std_msgs::msg::Bool>(
+      narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&MPPIController::onSidePassMode, this, std::placeholders::_1));
+    RCLCPP_INFO(
+      logger_,
+      "side_pass exit seed: min_vx=%.2f topic=%s",
+      reset_seed_min_vx_mps_, narrow_gate_side_pass_mode_topic_.c_str());
+  }
   RCLCPP_INFO(logger_, "Activated MPPI Controller: %s", name_.c_str());
 }
 
 void MPPIController::deactivate()
 {
+  side_pass_mode_sub_.reset();
   trajectory_visualizer_.on_deactivate();
   RCLCPP_INFO(logger_, "Deactivated MPPI Controller: %s", name_.c_str());
 }
@@ -75,6 +96,41 @@ void MPPIController::deactivate()
 void MPPIController::reset()
 {
   optimizer_.reset();
+  side_pass_exit_seed_pending_ = false;
+}
+
+void MPPIController::onSidePassMode(const std_msgs::msg::Bool::SharedPtr msg)
+{
+  if (msg->data) {
+    side_pass_active_ = true;
+    side_pass_exit_seed_pending_ = false;
+    return;
+  }
+  if (side_pass_active_) {
+    side_pass_exit_seed_pending_ = true;
+    RCLCPP_INFO(
+      logger_,
+      "side_pass exit: next idle reset seeds |vx|>=%.2f m/s",
+      reset_seed_min_vx_mps_);
+  }
+  side_pass_active_ = false;
+}
+
+void MPPIController::applyMinAbsVxSeed(
+  geometry_msgs::msg::Twist & speed, double min_vx_mps, double vel_eps)
+{
+  if (min_vx_mps <= 0.0) {
+    return;
+  }
+  const double vx = speed.linear.x;
+  if (std::abs(vx) >= min_vx_mps) {
+    return;
+  }
+  if (std::abs(vx) <= vel_eps) {
+    speed.linear.x = min_vx_mps;
+  } else {
+    speed.linear.x = (vx >= 0.0 ? 1.0 : -1.0) * min_vx_mps;
+  }
 }
 
 geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
@@ -90,7 +146,12 @@ geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
 #endif
 
   if (clock_->now() - last_time_called_ > rclcpp::Duration::from_seconds(reset_period_)) {
-    optimizer_.reset(&robot_speed);
+    geometry_msgs::msg::Twist seed_speed = robot_speed;
+    if (reset_seed_min_vx_after_side_pass_enable_ && side_pass_exit_seed_pending_) {
+      applyMinAbsVxSeed(seed_speed, reset_seed_min_vx_mps_, 1e-3);
+      side_pass_exit_seed_pending_ = false;
+    }
+    optimizer_.reset(&seed_speed);
   }
   last_time_called_ = clock_->now();
 

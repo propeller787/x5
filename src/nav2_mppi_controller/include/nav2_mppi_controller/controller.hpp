@@ -27,6 +27,7 @@
 #include "nav2_core/controller.hpp"
 #include "nav2_core/goal_checker.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/bool.hpp"
 
 namespace nav2_mppi_controller
 {
@@ -108,6 +109,11 @@ protected:
     */
   void visualize(nav_msgs::msg::Path transformed_plan);
 
+  void onSidePassMode(const std_msgs::msg::Bool::SharedPtr msg);
+
+  static void applyMinAbsVxSeed(
+    geometry_msgs::msg::Twist & speed, double min_vx_mps, double vel_eps);
+
   std::string name_;
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
   rclcpp::Clock::SharedPtr clock_;
@@ -123,6 +129,12 @@ protected:
   bool visualize_;
 
   double reset_period_;
+  bool reset_seed_min_vx_after_side_pass_enable_{false};
+  double reset_seed_min_vx_mps_{0.0};
+  std::string narrow_gate_side_pass_mode_topic_;
+  bool side_pass_active_{false};
+  bool side_pass_exit_seed_pending_{false};
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr side_pass_mode_sub_;
   // Last time computeVelocityCommands was called
   rclcpp::Time last_time_called_;
 };

@@ -45,6 +45,10 @@ controller_server:
       reset_period: 0.35
       # idle reset 时用 odom robot_speed 填充 control_sequence，使 rollout 噪声均值与 t=0 速度一致。
       reset_seed_from_speed: true
+      # side_pass 退出后首次 idle reset：|vx| 下限（与 cmd_vel_safety_gate side_pass_crawl_vx_mps 对齐）
+      reset_seed_min_vx_after_side_pass_enable: true
+      reset_seed_min_vx_mps: 0.10
+      narrow_gate_side_pass_mode_topic: "/mppi/narrow_gate_side_pass_mode"
       time_steps: 40
       batch_size: 600
       iteration_count: 1
