@@ -107,10 +107,18 @@ cmd_vel_safety_gate_node:
     release_soft_stop_brake_sector_half_angle: 0.30
 
     # MPPI fail 软停（/cmd_vel 突变为 0 且摇杆仍出死区）：减速度 ramp
-    mppi_fail_soft_stop_enable: false
-    mppi_fail_soft_stop_radius: 0.5
-    mppi_fail_soft_stop_decel: 1.0
-    mppi_fail_soft_stop_wz_decel: 2.0
+    # 安全区：左/右/前 forward strip 各 check_depth 内无障碍（同 proximity_side_pass）
+    # 左右角 strip 在 check_depth 外再探 side_probe_depth，用于 wz 策略：
+    #   转向朝向探知侧障碍 -> wz=0；单侧有障 -> 向避让方向 avoid_wz_accel 加速转向
+    mppi_fail_soft_stop_enable: true
+    mppi_fail_soft_stop_check_depth_m: 0.03
+    mppi_fail_soft_stop_side_probe_depth_m: 0.20
+    mppi_fail_soft_stop_jerk_mps3: 0.20
+    mppi_fail_soft_stop_decel_mps2: 1.0
+    mppi_fail_soft_stop_avoid_wz_accel: 0.80
+    mppi_fail_soft_stop_avoid_wz_max: 0.75
+    # fallback 最长持续帧数（@publish_rate_hz）；超时立即输出 0 并退出 soft-stop。0=不限
+    mppi_fail_soft_stop_max_frames: 30
 
     # --- 按 obstacle_points 周边密度分三档限制角速度（带迟滞）---
     # 调试：/cmd_vel_safety_gate_node/wz_density_tier (0=OPEN, 1=MODERATE, 2=DENSE)
@@ -123,8 +131,6 @@ cmd_vel_safety_gate_node:
     obstacle_count_engage_dense: 40
     obstacle_count_release_moderate: 28
     wz_density_min_dwell: 0.4
-    # 等比例缩放 MPPI 原始 /cmd_vel 的 vx 与 wz（ratio = 当前档 wz 上限 / OPEN 档 wz 上限）
-    wz_density_vx_scale_enable: true
 
     # --- 过窄门模式（订阅 /mppi/narrow_gate_pass_mode）---
     # vx 限速；更信任原始摇杆：前推禁倒退、后拉禁前进，左右推禁反向转向
@@ -160,6 +166,11 @@ cmd_vel_safety_gate_node:
     side_pass_crawl_wz_rps: 0.10
     side_pass_crawl_rocker_forward_min: 5.0
     side_pass_crawl_rocker_lateral_min: 5.0
+    # side_pass 退出：max_frames 内 max(crawl,MPPI)；超时后 hold last_out 直至 |MPPI vx|>crawl_vx
+    # hold 期间按 last_out 运动方向检查 side_pass_crawl_check_depth 条带净空
+    # MPPI reset seed 下限见 mppi_controller_server FollowPath.reset_seed_min_vx_mps（须与此 crawl_vx 一致）
+    side_pass_exit_transition_enable: true
+    side_pass_exit_transition_frames: 50
 
     # --- 侧边障碍平滑限速（点云 base_link；仅 1 档生效，默认关）---
     side_speed_limit_enable: false

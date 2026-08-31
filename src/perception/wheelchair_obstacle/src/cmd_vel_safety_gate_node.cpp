@@ -179,8 +179,6 @@ public:
     obstacle_count_release_moderate_ = declare_parameter<int>(
       "obstacle_count_release_moderate", 28);
     wz_density_min_dwell_ = declare_parameter<double>("wz_density_min_dwell", 0.4);
-    wz_density_vx_scale_enable_ = declare_parameter<bool>(
-      "wz_density_vx_scale_enable", true);
     release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", true);
     release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 0.8);
     release_soft_stop_decel_ = declare_parameter<double>("release_soft_stop_decel", 1.0);
@@ -206,13 +204,28 @@ public:
       "release_soft_stop_standoff", standoff_);
     release_soft_stop_brake_sector_half_angle_ = declare_parameter<double>(
       "release_soft_stop_brake_sector_half_angle", sector_half_angle_);
-    mppi_fail_soft_stop_decel_ = declare_parameter<double>("mppi_fail_soft_stop_decel", 1.5);
-    mppi_fail_soft_stop_wz_decel_ = declare_parameter<double>(
-      "mppi_fail_soft_stop_wz_decel", 2.0);
+    mppi_fail_soft_stop_jerk_mps3_ = declare_parameter<double>(
+      "mppi_fail_soft_stop_jerk_mps3", 0.3);
+    if (mppi_fail_soft_stop_jerk_mps3_ < 0.01) {
+      mppi_fail_soft_stop_jerk_mps3_ = 0.01;
+    }
+    mppi_fail_soft_stop_decel_mps2_ = declare_parameter<double>(
+      "mppi_fail_soft_stop_decel_mps2", 1.0);
+    if (mppi_fail_soft_stop_decel_mps2_ < 0.05) {
+      mppi_fail_soft_stop_decel_mps2_ = 0.05;
+    }
     mppi_fail_soft_stop_enable_ = declare_parameter<bool>(
       "mppi_fail_soft_stop_enable", false);
-    mppi_fail_soft_stop_radius_ = declare_parameter<double>(
-      "mppi_fail_soft_stop_radius", 0.8);
+    mppi_fail_soft_stop_check_depth_m_ = declare_parameter<double>(
+      "mppi_fail_soft_stop_check_depth_m", 0.10);
+    mppi_fail_soft_stop_side_probe_depth_m_ = declare_parameter<double>(
+      "mppi_fail_soft_stop_side_probe_depth_m", 0.20);
+    mppi_fail_soft_stop_avoid_wz_accel_ = declare_parameter<double>(
+      "mppi_fail_soft_stop_avoid_wz_accel", 0.50);
+    mppi_fail_soft_stop_avoid_wz_max_ = declare_parameter<double>(
+      "mppi_fail_soft_stop_avoid_wz_max", 0.35);
+    mppi_fail_soft_stop_max_frames_ = declare_parameter<int>(
+      "mppi_fail_soft_stop_max_frames", 50);
 
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
@@ -311,6 +324,13 @@ public:
       "side_pass_crawl_rocker_forward_min", 5.0);
     side_pass_crawl_rocker_lateral_min_ = declare_parameter<double>(
       "side_pass_crawl_rocker_lateral_min", 5.0);
+    side_pass_exit_transition_enable_ = declare_parameter<bool>(
+      "side_pass_exit_transition_enable", true);
+    side_pass_exit_transition_frames_ = declare_parameter<int>(
+      "side_pass_exit_transition_frames", 10);
+    if (side_pass_exit_transition_frames_ < 1) {
+      side_pass_exit_transition_frames_ = 1;
+    }
 
     open_corridor_cruise_mode_topic_ = declare_parameter<std::string>(
       "open_corridor_cruise_mode_topic", "/mppi/open_corridor_cruise_mode");
@@ -1152,6 +1172,42 @@ private:
     return true;
   }
 
+  // Same left/front/right forward strips as joystick_local_path proximity_side_pass.
+  bool mppiFailSoftStopForwardStripsClear() const
+  {
+    const double depth = mppi_fail_soft_stop_check_depth_m_;
+    for (size_t i = 0; i < side_pass_crawl_forward_strip_x_.size(); ++i) {
+      const double x0 = side_pass_crawl_forward_strip_x_[i];
+      if (!sidePassRoiClear(
+          x0, x0 + depth,
+          side_pass_crawl_forward_strip_y_min_[i],
+          side_pass_crawl_forward_strip_y_max_[i]))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Left/right forward corner strips beyond check_depth, for mppi-fail wz avoid/decel.
+  bool mppiFailSoftStopSideStripBlocked(bool left) const
+  {
+    if (side_pass_crawl_forward_strip_x_.size() < 3 ||
+      side_pass_crawl_forward_strip_y_min_.size() < 3 ||
+      side_pass_crawl_forward_strip_y_max_.size() < 3)
+    {
+      return false;
+    }
+    const size_t i = left ? 0 : 2;
+    const double x0 =
+      side_pass_crawl_forward_strip_x_[i] + mppi_fail_soft_stop_check_depth_m_;
+    const double x1 = x0 + mppi_fail_soft_stop_side_probe_depth_m_;
+    return !sidePassRoiClear(
+      x0, x1,
+      side_pass_crawl_forward_strip_y_min_[i],
+      side_pass_crawl_forward_strip_y_max_[i]);
+  }
+
   bool sidePassRearStripsClear() const
   {
     const double depth = side_pass_crawl_check_depth_m_;
@@ -1219,6 +1275,110 @@ private:
     }
 
     return out;
+  }
+
+  bool sidePassHoldMotionStripsClear(const Twist & hold) const
+  {
+    const double eps = release_soft_stop_vel_eps_;
+    if (hold.linear.x > eps && !sidePassForwardStripsClear()) {
+      return false;
+    }
+    if (hold.linear.x < -eps && !sidePassRearStripsClear()) {
+      return false;
+    }
+    if (hold.angular.z > eps && !sidePassLateralStripsClear(true)) {
+      return false;
+    }
+    if (hold.angular.z < -eps && !sidePassLateralStripsClear(false)) {
+      return false;
+    }
+    return true;
+  }
+
+  static double blendSignedMax(double a, double b)
+  {
+    if (a >= 0.0 && b >= 0.0) {
+      return std::max(a, b);
+    }
+    if (a <= 0.0 && b <= 0.0) {
+      return std::min(a, b);
+    }
+    return std::abs(a) >= std::abs(b) ? a : b;
+  }
+
+  void beginSidePassExitTransition()
+  {
+    if (!side_pass_exit_transition_enable_ || side_pass_crawl_enable_) {
+      return;
+    }
+    side_pass_exit_transition_active_ = true;
+    side_pass_exit_hold_active_ = false;
+    side_pass_exit_transition_frame_count_ = 0;
+    RCLCPP_INFO(
+      get_logger(),
+      "side_pass exit transition: max_frames=%d mppi_thresh=vx%.2f/wz%.2f (crawl)",
+      side_pass_exit_transition_frames_,
+      side_pass_crawl_vx_mps_, side_pass_crawl_wz_rps_);
+  }
+
+  void beginSidePassExitHold(const Twist & hold)
+  {
+    side_pass_exit_hold_active_ = true;
+    side_pass_exit_hold_twist_ = hold;
+    RCLCPP_INFO(
+      get_logger(),
+      "side_pass exit hold: vx=%.2f wz=%.2f until mppi |vx|>%.2f (strip depth=%.0fmm)",
+      hold.linear.x, hold.angular.z, side_pass_crawl_vx_mps_,
+      side_pass_crawl_check_depth_m_ * 1000.0);
+  }
+
+  void endSidePassExitTransition(const char * reason)
+  {
+    if (!side_pass_exit_transition_active_ && !side_pass_exit_hold_active_) {
+      return;
+    }
+    side_pass_exit_transition_active_ = false;
+    side_pass_exit_hold_active_ = false;
+    side_pass_exit_transition_frame_count_ = 0;
+    RCLCPP_INFO(get_logger(), "side_pass exit transition done: %s", reason);
+  }
+
+  void tickSidePassExitTransitionBlend(const Twist & mppi, bool input_ok, const Twist & blend_out)
+  {
+    if (side_pass_exit_hold_active_) {
+      return;
+    }
+    ++side_pass_exit_transition_frame_count_;
+    const double mppi_vx = input_ok ? mppi.linear.x : 0.0;
+    const double mppi_wz = input_ok ? mppi.angular.z : 0.0;
+    if (side_pass_exit_transition_frame_count_ >= side_pass_exit_transition_frames_) {
+      beginSidePassExitHold(blend_out);
+      return;
+    }
+    if (input_ok &&
+      (std::abs(mppi_vx) > side_pass_crawl_vx_mps_ ||
+      std::abs(mppi_wz) > side_pass_crawl_wz_rps_))
+    {
+      endSidePassExitTransition("mppi above threshold");
+    }
+  }
+
+  void applySidePassExitTransitionFilters(
+    Twist & out, const rclcpp::Time & tnow, double effective_wz_max,
+    bool cloud_ok, double mppi_raw_vx, double mppi_raw_wz)
+  {
+    applyNarrowGateExitVxRamp(out, tnow);
+    applyGearVxCap(out);
+    applyStickSpeedScale(out, tnow, false);
+    if (out.linear.x < 0.0) {
+      out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
+    }
+    out.angular.z = clamp(out.angular.z, -effective_wz_max, effective_wz_max);
+    applyNarrowGateRockerIntentFilter(out, tnow);
+    applyRockerSectorIntentFilter(out, tnow);
+    const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+    applySideObstacleSpeedLimit(out, dt, cloud_ok, mppi_raw_vx, mppi_raw_wz);
+    applyVxAccelLimit(out, dt);
   }
 
   double openCorridorCruiseVxMax(int gear) const
@@ -1578,29 +1738,93 @@ private:
     }
   }
 
-  void applySoftStopRamp(Twist & out, double dt)
+  void applyMppiFailSoftStopVxJerkDecel(double dt)
   {
-    const double lin_decel = soft_stop_ramp_legacy_ ?
-      release_soft_stop_decel_ : mppi_fail_soft_stop_decel_;
-    const double wz_decel = soft_stop_ramp_legacy_ ?
-      release_soft_stop_wz_decel_ : mppi_fail_soft_stop_wz_decel_;
-    const double lin_step = std::max(1e-6, lin_decel) * dt;
-    const double wz_step = std::max(1e-6, wz_decel) * dt;
+    const double max_da = mppi_fail_soft_stop_jerk_mps3_ * dt;
+    const double max_decel = mppi_fail_soft_stop_decel_mps2_;
 
     if (std::abs(soft_stop_vx_) <= release_soft_stop_vel_eps_) {
       soft_stop_vx_ = 0.0;
-    } else if (soft_stop_vx_ > 0.0) {
-      soft_stop_vx_ = std::max(0.0, soft_stop_vx_ - lin_step);
-    } else {
-      soft_stop_vx_ = std::min(0.0, soft_stop_vx_ + lin_step);
+      soft_stop_vx_ax_ = 0.0;
+      return;
     }
 
-    if (std::abs(soft_stop_wz_) <= release_soft_stop_vel_eps_) {
-      soft_stop_wz_ = 0.0;
-    } else if (soft_stop_wz_ > 0.0) {
-      soft_stop_wz_ = std::max(0.0, soft_stop_wz_ - wz_step);
+    if (soft_stop_vx_ > release_soft_stop_vel_eps_) {
+      const double desired_a = -max_decel;
+      if (soft_stop_vx_ax_ > desired_a) {
+        soft_stop_vx_ax_ = std::max(desired_a, soft_stop_vx_ax_ - max_da);
+      }
+      soft_stop_vx_ += soft_stop_vx_ax_ * dt;
+      if (soft_stop_vx_ <= release_soft_stop_vel_eps_) {
+        soft_stop_vx_ = 0.0;
+        soft_stop_vx_ax_ = 0.0;
+      }
     } else {
-      soft_stop_wz_ = std::min(0.0, soft_stop_wz_ + wz_step);
+      const double desired_a = max_decel;
+      if (soft_stop_vx_ax_ < desired_a) {
+        soft_stop_vx_ax_ = std::min(desired_a, soft_stop_vx_ax_ + max_da);
+      }
+      soft_stop_vx_ += soft_stop_vx_ax_ * dt;
+      if (soft_stop_vx_ >= -release_soft_stop_vel_eps_) {
+        soft_stop_vx_ = 0.0;
+        soft_stop_vx_ax_ = 0.0;
+      }
+    }
+  }
+
+  void applyMppiFailSoftStopWzRamp(double dt)
+  {
+    const bool left_outer = mppiFailSoftStopSideStripBlocked(true);
+    const bool right_outer = mppiFailSoftStopSideStripBlocked(false);
+    const bool turning_left = soft_stop_wz_ > release_soft_stop_vel_eps_;
+    const bool turning_right = soft_stop_wz_ < -release_soft_stop_vel_eps_;
+    const bool toward_obstacle =
+      (right_outer && turning_right) || (left_outer && turning_left);
+
+    if (toward_obstacle) {
+      soft_stop_wz_ = 0.0;
+      return;
+    }
+
+    const double avoid_step = std::max(1e-6, mppi_fail_soft_stop_avoid_wz_accel_) * dt;
+    const double wz_max = mppi_fail_soft_stop_avoid_wz_max_;
+
+    if (right_outer && !left_outer) {
+      soft_stop_wz_ = std::min(soft_stop_wz_ + avoid_step, wz_max);
+    } else if (left_outer && !right_outer) {
+      soft_stop_wz_ = std::max(soft_stop_wz_ - avoid_step, -wz_max);
+    }
+  }
+
+  void applySoftStopRamp(Twist & out, double dt)
+  {
+    const double lin_decel = release_soft_stop_decel_;
+    const double wz_decel = release_soft_stop_wz_decel_;
+    const double lin_step = std::max(1e-6, lin_decel) * dt;
+    const double wz_step = std::max(1e-6, wz_decel) * dt;
+
+    if (soft_stop_ramp_legacy_) {
+      if (std::abs(soft_stop_vx_) <= release_soft_stop_vel_eps_) {
+        soft_stop_vx_ = 0.0;
+      } else if (soft_stop_vx_ > 0.0) {
+        soft_stop_vx_ = std::max(0.0, soft_stop_vx_ - lin_step);
+      } else {
+        soft_stop_vx_ = std::min(0.0, soft_stop_vx_ + lin_step);
+      }
+    } else {
+      applyMppiFailSoftStopVxJerkDecel(dt);
+    }
+
+    if (soft_stop_ramp_legacy_) {
+      if (std::abs(soft_stop_wz_) <= release_soft_stop_vel_eps_) {
+        soft_stop_wz_ = 0.0;
+      } else if (soft_stop_wz_ > 0.0) {
+        soft_stop_wz_ = std::max(0.0, soft_stop_wz_ - wz_step);
+      } else {
+        soft_stop_wz_ = std::min(0.0, soft_stop_wz_ + wz_step);
+      }
+    } else {
+      applyMppiFailSoftStopWzRamp(dt);
     }
 
     out.linear.x = soft_stop_vx_;
@@ -1669,7 +1893,7 @@ private:
   bool canSoftStopOnMppiFail(bool cloud_ok) const
   {
     return mppi_fail_soft_stop_enable_ && cloud_ok &&
-           nearbyObstaclePointCountInRadius(mppi_fail_soft_stop_radius_) == 0;
+           mppiFailSoftStopForwardStripsClear();
   }
 
   double minRangeInSectorHalf(double center_angle, double half_angle) const
@@ -1776,7 +2000,7 @@ private:
     if (!cloud_ok) {
       reason = std::string(context) + " (cloud stale)";
     } else {
-      reason = std::string(context) + " (obstacles nearby)";
+      reason = std::string(context) + " (left/front/right strips blocked)";
     }
   }
 
@@ -1803,7 +2027,7 @@ private:
     }
     halted = true;
     reason = "cmd_vel stale";
-    mppi_fail_soft_stop_ = false;
+    clearMppiFailSoftStop();
     endSoftStop();
   }
 
@@ -1812,7 +2036,7 @@ private:
     if (!mppi_fail_soft_stop_ || !input_ok || isTwistNearZero(target)) {
       return;
     }
-    mppi_fail_soft_stop_ = false;
+    clearMppiFailSoftStop();
     endSoftStop();
     RCLCPP_INFO(
       get_logger(),
@@ -1842,12 +2066,14 @@ private:
       soft_stop_ramp_legacy_ = false;
       soft_stop_vx_ = last_out_.linear.x;
       soft_stop_wz_ = last_out_.angular.z;
+      soft_stop_vx_ax_ = 0.0;
       soft_stopping_ = true;
       RCLCPP_INFO(
         get_logger(),
-        "mppi fail soft-stop ramp: v0=%.2f wz0=%.2f decel=%.2f/%.2f",
+        "mppi fail soft-stop ramp: v0=%.2f wz0=%.2f jerk=%.2f decel=%.2f avoid_wz=%.2f/%.2f",
         soft_stop_vx_, soft_stop_wz_,
-        mppi_fail_soft_stop_decel_, mppi_fail_soft_stop_wz_decel_);
+        mppi_fail_soft_stop_jerk_mps3_, mppi_fail_soft_stop_decel_mps2_,
+        mppi_fail_soft_stop_avoid_wz_accel_, mppi_fail_soft_stop_avoid_wz_max_);
     }
   }
 
@@ -1875,6 +2101,13 @@ private:
     soft_stop_ramp_legacy_ = false;
     soft_stop_vx_ = 0.0;
     soft_stop_wz_ = 0.0;
+    soft_stop_vx_ax_ = 0.0;
+  }
+
+  void clearMppiFailSoftStop()
+  {
+    mppi_fail_soft_stop_ = false;
+    mppi_fail_soft_stop_frame_count_ = 0;
   }
 
   void finishSoftStopIfDecayed()
@@ -1942,32 +2175,6 @@ private:
       return wz_max_;
     }
     return std::min(wz_max_, wz_density_caps_rps_[idx]);
-  }
-
-  double wzDensityVxScaleRatio(double effective_wz_max) const
-  {
-    if (!wz_density_vx_scale_enable_ || wz_density_caps_rps_.empty()) {
-      return 1.0;
-    }
-    const double open_ref = wz_density_caps_rps_[0];
-    if (open_ref <= 1e-6) {
-      return 1.0;
-    }
-    return std::clamp(effective_wz_max / open_ref, 0.0, 1.0);
-  }
-
-  void applyWzDensityMppiScale(Twist & twist, double effective_wz_max) const
-  {
-    if (!wz_density_cap_enable_) {
-      return;
-    }
-    const double ratio = wzDensityVxScaleRatio(effective_wz_max);
-    if (ratio < 1.0 - 1e-6) {
-      twist.linear.x *= ratio;
-      twist.angular.z *= ratio;
-    } else if (std::abs(twist.angular.z) > effective_wz_max + 1e-6) {
-      twist.angular.z = clamp(twist.angular.z, -effective_wz_max, effective_wz_max);
-    }
   }
 
   double minRangeInSector(double center_angle) const
@@ -2053,12 +2260,12 @@ private:
         reason = "joystick stale";
         endSoftStop();
       } else if (stick_release_halt) {
-        mppi_fail_soft_stop_ = false;
+        clearMppiFailSoftStop();
         halted = true;
         endSoftStop();
         reason = "stick released (halt)";
       } else if (release_soft_stop) {
-        mppi_fail_soft_stop_ = false;
+        clearMppiFailSoftStop();
         if (!soft_stopping_) {
           if (canSoftStopOnReleaseLowPass(cloud_ok)) {
             beginSoftStopLowPass();
@@ -2076,7 +2283,13 @@ private:
     const bool side_pass_crawl =
       !side_pass_crawl_enable_ &&
       narrow_gate_side_pass_crawl_active_.load(std::memory_order_relaxed);
+    if (side_pass_crawl_prev_ && !side_pass_crawl) {
+      beginSidePassExitTransition();
+    }
+    side_pass_crawl_prev_ = side_pass_crawl;
+
     if (side_pass_crawl) {
+      endSidePassExitTransition("side_pass re-entered");
       Twist out;
       if (!halted && !soft_stopping_ && cloud_ok && rockerFresh(tnow) &&
         !stick_release_halt && !release_soft_stop)
@@ -2094,6 +2307,91 @@ private:
       last_pub_stamp_ = tnow;
       last_out_ = out;
       return;
+    }
+
+    if (side_pass_exit_transition_active_) {
+      if (halted || soft_stopping_ || stick_release_halt || release_soft_stop) {
+        endSidePassExitTransition("halt/soft-stop");
+      } else {
+        Twist target;
+        bool input_ok = false;
+        readCmdVelInput(tnow, target, input_ok, halted, reason);
+        const double mppi_raw_vx = target.linear.x;
+        const double mppi_raw_wz = target.angular.z;
+        const double mppi_vx = input_ok ? target.linear.x : 0.0;
+        const double mppi_wz = input_ok ? target.angular.z : 0.0;
+
+        double effective_wz_max = wz_max_;
+        if (wz_density_cap_enable_ && input_ok) {
+          if (!cloud_ok) {
+            current_wz_tier_ = WzDensityTier::DENSE;
+          } else {
+            updateWzDensityTier(nearbyObstaclePointCount(), tnow);
+          }
+          effective_wz_max = wzDensityCap();
+        }
+
+        Twist out;
+        if (side_pass_exit_hold_active_) {
+          if (!cloud_ok) {
+            halted = true;
+            reason = "side_pass exit hold (cloud stale)";
+            endSidePassExitTransition("cloud stale");
+          } else if (!sidePassHoldMotionStripsClear(side_pass_exit_hold_twist_)) {
+            halted = true;
+            reason = "side_pass exit hold (motion strips blocked)";
+            endSidePassExitTransition("strips blocked");
+          } else if (input_ok && std::abs(mppi_vx) > side_pass_crawl_vx_mps_) {
+            endSidePassExitTransition("mppi vx ready");
+            out = target;
+          } else {
+            out = side_pass_exit_hold_twist_;
+          }
+        } else {
+          Twist crawl;
+          if (cloud_ok && rockerFresh(tnow)) {
+            crawl = computeSidePassCrawlTwist(tnow);
+          }
+          out.linear.x = blendSignedMax(crawl.linear.x, mppi_vx);
+          out.angular.z = blendSignedMax(crawl.angular.z, mppi_wz);
+          tickSidePassExitTransitionBlend(target, input_ok, out);
+        }
+
+        if (!halted && side_pass_exit_transition_active_) {
+          applySidePassExitTransitionFilters(
+            out, tnow, effective_wz_max, cloud_ok, mppi_raw_vx, mppi_raw_wz);
+          applyLeftTurnWzTrick(out);
+          out_pub_->publish(out);
+          last_pub_stamp_ = tnow;
+          last_out_ = out;
+
+          UInt8 tier_msg;
+          tier_msg.data = static_cast<uint8_t>(current_wz_tier_);
+          wz_tier_pub_->publish(tier_msg);
+          return;
+        }
+        if (!side_pass_exit_transition_active_ && !halted && input_ok) {
+          applySidePassExitTransitionFilters(
+            out, tnow, effective_wz_max, cloud_ok, mppi_raw_vx, mppi_raw_wz);
+          applyLeftTurnWzTrick(out);
+          out_pub_->publish(out);
+          last_pub_stamp_ = tnow;
+          last_out_ = out;
+
+          UInt8 tier_msg;
+          tier_msg.data = static_cast<uint8_t>(current_wz_tier_);
+          wz_tier_pub_->publish(tier_msg);
+          return;
+        }
+        if (halted) {
+          out = Twist();
+          applyLeftTurnWzTrick(out);
+          out_pub_->publish(out);
+          last_pub_stamp_ = tnow;
+          last_out_ = out;
+          return;
+        }
+      }
     }
 
     const bool open_corridor_cruise =
@@ -2238,24 +2536,36 @@ private:
         applyMppiFailSoftStop(cloud_ok, halted, reason, "mppi fail");
         if (!halted) {
           mppi_fail_soft_stop_ = true;
+          mppi_fail_soft_stop_frame_count_ = 0;
           RCLCPP_INFO(
             get_logger(),
-            "mppi fail: release soft-stop (rocker active, cmd_vel=0, radius=%.1fm)",
-            mppi_fail_soft_stop_radius_);
+            "mppi fail: release soft-stop (rocker active, cmd_vel=0, forward strips depth=%.0fmm)",
+            mppi_fail_soft_stop_check_depth_m_ * 1000.0);
         }
       }
     }
 
     if (soft_stopping_ && !halted) {
       if (mppi_fail_soft_stop_) {
-        if (!cloud_ok ||
-          nearbyObstaclePointCountInRadius(mppi_fail_soft_stop_radius_) > 0)
+        if (mppi_fail_soft_stop_max_frames_ > 0) {
+          ++mppi_fail_soft_stop_frame_count_;
+          if (mppi_fail_soft_stop_frame_count_ >= mppi_fail_soft_stop_max_frames_) {
+            RCLCPP_INFO(
+              get_logger(),
+              "mppi fail soft-stop timeout: max_frames=%d -> output 0",
+              mppi_fail_soft_stop_max_frames_);
+            clearMppiFailSoftStop();
+            endSoftStop();
+          }
+        }
+        if (mppi_fail_soft_stop_ &&
+          (!cloud_ok || !mppiFailSoftStopForwardStripsClear()))
         {
           halted = true;
-          mppi_fail_soft_stop_ = false;
+          clearMppiFailSoftStop();
           endSoftStop();
           reason = !cloud_ok ?
-            "mppi fail (cloud stale)" : "mppi fail (obstacles nearby)";
+            "mppi fail (cloud stale)" : "mppi fail (left/front/right strips blocked)";
         }
       } else if (soft_stop_ramp_mode_ && soft_stop_ramp_legacy_) {
         if (!cloud_ok ||
@@ -2287,7 +2597,6 @@ private:
         updateWzDensityTier(nearbyObstaclePointCount(), tnow);
       }
       effective_wz_max = wzDensityCap();
-      applyWzDensityMppiScale(target, effective_wz_max);
     }
 
     if (proximity_speed_cap_ && !narrow_gate_pass && input_ok && !halted &&
@@ -2341,7 +2650,7 @@ private:
         applyVxAccelLimit(out, dt);
       }
     } else {
-      mppi_fail_soft_stop_ = false;
+      clearMppiFailSoftStop();
       last_out_ = Twist();
       if (!reason.empty()) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
@@ -2426,7 +2735,6 @@ private:
   int obstacle_count_engage_dense_{40};
   int obstacle_count_release_moderate_{28};
   double wz_density_min_dwell_{0.4};
-  bool wz_density_vx_scale_enable_{true};
   bool release_soft_stop_enable_{true};
   double release_soft_stop_radius_{0.8};
   double release_soft_stop_decel_{1.0};
@@ -2437,9 +2745,13 @@ private:
   bool release_soft_stop_brake_check_enable_{true};
   double release_soft_stop_standoff_{0.08};
   double release_soft_stop_brake_sector_half_angle_{0.30};
-  double mppi_fail_soft_stop_decel_{1.5};
-  double mppi_fail_soft_stop_wz_decel_{2.0};
-  double mppi_fail_soft_stop_radius_{0.8};
+  double mppi_fail_soft_stop_jerk_mps3_{0.3};
+  double mppi_fail_soft_stop_decel_mps2_{1.0};
+  double mppi_fail_soft_stop_check_depth_m_{0.10};
+  double mppi_fail_soft_stop_side_probe_depth_m_{0.20};
+  double mppi_fail_soft_stop_avoid_wz_accel_{0.50};
+  double mppi_fail_soft_stop_avoid_wz_max_{0.35};
+  int mppi_fail_soft_stop_max_frames_{50};
   std::string release_soft_stop_mode_topic_;
   std::string stick_release_halt_topic_;
   bool mppi_fail_soft_stop_enable_{true};
@@ -2468,6 +2780,13 @@ private:
   double side_pass_crawl_wz_rps_{0.10};
   double side_pass_crawl_rocker_forward_min_{5.0};
   double side_pass_crawl_rocker_lateral_min_{5.0};
+  bool side_pass_exit_transition_enable_{true};
+  int side_pass_exit_transition_frames_{10};
+  bool side_pass_exit_transition_active_{false};
+  bool side_pass_exit_hold_active_{false};
+  Twist side_pass_exit_hold_twist_;
+  int side_pass_exit_transition_frame_count_{0};
+  bool side_pass_crawl_prev_{false};
   std::string open_corridor_cruise_mode_topic_;
   int open_corridor_cruise_min_gear_{4};
   double open_corridor_cruise_jerk_mps3_{0.1};
@@ -2572,7 +2891,9 @@ private:
   bool soft_stop_ramp_legacy_{false};
   double soft_stop_vx_{0.0};
   double soft_stop_wz_{0.0};
+  double soft_stop_vx_ax_{0.0};
   bool mppi_fail_soft_stop_{false};
+  int mppi_fail_soft_stop_frame_count_{0};
 };
 
 int main(int argc, char ** argv)
