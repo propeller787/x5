@@ -341,6 +341,11 @@ public:
     if (open_corridor_cruise_pre_exit_decel_mps2_ < 0.05) {
       open_corridor_cruise_pre_exit_decel_mps2_ = 0.05;
     }
+    open_corridor_cruise_pre_exit_exit_speed_kph_ = declare_parameter<double>(
+      "open_corridor_cruise_pre_exit_exit_speed_kph", 2.0);
+    if (open_corridor_cruise_pre_exit_exit_speed_kph_ < 0.0) {
+      open_corridor_cruise_pre_exit_exit_speed_kph_ = 0.0;
+    }
     open_corridor_cruise_pre_exit_mode_topic_ = declare_parameter<std::string>(
       "open_corridor_cruise_pre_exit_mode_topic",
       "/mppi/open_corridor_cruise_pre_exit_mode");
@@ -361,6 +366,30 @@ public:
     }
     open_corridor_cruise_exit_early_below_mppi_enable_ = declare_parameter<bool>(
       "open_corridor_cruise_exit_early_below_mppi_enable", true);
+    open_corridor_cruise_mppi_handoff_enable_ = declare_parameter<bool>(
+      "open_corridor_cruise_mppi_handoff_enable", true);
+    open_corridor_cruise_mppi_handoff_jerk_mps3_ = declare_parameter<double>(
+      "open_corridor_cruise_mppi_handoff_jerk_mps3", 0.2);
+    if (open_corridor_cruise_mppi_handoff_jerk_mps3_ < 0.01) {
+      open_corridor_cruise_mppi_handoff_jerk_mps3_ = 0.01;
+    }
+    open_corridor_cruise_mppi_handoff_accel_mps2_ = declare_parameter<double>(
+      "open_corridor_cruise_mppi_handoff_accel_mps2", 0.5);
+    if (open_corridor_cruise_mppi_handoff_accel_mps2_ < 0.05) {
+      open_corridor_cruise_mppi_handoff_accel_mps2_ = 0.05;
+    }
+    open_corridor_cruise_mppi_handoff_max_sec_ = declare_parameter<double>(
+      "open_corridor_cruise_mppi_handoff_max_sec", 0.6);
+    if (open_corridor_cruise_mppi_handoff_max_sec_ < 0.05) {
+      open_corridor_cruise_mppi_handoff_max_sec_ = 0.05;
+    }
+    open_corridor_cruise_mppi_handoff_vx_eps_ = declare_parameter<double>(
+      "open_corridor_cruise_mppi_handoff_vx_eps", 0.08);
+    if (open_corridor_cruise_mppi_handoff_vx_eps_ < 0.01) {
+      open_corridor_cruise_mppi_handoff_vx_eps_ = 0.01;
+    }
+    proximity_speed_cap_during_cruise_exit_ = declare_parameter<bool>(
+      "proximity_speed_cap_during_cruise_exit", true);
     const auto open_cruise_wz = declare_parameter<std::vector<double>>(
       "open_corridor_cruise_gear_wz_max_rps",
       std::vector<double>{0.55, 0.75, 0.95, 1.15});
@@ -581,13 +610,18 @@ public:
     }
     RCLCPP_INFO(
       get_logger(),
-      "open_corridor_cruise: topic=%s gear>=%d front_half=%.0fdeg jerk=%.2f accel=%.2f pre_exit@jerk=%.2f decel=%.2f exit=%d@jerk=%.2f decel=%.2f vx_kph=[%.0f,%.0f,%.0f,%.0f]",
+      "open_corridor_cruise: topic=%s gear>=%d front_half=%.0fdeg jerk=%.2f accel=%.2f pre_exit@jerk=%.2f decel=%.2f crawl_kph=%.1f exit=%d@jerk=%.2f decel=%.2f handoff=%d@jerk=%.2f accel=%.2f prox_exit=%d vx_kph=[%.0f,%.0f,%.0f,%.0f]",
       open_corridor_cruise_mode_topic_.c_str(), open_corridor_cruise_min_gear_,
       open_corridor_cruise_front_half_deg_, open_corridor_cruise_jerk_mps3_,
       open_corridor_cruise_accel_mps2_,
       open_corridor_cruise_pre_exit_jerk_mps3_, open_corridor_cruise_pre_exit_decel_mps2_,
+      open_corridor_cruise_pre_exit_exit_speed_kph_,
       open_corridor_cruise_exit_hold_frames_, open_corridor_cruise_exit_jerk_mps3_,
       open_corridor_cruise_exit_decel_mps2_,
+      open_corridor_cruise_mppi_handoff_enable_ ? 1 : 0,
+      open_corridor_cruise_mppi_handoff_jerk_mps3_,
+      open_corridor_cruise_mppi_handoff_accel_mps2_,
+      proximity_speed_cap_during_cruise_exit_ ? 1 : 0,
       open_corridor_cruise_gear_vx_max_mps_.size() > 0 ?
       open_corridor_cruise_gear_vx_max_mps_[0] * 3.6 : 0.0,
       open_corridor_cruise_gear_vx_max_mps_.size() > 1 ?
@@ -620,6 +654,9 @@ private:
     const bool active = msg->data;
     const bool was = open_corridor_cruise_active_.exchange(active, std::memory_order_relaxed);
     if (!was && active) {
+      open_cruise_mppi_handoff_active_ = false;
+      open_cruise_handoff_vx_ = 0.0;
+      open_cruise_handoff_ax_ = 0.0;
       open_cruise_exiting_ = false;
       open_cruise_exit_frames_ = 0;
       open_cruise_vx_ = last_out_.linear.x;
@@ -1217,6 +1254,70 @@ private:
     return norm_y * wz_max;
   }
 
+  double openCorridorCruiseDriveSign(
+    const rclcpp::Time & tnow, const Twist & handle, bool handle_valid) const
+  {
+    if (!handle_valid) {
+      return 0.0;
+    }
+    if (handle.linear.x > intent_eps_) {
+      return 1.0;
+    }
+    if (handle.linear.x < -intent_eps_) {
+      return -1.0;
+    }
+    if (rockerFresh(tnow)) {
+      const double rx = static_cast<double>(
+        latest_rocker_x_.load(std::memory_order_relaxed));
+      if (rx > rocker_deadband_) {
+        return 1.0;
+      }
+      if (rx < -rocker_deadband_) {
+        return -1.0;
+      }
+    }
+    return 0.0;
+  }
+
+  Twist applyOpenCruiseJerkTowardVx(
+    const rclcpp::Time & tnow, double target_vx, double max_accel, double jerk,
+    bool clamp_forward_nonnegative = false)
+  {
+    Twist out;
+    const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+    const double max_da = jerk * dt;
+
+    if (open_cruise_vx_ < target_vx - 1e-6) {
+      open_cruise_ax_ = std::min(max_accel, open_cruise_ax_ + max_da);
+    } else if (open_cruise_vx_ > target_vx + 1e-6) {
+      open_cruise_ax_ = std::max(-max_accel, open_cruise_ax_ - max_da);
+    } else if (open_cruise_ax_ > 0.0) {
+      open_cruise_ax_ = std::max(0.0, open_cruise_ax_ - max_da);
+    } else if (open_cruise_ax_ < 0.0) {
+      open_cruise_ax_ = std::min(0.0, open_cruise_ax_ + max_da);
+    } else {
+      open_cruise_ax_ = 0.0;
+    }
+
+    open_cruise_vx_ += open_cruise_ax_ * dt;
+    if (open_cruise_ax_ >= 0.0 && open_cruise_vx_ > target_vx) {
+      open_cruise_vx_ = target_vx;
+      open_cruise_ax_ = 0.0;
+    } else if (open_cruise_ax_ <= 0.0 && open_cruise_vx_ < target_vx) {
+      open_cruise_vx_ = target_vx;
+      open_cruise_ax_ = 0.0;
+    }
+
+    if (clamp_forward_nonnegative && target_vx >= 0.0 && open_cruise_vx_ < 0.0) {
+      open_cruise_vx_ = 0.0;
+      open_cruise_ax_ = 0.0;
+    }
+
+    out.linear.x = open_cruise_vx_;
+    out.angular.z = openCorridorCruiseWzFromRocker(tnow, currentGearIndex());
+    return out;
+  }
+
   Twist computeOpenCorridorCruiseTwist(
     const rclcpp::Time & tnow, const Twist & handle, bool handle_valid)
   {
@@ -1230,20 +1331,7 @@ private:
       return out;
     }
 
-    double sign = 0.0;
-    if (handle.linear.x > intent_eps_) {
-      sign = 1.0;
-    } else if (handle.linear.x < -intent_eps_) {
-      sign = -1.0;
-    } else if (rockerFresh(tnow)) {
-      const double rx = static_cast<double>(
-        latest_rocker_x_.load(std::memory_order_relaxed));
-      if (rx > rocker_deadband_) {
-        sign = 1.0;
-      } else if (rx < -rocker_deadband_) {
-        sign = -1.0;
-      }
-    }
+    const double sign = openCorridorCruiseDriveSign(tnow, handle, handle_valid);
     if (sign == 0.0) {
       return out;
     }
@@ -1275,6 +1363,10 @@ private:
       } else {
         open_cruise_ax_ = 0.0;
       }
+    }
+    if (sign > 0.0 && open_cruise_vx_ < 0.0) {
+      open_cruise_vx_ = 0.0;
+      open_cruise_ax_ = 0.0;
     }
     out.linear.x = open_cruise_vx_;
     out.angular.z = openCorridorCruiseWzFromRocker(tnow, gear);
@@ -1322,8 +1414,113 @@ private:
       tnow, open_corridor_cruise_exit_decel_mps2_, open_corridor_cruise_exit_jerk_mps3_);
   }
 
-  Twist computeOpenCorridorCruisePreExitTwist(const rclcpp::Time & tnow)
+  void endOpenCruiseMppiHandoff()
   {
+    open_cruise_mppi_handoff_active_ = false;
+    open_cruise_handoff_vx_ = 0.0;
+    open_cruise_handoff_ax_ = 0.0;
+  }
+
+  void beginOpenCruiseMppiHandoff(const rclcpp::Time & tnow, double start_vx)
+  {
+    if (!open_corridor_cruise_mppi_handoff_enable_) {
+      return;
+    }
+    open_cruise_mppi_handoff_active_ = true;
+    open_cruise_handoff_vx_ = start_vx;
+    open_cruise_handoff_ax_ = 0.0;
+    open_cruise_handoff_start_ = tnow;
+    RCLCPP_INFO(
+      get_logger(),
+      "open_corridor_cruise MPPI handoff: start_vx=%.2f jerk=%.2f accel=%.2f max=%.2fs",
+      start_vx, open_corridor_cruise_mppi_handoff_jerk_mps3_,
+      open_corridor_cruise_mppi_handoff_accel_mps2_,
+      open_corridor_cruise_mppi_handoff_max_sec_);
+  }
+
+  Twist computeOpenCruiseMppiHandoffTwist(
+    const rclcpp::Time & tnow, const Twist & mppi_target)
+  {
+    Twist out;
+    const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+    const double target_vx = mppi_target.linear.x;
+    const double max_accel = open_corridor_cruise_mppi_handoff_accel_mps2_;
+    const double jerk = open_corridor_cruise_mppi_handoff_jerk_mps3_;
+    const double max_da = jerk * dt;
+    const double eps = open_corridor_cruise_mppi_handoff_vx_eps_;
+
+    if (open_cruise_handoff_vx_ < target_vx - 1e-6) {
+      open_cruise_handoff_ax_ = std::min(max_accel, open_cruise_handoff_ax_ + max_da);
+    } else if (open_cruise_handoff_vx_ > target_vx + 1e-6) {
+      open_cruise_handoff_ax_ = std::max(-max_accel, open_cruise_handoff_ax_ - max_da);
+    } else if (open_cruise_handoff_ax_ > 0.0) {
+      open_cruise_handoff_ax_ = std::max(0.0, open_cruise_handoff_ax_ - max_da);
+    } else if (open_cruise_handoff_ax_ < 0.0) {
+      open_cruise_handoff_ax_ = std::min(0.0, open_cruise_handoff_ax_ + max_da);
+    } else {
+      open_cruise_handoff_ax_ = 0.0;
+    }
+
+    open_cruise_handoff_vx_ += open_cruise_handoff_ax_ * dt;
+    if (open_cruise_handoff_ax_ >= 0.0 && open_cruise_handoff_vx_ > target_vx) {
+      open_cruise_handoff_vx_ = target_vx;
+      open_cruise_handoff_ax_ = 0.0;
+    } else if (open_cruise_handoff_ax_ <= 0.0 && open_cruise_handoff_vx_ < target_vx) {
+      open_cruise_handoff_vx_ = target_vx;
+      open_cruise_handoff_ax_ = 0.0;
+    }
+
+    out.linear.x = open_cruise_handoff_vx_;
+    out.angular.z = mppi_target.angular.z;
+
+    const double elapsed = (tnow - open_cruise_handoff_start_).seconds();
+    if (std::abs(open_cruise_handoff_vx_ - target_vx) <= eps ||
+      elapsed >= open_corridor_cruise_mppi_handoff_max_sec_)
+    {
+      RCLCPP_INFO(
+        get_logger(),
+        "open_corridor_cruise MPPI handoff complete (handoff_vx=%.2f mppi_vx=%.2f elapsed=%.2fs)",
+        open_cruise_handoff_vx_, target_vx, elapsed);
+      endOpenCruiseMppiHandoff();
+    }
+    return out;
+  }
+
+  void applyProximitySpeedCapTwist(
+    Twist & out, int dir, double d, double overhang) const
+  {
+    if (dir == 0 || !std::isfinite(d)) {
+      return;
+    }
+    const double clearance = d - overhang - standoff_;
+    const double v_safe = (clearance <= 0.0)
+      ? 0.0
+      : std::sqrt(2.0 * std::max(1e-3, brake_decel_) * clearance);
+    if (dir > 0) {
+      out.linear.x = std::min(out.linear.x, v_safe);
+    } else {
+      out.linear.x = std::max(out.linear.x, -v_safe);
+    }
+  }
+
+  bool shouldApplyCruiseExitProximityCap() const
+  {
+    return proximity_speed_cap_during_cruise_exit_ &&
+      (open_cruise_exiting_ ||
+      open_cruise_mppi_handoff_active_ ||
+      open_corridor_cruise_pre_exit_active_.load(std::memory_order_relaxed));
+  }
+
+  Twist computeOpenCorridorCruisePreExitTwist(
+    const rclcpp::Time & tnow, const Twist & handle, bool handle_valid)
+  {
+    const double sign = openCorridorCruiseDriveSign(tnow, handle, handle_valid);
+    if (sign > 0.0) {
+      const double crawl_mps = open_corridor_cruise_pre_exit_exit_speed_kph_ / 3.6;
+      return applyOpenCruiseJerkTowardVx(
+        tnow, crawl_mps, open_corridor_cruise_pre_exit_decel_mps2_,
+        open_corridor_cruise_pre_exit_jerk_mps3_, true);
+    }
     return applyOpenCruiseJerkDecelTwist(
       tnow, open_corridor_cruise_pre_exit_decel_mps2_,
       open_corridor_cruise_pre_exit_jerk_mps3_);
@@ -1774,7 +1971,6 @@ private:
     bool halted = false;
     std::string reason;
     bool rocker_stale = false;
-    bool rocker_released = false;
 
     Twist handle;
     bool handle_valid;
@@ -1818,7 +2014,6 @@ private:
       release_soft_stop_active_.load(std::memory_order_relaxed);
     const bool stick_release_halt =
       stick_release_halt_active_.load(std::memory_order_relaxed);
-    const bool jlp_release_active = release_soft_stop || stick_release_halt;
 
     if (have_rocker_.load(std::memory_order_relaxed)) {
       const auto rocker_age_ns =
@@ -1826,8 +2021,6 @@ private:
         latest_rocker_stamp_ns_.load(std::memory_order_relaxed);
       rocker_stale = rocker_age_ns >
         static_cast<int64_t>(rocker_timeout_ * 1e9);
-      rocker_released = !rocker_stale &&
-        rocker_at_origin_.load(std::memory_order_relaxed);
       if (rocker_stale) {
         halted = true;
         reason = "joystick stale";
@@ -1848,9 +2041,6 @@ private:
             reason = "stick released (soft-stop brake clearance)";
           }
         }
-      } else if (!jlp_release_active && rocker_released) {
-        mppi_fail_soft_stop_ = false;
-        applyReleaseLikeStop(cloud_ok, halted, reason, "joystick released");
       } else if (!mppi_fail_soft_stop_) {
         endSoftStop();
       }
@@ -1862,7 +2052,7 @@ private:
     if (side_pass_crawl) {
       Twist out;
       if (!halted && !soft_stopping_ && cloud_ok && rockerFresh(tnow) &&
-        !stick_release_halt && !release_soft_stop && !rocker_released)
+        !stick_release_halt && !release_soft_stop)
       {
         out = computeSidePassCrawlTwist(tnow);
       } else if (!reason.empty()) {
@@ -1881,6 +2071,8 @@ private:
 
     const bool open_corridor_cruise =
       open_corridor_cruise_active_.load(std::memory_order_relaxed);
+    const bool cruise_drive_ok =
+      openCorridorCruiseDriveSign(tnow, handle, handle_valid) != 0.0;
     if (open_corridor_cruise || open_cruise_exiting_) {
       Twist out;
       if (halted || soft_stopping_) {
@@ -1888,13 +2080,15 @@ private:
         open_cruise_exit_frames_ = 0;
         open_cruise_vx_ = 0.0;
         open_cruise_ax_ = 0.0;
+        endOpenCruiseMppiHandoff();
       } else if (open_cruise_exiting_) {
         out = computeOpenCorridorCruiseExitTwist(tnow);
         ++open_cruise_exit_frames_;
         const double early_exit_mps =
           open_corridor_cruise_exit_early_speed_kph_ / 3.6;
         const bool speed_low =
-          std::abs(open_cruise_vx_) <= early_exit_mps + 1e-6;
+          std::abs(open_cruise_vx_) <= early_exit_mps + 1e-6 ||
+          std::abs(last_out_.linear.x) <= early_exit_mps + 1e-6;
         bool below_mppi = false;
         double mppi_vx = 0.0;
         if (open_corridor_cruise_exit_early_below_mppi_enable_) {
@@ -1912,25 +2106,32 @@ private:
             }
           }
         }
-        if (speed_low || below_mppi)
+        if (open_cruise_exit_frames_ >= open_corridor_cruise_exit_hold_frames_ ||
+          speed_low || below_mppi)
         {
+          const double handoff_start_vx = open_cruise_vx_;
           open_cruise_exiting_ = false;
           open_cruise_exit_frames_ = 0;
           open_cruise_vx_ = 0.0;
           open_cruise_ax_ = 0.0;
-          const char * exit_reason = speed_low ?
-            "speed<=early threshold" : "vx below mppi cmd";
+          beginOpenCruiseMppiHandoff(tnow, handoff_start_vx);
+          const char * exit_reason = "hold frames elapsed";
+          if (below_mppi) {
+            exit_reason = "vx below mppi cmd";
+          } else if (speed_low) {
+            exit_reason = "speed<=early threshold";
+          }
           RCLCPP_INFO(
             get_logger(),
             "open_corridor_cruise exit complete (%s, cruise_vx=%.2f mppi_vx=%.2f)",
-            exit_reason, out.linear.x, mppi_vx);
+            exit_reason, handoff_start_vx, mppi_vx);
         }
       } else if (open_corridor_cruise_pre_exit_active_.load(std::memory_order_relaxed) &&
-        cloud_ok && rockerFresh(tnow))
+        cloud_ok && cruise_drive_ok)
       {
-        out = computeOpenCorridorCruisePreExitTwist(tnow);
+        out = computeOpenCorridorCruisePreExitTwist(tnow, handle, handle_valid);
       } else if (cloud_ok && handle_valid && !stick_release_halt &&
-        !release_soft_stop && !rocker_released && rockerFresh(tnow)) {
+        !release_soft_stop && cruise_drive_ok) {
         out = computeOpenCorridorCruiseTwist(tnow, handle, handle_valid);
       } else if (!reason.empty()) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
@@ -1938,12 +2139,57 @@ private:
       } else if (!cloud_ok) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
           "open_corridor_cruise halted: cloud stale");
+      } else if (open_corridor_cruise && !cruise_drive_ok) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+          "open_corridor_cruise idle: no forward drive intent (handle/rocker)");
+        open_cruise_vx_ = 0.0;
+        open_cruise_ax_ = 0.0;
+      } else {
+        open_cruise_vx_ = out.linear.x;
+        open_cruise_ax_ = 0.0;
+      }
+      if (shouldApplyCruiseExitProximityCap() && cloud_ok && dir != 0 &&
+        std::isfinite(d))
+      {
+        applyProximitySpeedCapTwist(out, dir, d, overhang);
       }
       applyLeftTurnWzTrick(out);
       out_pub_->publish(out);
       last_pub_stamp_ = tnow;
       last_out_ = out;
       return;
+    }
+
+    if (open_cruise_mppi_handoff_active_) {
+      Twist mppi_target;
+      bool mppi_ok = false;
+      readCmdVelInput(tnow, mppi_target, mppi_ok, halted, reason);
+      Twist out;
+      if (halted || soft_stopping_ || !mppi_ok) {
+        endOpenCruiseMppiHandoff();
+        if (halted || !mppi_ok) {
+          applyLeftTurnWzTrick(out);
+          out_pub_->publish(out);
+          last_pub_stamp_ = tnow;
+          last_out_ = out;
+          return;
+        }
+      } else {
+        out = computeOpenCruiseMppiHandoffTwist(tnow, mppi_target);
+        if (shouldApplyCruiseExitProximityCap() && cloud_ok && dir != 0 &&
+          std::isfinite(d))
+        {
+          applyProximitySpeedCapTwist(out, dir, d, overhang);
+        }
+        applyGearVxCap(out);
+        applyLeftTurnWzTrick(out);
+        out_pub_->publish(out);
+        last_pub_stamp_ = tnow;
+        last_out_ = out;
+        if (open_cruise_mppi_handoff_active_) {
+          return;
+        }
+      }
     }
 
     Twist target;
@@ -1955,7 +2201,7 @@ private:
 
     if (mppi_fail_soft_stop_enable_ && !side_pass_crawl && !halted && !soft_stopping_ &&
       input_ok && have_rocker_.load(std::memory_order_relaxed) &&
-      !rocker_stale && !stick_release_halt && !release_soft_stop && !rocker_released &&
+      !rocker_stale && !stick_release_halt && !release_soft_stop &&
       isTwistNearZero(target))
     {
       const bool was_moving =
@@ -2201,11 +2447,22 @@ private:
   int open_corridor_cruise_exit_hold_frames_{20};
   double open_corridor_cruise_pre_exit_jerk_mps3_{0.2};
   double open_corridor_cruise_pre_exit_decel_mps2_{0.4};
+  double open_corridor_cruise_pre_exit_exit_speed_kph_{2.0};
   std::string open_corridor_cruise_pre_exit_mode_topic_;
   double open_corridor_cruise_exit_jerk_mps3_{0.2};
   double open_corridor_cruise_exit_decel_mps2_{0.8};
   double open_corridor_cruise_exit_early_speed_kph_{2.0};
   bool open_corridor_cruise_exit_early_below_mppi_enable_{true};
+  bool open_corridor_cruise_mppi_handoff_enable_{true};
+  double open_corridor_cruise_mppi_handoff_jerk_mps3_{0.2};
+  double open_corridor_cruise_mppi_handoff_accel_mps2_{0.5};
+  double open_corridor_cruise_mppi_handoff_max_sec_{0.6};
+  double open_corridor_cruise_mppi_handoff_vx_eps_{0.08};
+  bool proximity_speed_cap_during_cruise_exit_{true};
+  bool open_cruise_mppi_handoff_active_{false};
+  double open_cruise_handoff_vx_{0.0};
+  double open_cruise_handoff_ax_{0.0};
+  rclcpp::Time open_cruise_handoff_start_{0, 0, RCL_ROS_TIME};
   std::vector<double> open_corridor_cruise_gear_wz_max_rps_;
   std::vector<double> open_corridor_cruise_gear_vx_max_mps_;
   double open_cruise_vx_{0.0};

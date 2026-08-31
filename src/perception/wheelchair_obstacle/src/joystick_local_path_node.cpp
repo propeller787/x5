@@ -258,8 +258,18 @@ public:
     if (path_open_cruise_pre_exit_exit_speed_kph_ < 0.0) {
       path_open_cruise_pre_exit_exit_speed_kph_ = 0.0;
     }
+    path_open_cruise_stall_exit_frames_ = declare_parameter<int>(
+      "path_open_cruise_stall_exit_frames", 30);
+    if (path_open_cruise_stall_exit_frames_ < 1) {
+      path_open_cruise_stall_exit_frames_ = 1;
+    }
     path_open_cruise_confirm_frames_ = declare_parameter<int>(
       "path_open_cruise_confirm_frames", 10);
+    path_open_cruise_enter_min_speed_kph_ = declare_parameter<double>(
+      "path_open_cruise_enter_min_speed_kph", 3.0);
+    if (path_open_cruise_enter_min_speed_kph_ < 0.0) {
+      path_open_cruise_enter_min_speed_kph_ = 0.0;
+    }
     path_open_cruise_exit_confirm_frames_ = declare_parameter<int>(
       "path_open_cruise_exit_confirm_frames", 3);
     if (path_open_cruise_exit_confirm_frames_ < 1) {
@@ -643,7 +653,7 @@ public:
     if (path_open_cruise_enable_) {
       RCLCPP_INFO(
         get_logger(),
-        "path_open_cruise: gear>=%d front_half_deg=[%.0f,%.0f,%.0f,%.0f] extra_pad_cm=[%.0f,%.0f,%.0f,%.0f] outer_far=%.2fm pre_exit=%d pre_exit_exit_kph=%.1f enter=%d exit_inner=%d reenter_cd=%d topic=%s pre_exit_topic=%s",
+        "path_open_cruise: gear>=%d front_half_deg=[%.0f,%.0f,%.0f,%.0f] extra_pad_cm=[%.0f,%.0f,%.0f,%.0f] outer_far=%.2fm pre_exit=%d pre_exit_exit_kph=%.1f enter=%d enter_min_kph=%.1f exit_inner=%d reenter_cd=%d topic=%s pre_exit_topic=%s",
         path_open_cruise_min_gear_,
         path_open_cruise_gear_front_half_deg_.size() > 0 ?
         path_open_cruise_gear_front_half_deg_[0] : 0.0,
@@ -663,7 +673,8 @@ public:
         path_open_cruise_gear_extra_padding_m_[3] * 100.0 : 0.0,
         path_open_cruise_outer_far_m_, path_open_cruise_pre_exit_confirm_frames_,
         path_open_cruise_pre_exit_exit_speed_kph_,
-        path_open_cruise_confirm_frames_, path_open_cruise_exit_confirm_frames_,
+        path_open_cruise_confirm_frames_, path_open_cruise_enter_min_speed_kph_,
+        path_open_cruise_exit_confirm_frames_,
         path_open_cruise_reenter_cooldown_frames_, path_open_cruise_topic_.c_str(),
         path_open_cruise_pre_exit_topic_.c_str());
     }
@@ -825,6 +836,7 @@ private:
   void resetOpenCruisePreExitState()
   {
     path_open_cruise_pre_exit_streak_ = 0;
+    path_open_cruise_stall_streak_ = 0;
   }
 
   void setOpenCorridorCruisePreExitMode(bool active)
@@ -1877,12 +1889,13 @@ private:
     }
 
     bool open_cruise_conditions = false;
+    const double cruise_speed_kph = vehiclePlanarSpeedMps(*odom) * 3.6;
     if (open_cruise_base_ok) {
       if (open_corridor_cruise_active_) {
         const auto inner = checkOpenCruiseForwardRegionClear(
           gear, tnow, openCruiseInnerCorridorHalfWidth(gear));
         open_cruise_conditions = inner.valid && inner.clear;
-      } else {
+      } else if (cruise_speed_kph > path_open_cruise_enter_min_speed_kph_) {
         const auto full = checkOpenCruiseForwardRegionClear(
           gear, tnow, openCruiseCorridorHalfWidth(gear), path_open_cruise_outer_far_m_);
         open_cruise_conditions = full.valid && full.clear;
@@ -1902,19 +1915,19 @@ private:
       if (pre_exit) {
         const double speed_kph = vehiclePlanarSpeedMps(*odom) * 3.6;
         const bool outer_occupied = isOpenCruiseOuterRegionOccupied(gear, tnow);
-        if (speed_kph <= path_open_cruise_pre_exit_exit_speed_kph_) {
-          const auto inner = checkOpenCruiseForwardRegionClear(
-            gear, tnow, openCruiseInnerCorridorHalfWidth(gear));
-          const bool inner_clear = inner.valid && inner.clear;
-          if (!inner_clear) {
-            path_open_cruise_pre_exit_streak_ = 0;
-            pre_exit = false;
-            path_open_cruise_exit_streak_ = path_open_cruise_exit_confirm_frames_;
-            RCLCPP_INFO(
-              get_logger(),
-              "open_corridor_cruise: pre_exit speed %.2f kph <= %.2f, inner occupied -> formal exit (MPPI resume)",
-              speed_kph, path_open_cruise_pre_exit_exit_speed_kph_);
-          } else if (!outer_occupied) {
+        const auto inner = checkOpenCruiseForwardRegionClear(
+          gear, tnow, openCruiseInnerCorridorHalfWidth(gear));
+        const bool inner_clear = inner.valid && inner.clear;
+        if (!inner_clear) {
+          path_open_cruise_pre_exit_streak_ = 0;
+          pre_exit = false;
+          path_open_cruise_exit_streak_ = path_open_cruise_exit_confirm_frames_;
+          RCLCPP_INFO(
+            get_logger(),
+            "open_corridor_cruise: pre_exit inner occupied (speed %.2f kph) -> formal exit (MPPI resume)",
+            speed_kph);
+        } else if (speed_kph <= path_open_cruise_pre_exit_exit_speed_kph_) {
+          if (!outer_occupied) {
             path_open_cruise_pre_exit_streak_ = 0;
             pre_exit = false;
             RCLCPP_INFO(
@@ -1928,6 +1941,28 @@ private:
               speed_kph, path_open_cruise_pre_exit_exit_speed_kph_);
           }
         }
+      }
+
+      if (!pre_exit) {
+        const double speed_kph = vehiclePlanarSpeedMps(*odom) * 3.6;
+        if (isStickInOpenCruiseForwardSector(gear, tnow) &&
+          speed_kph <= path_open_cruise_pre_exit_exit_speed_kph_)
+        {
+          ++path_open_cruise_stall_streak_;
+        } else {
+          path_open_cruise_stall_streak_ = 0;
+        }
+        if (path_open_cruise_stall_streak_ >= path_open_cruise_stall_exit_frames_) {
+          path_open_cruise_exit_streak_ = path_open_cruise_exit_confirm_frames_;
+          path_open_cruise_stall_streak_ = 0;
+          RCLCPP_INFO(
+            get_logger(),
+            "open_corridor_cruise: forward stall %.2f kph <= %.2f for %d frames -> formal exit",
+            speed_kph, path_open_cruise_pre_exit_exit_speed_kph_,
+            path_open_cruise_stall_exit_frames_);
+        }
+      } else {
+        path_open_cruise_stall_streak_ = 0;
       }
 
       setOpenCorridorCruisePreExitMode(pre_exit);
@@ -1965,7 +2000,8 @@ private:
     } else {
       open_cruise = open_cruise_conditions &&
         path_open_cruise_enter_streak_ >= path_open_cruise_confirm_frames_ &&
-        path_open_cruise_frames_since_exit_ > path_open_cruise_reenter_cooldown_frames_;
+        path_open_cruise_frames_since_exit_ > path_open_cruise_reenter_cooldown_frames_ &&
+        cruise_speed_kph > path_open_cruise_enter_min_speed_kph_;
     }
     setOpenCorridorCruiseMode(open_cruise, tnow);
 
@@ -4145,10 +4181,13 @@ private:
   double path_open_cruise_outer_far_m_{0.5};
   int path_open_cruise_pre_exit_confirm_frames_{2};
   double path_open_cruise_pre_exit_exit_speed_kph_{2.0};
+  int path_open_cruise_stall_exit_frames_{30};
   int path_open_cruise_pre_exit_streak_{0};
+  int path_open_cruise_stall_streak_{0};
   bool open_corridor_cruise_pre_exit_active_{false};
   std::string path_open_cruise_pre_exit_topic_;
   int path_open_cruise_confirm_frames_{10};
+  double path_open_cruise_enter_min_speed_kph_{3.0};
   int path_open_cruise_exit_confirm_frames_{3};
   int path_open_cruise_reenter_cooldown_frames_{30};
   int path_open_cruise_enter_streak_{0};
