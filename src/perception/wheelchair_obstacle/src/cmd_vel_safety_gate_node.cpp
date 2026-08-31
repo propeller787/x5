@@ -179,7 +179,8 @@ public:
     obstacle_count_release_moderate_ = declare_parameter<int>(
       "obstacle_count_release_moderate", 28);
     wz_density_min_dwell_ = declare_parameter<double>("wz_density_min_dwell", 0.4);
-
+    wz_density_vx_scale_enable_ = declare_parameter<bool>(
+      "wz_density_vx_scale_enable", true);
     release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", true);
     release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 0.8);
     release_soft_stop_decel_ = declare_parameter<double>("release_soft_stop_decel", 1.0);
@@ -1943,6 +1944,32 @@ private:
     return std::min(wz_max_, wz_density_caps_rps_[idx]);
   }
 
+  double wzDensityVxScaleRatio(double effective_wz_max) const
+  {
+    if (!wz_density_vx_scale_enable_ || wz_density_caps_rps_.empty()) {
+      return 1.0;
+    }
+    const double open_ref = wz_density_caps_rps_[0];
+    if (open_ref <= 1e-6) {
+      return 1.0;
+    }
+    return std::clamp(effective_wz_max / open_ref, 0.0, 1.0);
+  }
+
+  void applyWzDensityMppiScale(Twist & twist, double effective_wz_max) const
+  {
+    if (!wz_density_cap_enable_) {
+      return;
+    }
+    const double ratio = wzDensityVxScaleRatio(effective_wz_max);
+    if (ratio < 1.0 - 1e-6) {
+      twist.linear.x *= ratio;
+      twist.angular.z *= ratio;
+    } else if (std::abs(twist.angular.z) > effective_wz_max + 1e-6) {
+      twist.angular.z = clamp(twist.angular.z, -effective_wz_max, effective_wz_max);
+    }
+  }
+
   double minRangeInSector(double center_angle) const
   {
     double best = std::numeric_limits<double>::infinity();
@@ -2252,6 +2279,17 @@ private:
       }
     }
 
+    double effective_wz_max = wz_max_;
+    if (wz_density_cap_enable_ && input_ok && !halted && !soft_stopping_) {
+      if (!cloud_ok) {
+        current_wz_tier_ = WzDensityTier::DENSE;
+      } else {
+        updateWzDensityTier(nearbyObstaclePointCount(), tnow);
+      }
+      effective_wz_max = wzDensityCap();
+      applyWzDensityMppiScale(target, effective_wz_max);
+    }
+
     if (proximity_speed_cap_ && !narrow_gate_pass && input_ok && !halted &&
       !soft_stopping_ && dir != 0 && std::isfinite(d))
     {
@@ -2264,16 +2302,6 @@ private:
       } else {
         target.linear.x = std::max(target.linear.x, -v_safe);
       }
-    }
-
-    double effective_wz_max = wz_max_;
-    if (wz_density_cap_enable_ && input_ok && !halted && !soft_stopping_) {
-      if (!cloud_ok) {
-        current_wz_tier_ = WzDensityTier::DENSE;
-      } else {
-        updateWzDensityTier(nearbyObstaclePointCount(), tnow);
-      }
-      effective_wz_max = wzDensityCap();
     }
 
     Twist out;
@@ -2398,6 +2426,7 @@ private:
   int obstacle_count_engage_dense_{40};
   int obstacle_count_release_moderate_{28};
   double wz_density_min_dwell_{0.4};
+  bool wz_density_vx_scale_enable_{true};
   bool release_soft_stop_enable_{true};
   double release_soft_stop_radius_{0.8};
   double release_soft_stop_decel_{1.0};

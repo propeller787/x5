@@ -123,6 +123,8 @@ cmd_vel_safety_gate_node:
     obstacle_count_engage_dense: 40
     obstacle_count_release_moderate: 28
     wz_density_min_dwell: 0.4
+    # 等比例缩放 MPPI 原始 /cmd_vel 的 vx 与 wz（ratio = 当前档 wz 上限 / OPEN 档 wz 上限）
+    wz_density_vx_scale_enable: true
 
     # --- 过窄门模式（订阅 /mppi/narrow_gate_pass_mode）---
     # vx 限速；更信任原始摇杆：前推禁倒退、后拉禁前进，左右推禁反向转向
