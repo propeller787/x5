@@ -108,6 +108,14 @@ joystick_local_path_node:
     gate_intent_cross_slack_m: 0.18
     gate_intent_angle_delta_max: 0.45
     gate_opening_depth_m: 0.25
+    # gate center 通道内、门平面前至少 min_depth 须无明显障碍（拒假门；侧墙柱点不计）
+    gate_approach_corridor_half_width_m: 0.25
+    gate_approach_corridor_min_depth_m: 0.50
+    gate_approach_corridor_min_points: 2
+    # 接近段仅单侧连续侧墙（斜墙/贴墙走）→ 拒假门；双侧廊道不受影响
+    gate_side_wall_y_threshold_m: 0.32
+    gate_side_wall_min_points: 4
+    gate_side_wall_min_span_m: 0.45
     # detect/track：接近门槛时可稍高速识别（车身可能已部分入门）；pass_mode 进入仍须 creep。
     gate_detect_speed_max_mps: 0.55
     gate_detect_confirm_sec: 0.80

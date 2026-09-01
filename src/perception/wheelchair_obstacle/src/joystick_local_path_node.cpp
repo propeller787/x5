@@ -333,6 +333,26 @@ public:
     gate_min_side_points_ = declare_parameter<int>("gate_min_side_points", 1);
     gate_center_clear_half_width_m_ = declare_parameter<double>(
       "gate_center_clear_half_width_m", 0.12);
+    gate_approach_corridor_half_width_m_ = declare_parameter<double>(
+      "gate_approach_corridor_half_width_m", 0.25);
+    gate_approach_corridor_min_depth_m_ = declare_parameter<double>(
+      "gate_approach_corridor_min_depth_m", 0.5);
+    gate_approach_corridor_min_points_ = declare_parameter<int>(
+      "gate_approach_corridor_min_points", 2);
+    if (gate_approach_corridor_min_depth_m_ < 0.05) {
+      gate_approach_corridor_min_depth_m_ = 0.05;
+    }
+    if (gate_approach_corridor_min_points_ < 1) {
+      gate_approach_corridor_min_points_ = 1;
+    }
+    gate_side_wall_y_threshold_m_ = declare_parameter<double>(
+      "gate_side_wall_y_threshold_m", 0.32);
+    gate_side_wall_min_points_ = declare_parameter<int>("gate_side_wall_min_points", 4);
+    gate_side_wall_min_span_m_ = declare_parameter<double>(
+      "gate_side_wall_min_span_m", 0.45);
+    if (gate_side_wall_min_points_ < 1) {
+      gate_side_wall_min_points_ = 1;
+    }
     gate_lateral_stick_forward_min_ = declare_parameter<double>(
       "gate_lateral_stick_forward_min", 0.08);
     gate_stick_forward_min_ = declare_parameter<double>("gate_stick_forward_min", 0.20);
@@ -3102,6 +3122,78 @@ private:
     float right_y{0.0f};
   };
 
+  bool openingApproachCorridorClear(
+    const std::vector<std::pair<float, float>> & local_pts,
+    double dist, double center_y) const
+  {
+    const double dist_step = std::max(0.03, gate_scan_dist_step_m_);
+    const double x_start = gate_scan_dist_min_m_;
+    const double x_end = dist - dist_step * 0.5;
+    if (x_end <= x_start) {
+      return true;
+    }
+
+    const double approach_len = x_end - x_start;
+    const double depth_req = std::min(gate_approach_corridor_min_depth_m_, approach_len);
+    const double check_x_start = x_end - depth_req;
+
+    const double half_w = gate_approach_corridor_half_width_m_;
+    int block_count = 0;
+    for (const auto & p : local_pts) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x < check_x_start || x > x_end) {
+        continue;
+      }
+      if (std::abs(y - center_y) <= half_w) {
+        ++block_count;
+        if (block_count >= gate_approach_corridor_min_points_) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  bool openingApproachHasOneSidedWall(
+    const std::vector<std::pair<float, float>> & local_pts,
+    double dist) const
+  {
+    const double dist_step = std::max(0.03, gate_scan_dist_step_m_);
+    const double x_start = gate_scan_dist_min_m_;
+    const double x_end = dist - dist_step * 0.5;
+    if (x_end <= x_start) {
+      return false;
+    }
+
+    auto detect_wall = [this, &local_pts, x_start, x_end](bool left_side) {
+      int count = 0;
+      double x_min = std::numeric_limits<double>::infinity();
+      double x_max = -std::numeric_limits<double>::infinity();
+      for (const auto & p : local_pts) {
+        const double x = static_cast<double>(p.first);
+        const double y = static_cast<double>(p.second);
+        if (x < x_start || x > x_end) {
+          continue;
+        }
+        const bool hit = left_side ?
+          (y >= gate_side_wall_y_threshold_m_) : (y <= -gate_side_wall_y_threshold_m_);
+        if (!hit) {
+          continue;
+        }
+        ++count;
+        x_min = std::min(x_min, x);
+        x_max = std::max(x_max, x);
+      }
+      if (count < gate_side_wall_min_points_) {
+        return false;
+      }
+      return (x_max - x_min) >= gate_side_wall_min_span_m_;
+    };
+
+    return detect_wall(true) != detect_wall(false);
+  }
+
   std::optional<OpeningSliceSample> sampleOpeningSliceAtDistance(
     const std::vector<std::pair<float, float>> & local_pts,
     double dist, double width_min, double width_max) const
@@ -3164,9 +3256,16 @@ private:
       }
     }
 
+    const double center_y = 0.5 * (static_cast<double>(left_y) + static_cast<double>(right_y));
+    if (!openingApproachCorridorClear(local_pts, dist, center_y) ||
+      openingApproachHasOneSidedWall(local_pts, dist))
+    {
+      return std::nullopt;
+    }
+
     OpeningSliceSample sample;
     sample.distance_m = dist;
-    sample.center_y_m = 0.5 * (static_cast<double>(left_y) + static_cast<double>(right_y));
+    sample.center_y_m = center_y;
     sample.width_m = width;
     sample.left_y = left_y;
     sample.right_y = right_y;
@@ -4395,6 +4494,12 @@ private:
   double gate_pillar_symmetry_ratio_min_{0.55};
   int gate_min_side_points_{1};
   double gate_center_clear_half_width_m_{0.12};
+  double gate_approach_corridor_half_width_m_{0.25};
+  double gate_approach_corridor_min_depth_m_{0.5};
+  int gate_approach_corridor_min_points_{2};
+  double gate_side_wall_y_threshold_m_{0.32};
+  int gate_side_wall_min_points_{4};
+  double gate_side_wall_min_span_m_{0.45};
   double gate_stick_forward_min_{0.20};
   double gate_lateral_stick_forward_min_{0.08};
   double gate_center_y_deadband_m_{0.18};
