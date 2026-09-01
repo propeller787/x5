@@ -415,6 +415,8 @@ public:
       gate_side_pass_exit_forward_strip_y_min_ = {0.2, -0.34};
       gate_side_pass_exit_forward_strip_y_max_ = {0.34, -0.2};
     }
+    proximity_side_pass_enable_ = declare_parameter<bool>(
+      "proximity_side_pass_enable", true);
     proximity_side_pass_enter_depth_m_ = declare_parameter<double>(
       "proximity_side_pass_enter_depth_m", 0.10);
     proximity_side_pass_exit_margin_m_ = declare_parameter<double>(
@@ -1241,6 +1243,9 @@ private:
 
   void updateProximitySidePassCrawlModeFromCloud()
   {
+    if (!proximity_side_pass_enable_) {
+      return;
+    }
     if (narrow_gate_pass_active_) {
       proximity_side_pass_enter_streak_ = 0;
       return;
@@ -4275,6 +4280,7 @@ private:
   std::vector<double> gate_side_pass_exit_forward_strip_x_{0.685, 0.685};
   std::vector<double> gate_side_pass_exit_forward_strip_y_min_{0.2, -0.34};
   std::vector<double> gate_side_pass_exit_forward_strip_y_max_{0.34, -0.2};
+  bool proximity_side_pass_enable_{true};
   double proximity_side_pass_enter_depth_m_{0.10};
   double proximity_side_pass_exit_margin_m_{0.15};
   double proximity_side_pass_max_speed_mps_{0.10};

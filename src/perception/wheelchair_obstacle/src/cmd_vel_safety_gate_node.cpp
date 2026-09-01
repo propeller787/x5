@@ -331,6 +331,8 @@ public:
     if (side_pass_exit_transition_frames_ < 1) {
       side_pass_exit_transition_frames_ = 1;
     }
+    side_pass_avoid_turn_enable_ = declare_parameter<bool>(
+      "side_pass_avoid_turn_enable", true);
 
     open_corridor_cruise_mode_topic_ = declare_parameter<std::string>(
       "open_corridor_cruise_mode_topic", "/mppi/open_corridor_cruise_mode");
@@ -1277,6 +1279,113 @@ private:
     return out;
   }
 
+  bool sidePassForwardRockerIntent(const rclcpp::Time & tnow) const
+  {
+    if (!rockerFresh(tnow)) {
+      return false;
+    }
+    const double rx = static_cast<double>(
+      latest_rocker_x_.load(std::memory_order_relaxed));
+    return rx > side_pass_crawl_rocker_forward_min_;
+  }
+
+  bool sidePassAvoidTurnEligible() const
+  {
+    if (mppiFailSoftStopForwardStripsClear()) {
+      return false;
+    }
+    const bool left_outer = mppiFailSoftStopSideStripBlocked(true);
+    const bool right_outer = mppiFailSoftStopSideStripBlocked(false);
+    return (left_outer && !right_outer) || (right_outer && !left_outer);
+  }
+
+  void clearSidePassAvoidTurn()
+  {
+    side_pass_avoid_turn_active_ = false;
+    side_pass_avoid_turn_wz_ = 0.0;
+    side_pass_avoid_turn_frame_count_ = 0;
+  }
+
+  void beginSidePassAvoidTurn(double wz0)
+  {
+    side_pass_avoid_turn_active_ = true;
+    side_pass_avoid_turn_wz_ = wz0;
+    side_pass_avoid_turn_frame_count_ = 0;
+    RCLCPP_INFO(
+      get_logger(),
+      "side_pass avoid turn: forward blocked, one-sided outer clear "
+      "(probe=%.0fmm, max_frames=%d)",
+      mppi_fail_soft_stop_side_probe_depth_m_ * 1000.0,
+      mppi_fail_soft_stop_max_frames_);
+  }
+
+  void applyOneSidedOuterAvoidWzRamp(double & wz, double dt) const
+  {
+    const bool left_outer = mppiFailSoftStopSideStripBlocked(true);
+    const bool right_outer = mppiFailSoftStopSideStripBlocked(false);
+    const bool turning_left = wz > release_soft_stop_vel_eps_;
+    const bool turning_right = wz < -release_soft_stop_vel_eps_;
+    if ((right_outer && turning_right) || (left_outer && turning_left)) {
+      wz = 0.0;
+      return;
+    }
+    const double avoid_step =
+      std::max(1e-6, mppi_fail_soft_stop_avoid_wz_accel_) * dt;
+    const double wz_max = mppi_fail_soft_stop_avoid_wz_max_;
+    if (right_outer && !left_outer) {
+      wz = std::min(wz + avoid_step, wz_max);
+    } else if (left_outer && !right_outer) {
+      wz = std::max(wz - avoid_step, -wz_max);
+    }
+  }
+
+  void tickSidePassAvoidTurn(Twist & out, const rclcpp::Time & tnow, bool cloud_ok)
+  {
+    const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+    const bool eligible =
+      cloud_ok && sidePassForwardRockerIntent(tnow) && sidePassAvoidTurnEligible();
+
+    if (side_pass_avoid_turn_active_) {
+      ++side_pass_avoid_turn_frame_count_;
+      const bool timeout = mppi_fail_soft_stop_max_frames_ > 0 &&
+        side_pass_avoid_turn_frame_count_ >= mppi_fail_soft_stop_max_frames_;
+      if (!eligible) {
+        clearSidePassAvoidTurn();
+        return;
+      }
+      if (sidePassForwardStripsClear()) {
+        RCLCPP_INFO(get_logger(), "side_pass avoid turn done: forward clear");
+        clearSidePassAvoidTurn();
+        return;
+      }
+      if (timeout) {
+        RCLCPP_INFO(
+          get_logger(),
+          "side_pass avoid turn timeout: max_frames=%d",
+          mppi_fail_soft_stop_max_frames_);
+        clearSidePassAvoidTurn();
+        return;
+      }
+      applyOneSidedOuterAvoidWzRamp(side_pass_avoid_turn_wz_, dt);
+      out.linear.x = 0.0;
+      out.angular.z = side_pass_avoid_turn_wz_;
+      return;
+    }
+
+    if (!eligible) {
+      return;
+    }
+    if (std::abs(out.linear.x) > release_soft_stop_vel_eps_ ||
+      std::abs(out.angular.z) > release_soft_stop_vel_eps_)
+    {
+      return;
+    }
+    beginSidePassAvoidTurn(out.angular.z);
+    applyOneSidedOuterAvoidWzRamp(side_pass_avoid_turn_wz_, dt);
+    out.linear.x = 0.0;
+    out.angular.z = side_pass_avoid_turn_wz_;
+  }
+
   bool sidePassHoldMotionStripsClear(const Twist & hold) const
   {
     const double eps = release_soft_stop_vel_eps_;
@@ -1774,26 +1883,7 @@ private:
 
   void applyMppiFailSoftStopWzRamp(double dt)
   {
-    const bool left_outer = mppiFailSoftStopSideStripBlocked(true);
-    const bool right_outer = mppiFailSoftStopSideStripBlocked(false);
-    const bool turning_left = soft_stop_wz_ > release_soft_stop_vel_eps_;
-    const bool turning_right = soft_stop_wz_ < -release_soft_stop_vel_eps_;
-    const bool toward_obstacle =
-      (right_outer && turning_right) || (left_outer && turning_left);
-
-    if (toward_obstacle) {
-      soft_stop_wz_ = 0.0;
-      return;
-    }
-
-    const double avoid_step = std::max(1e-6, mppi_fail_soft_stop_avoid_wz_accel_) * dt;
-    const double wz_max = mppi_fail_soft_stop_avoid_wz_max_;
-
-    if (right_outer && !left_outer) {
-      soft_stop_wz_ = std::min(soft_stop_wz_ + avoid_step, wz_max);
-    } else if (left_outer && !right_outer) {
-      soft_stop_wz_ = std::max(soft_stop_wz_ - avoid_step, -wz_max);
-    }
+    applyOneSidedOuterAvoidWzRamp(soft_stop_wz_, dt);
   }
 
   void applySoftStopRamp(Twist & out, double dt)
@@ -2288,6 +2378,7 @@ private:
       narrow_gate_side_pass_crawl_active_.load(std::memory_order_relaxed);
     if (side_pass_crawl_prev_ && !side_pass_crawl) {
       beginSidePassExitTransition();
+      clearSidePassAvoidTurn();
     }
     side_pass_crawl_prev_ = side_pass_crawl;
 
@@ -2298,6 +2389,9 @@ private:
         !stick_release_halt && !release_soft_stop)
       {
         out = computeSidePassCrawlTwist(tnow);
+        if (side_pass_avoid_turn_enable_ && mppi_fail_soft_stop_enable_) {
+          tickSidePassAvoidTurn(out, tnow, cloud_ok);
+        }
       } else if (!reason.empty()) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
           "side_pass crawl halted: %s", reason.c_str());
@@ -2785,10 +2879,14 @@ private:
   double side_pass_crawl_rocker_lateral_min_{5.0};
   bool side_pass_exit_transition_enable_{true};
   int side_pass_exit_transition_frames_{10};
+  bool side_pass_avoid_turn_enable_{true};
   bool side_pass_exit_transition_active_{false};
   bool side_pass_exit_hold_active_{false};
   Twist side_pass_exit_hold_twist_;
   int side_pass_exit_transition_frame_count_{0};
+  bool side_pass_avoid_turn_active_{false};
+  double side_pass_avoid_turn_wz_{0.0};
+  int side_pass_avoid_turn_frame_count_{0};
   bool side_pass_crawl_prev_{false};
   std::string open_corridor_cruise_mode_topic_;
   int open_corridor_cruise_min_gear_{4};

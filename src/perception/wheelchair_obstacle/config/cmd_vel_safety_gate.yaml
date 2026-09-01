@@ -166,6 +166,8 @@ cmd_vel_safety_gate_node:
     side_pass_crawl_wz_rps: 0.10
     side_pass_crawl_rocker_forward_min: 5.0
     side_pass_crawl_rocker_lateral_min: 5.0
+    # crawl 前向被挡且外侧 20cm 仅单侧有障：向净空侧加速转向起步（复用 mppi_fail_soft_stop 条带/wz/max_frames）
+    side_pass_avoid_turn_enable: true
     # side_pass 退出：max_frames 内 max(crawl,MPPI)；超时后 hold last_out 直至 |MPPI vx|>crawl_vx
     # hold 期间按 last_out 运动方向检查 side_pass_crawl_check_depth 条带净空
     # MPPI reset seed 下限见 mppi_controller_server FollowPath.reset_seed_min_vx_mps（须与此 crawl_vx 一致）
