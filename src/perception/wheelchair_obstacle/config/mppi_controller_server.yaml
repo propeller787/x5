@@ -57,10 +57,12 @@ controller_server:
       # /handle/control 镜像过来的意图，高挡位永远达不到指令速度。挡位表（最大 v / 最大 w）：
       #   1: 0.560 / 0.780   2: 1.125 / 0.945
       #   3: 1.687 / 1.102   4: 2.249 / 1.260
-      # 设置为略高于挡位 4。倒车（vx_min）与前进幅值相同，使按挡位缩放的倒车意图不被裁剪；
-      # 若倒车应限制得更低以保安全，可收紧此值。
+      # 【前】扇区 vx_min 禁倒车；其他扇区允许 vx_min_lateral。扇区判定在 jlp 发布 topic。
       vx_max: 5.0
-      vx_min: -0.50
+      vx_min: 0.001
+      vx_min_lateral: -0.50
+      rocker_sector_vx_min_enable: true
+      rocker_forward_sector_topic: "/mppi/rocker_forward_sector_mode"
       vy_max: 0.0
       wz_max: 1.20
       # 加速度约束：rollout 与最优 control sequence 按 model_dt 逐步限幅，使 MPPI 选轨迹时

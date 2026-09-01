@@ -17,6 +17,7 @@
 
 #include <string>
 #include <memory>
+#include <atomic>
 
 #include "nav2_mppi_controller/tools/path_handler.hpp"
 #include "nav2_mppi_controller/optimizer.hpp"
@@ -110,9 +111,12 @@ protected:
   void visualize(nav_msgs::msg::Path transformed_plan);
 
   void onSidePassMode(const std_msgs::msg::Bool::SharedPtr msg);
+  void onRockerForwardSector(const std_msgs::msg::Bool::SharedPtr msg);
 
   static void applyMinAbsVxSeed(
     geometry_msgs::msg::Twist & speed, double min_vx_mps, double vel_eps);
+
+  void applyRockerSectorVxMin();
 
   std::string name_;
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
@@ -135,6 +139,14 @@ protected:
   bool side_pass_active_{false};
   bool side_pass_exit_seed_pending_{false};
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr side_pass_mode_sub_;
+
+  bool rocker_sector_vx_min_enable_{false};
+  float vx_min_forward_{0.001f};
+  float vx_min_lateral_{-0.50f};
+  std::string rocker_forward_sector_topic_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr rocker_forward_sector_sub_;
+  std::atomic<bool> rocker_forward_sector_active_{true};
+
   // Last time computeVelocityCommands was called
   rclcpp::Time last_time_called_;
 };

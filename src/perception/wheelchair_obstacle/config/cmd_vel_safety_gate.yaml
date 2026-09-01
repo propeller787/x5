@@ -19,14 +19,12 @@ cmd_vel_safety_gate_node:
     # 超过该时长没收到摇杆消息也判失效（fail-safe 停车）。
     rocker_timeout: 0.30
 
-    # --- 摇杆扇区意图滤波（滤除非预期 MPPI 行为）---
-    # atan2(rocker_y, rocker_x): 0=正前，+y=左。前向半圆划分为：
-    #   【前】|θ| ≤ front_half；【左】(front_half, front_half+side_span]；
-    #   【右】[-front_half-side_span, -front_half)。side_span=90° 时覆盖至 ±120°。
-    # 【前】禁倒车；【左】禁右转(wz<0)；【右】禁左转(wz>0)。
+    # --- 摇杆扇区意图滤波（左右扇区禁反向转弯）---
+    # 扇区划分见 joystick_local_path.yaml（/mppi/rocker_intent_zone）
+    # 【前】禁倒车由 MPPI vx_min 保证；【左】禁右转(wz<0)；【右】禁左转(wz>0)。
     rocker_sector_intent_filter_enable: true
-    rocker_intent_front_half_deg: 30.0    # 【前】半角 30° → 扇区宽 60°
-    rocker_intent_side_span_deg: 90.0     # 【左】【右】各 90°（含侧后斜向）
+    rocker_intent_zone_topic: "/mppi/rocker_intent_zone"
+    rocker_intent_zone_timeout: 0.30
     # 障碍物点云：proximity 限速 + wz 密度分档。
     obstacle_points_topic: "/perception/obstacle_points"
     # Nav2 Humble 的 controller_server 在 /cmd_vel 上发布 geometry_msgs/Twist
@@ -166,7 +164,8 @@ cmd_vel_safety_gate_node:
     side_pass_crawl_wz_rps: 0.10
     side_pass_crawl_rocker_forward_min: 5.0
     side_pass_crawl_rocker_lateral_min: 5.0
-    # crawl 前向被挡且外侧 20cm 仅单侧有障：向净空侧加速转向起步（复用 mppi_fail_soft_stop 条带/wz/max_frames）
+    # side_pass 两阶段：内层 check_depth 净空 + 外侧 20cm 有障 → crawl wz；外侧 20cm 净空 → avoid turn 加速
+    # 外侧 probe 深度同 mppi_fail_soft_stop_side_probe_depth_m（内层基准为 side_pass_crawl_check_depth_m）
     side_pass_avoid_turn_enable: true
     # side_pass 退出：max_frames 内 max(crawl,MPPI)；超时后 hold last_out 直至 |MPPI vx|>crawl_vx
     # hold 期间按 last_out 运动方向检查 side_pass_crawl_check_depth 条带净空

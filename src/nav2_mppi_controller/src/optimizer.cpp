@@ -518,6 +518,14 @@ void Optimizer::setMotionModel(const std::string & model)
   }
 }
 
+void Optimizer::setVxMin(float vx_min)
+{
+  settings_.constraints.vx_min = vx_min;
+  if (motion_model_) {
+    motion_model_->setConstraints(settings_.constraints, settings_.model_dt);
+  }
+}
+
 void Optimizer::setSpeedLimit(double speed_limit, bool percentage)
 {
   auto & s = settings_;

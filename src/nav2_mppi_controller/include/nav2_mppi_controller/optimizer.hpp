@@ -112,6 +112,11 @@ public:
   void setSpeedLimit(double speed_limit, bool percentage);
 
   /**
+   * @brief Override vx_min constraint for the current control cycle.
+   */
+  void setVxMin(float vx_min);
+
+  /**
    * @brief Reset the optimization problem to initial conditions
    * @param seed_speed When reset_seed_from_speed is enabled, seed control_sequence
    *   and control_history from this measured speed (typically odom).

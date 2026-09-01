@@ -50,6 +50,12 @@ void MPPIController::configure(
   getParam(
     narrow_gate_side_pass_mode_topic_,
     "narrow_gate_side_pass_mode_topic", std::string("/mppi/narrow_gate_side_pass_mode"));
+  getParam(rocker_sector_vx_min_enable_, "rocker_sector_vx_min_enable", false);
+  getParam(vx_min_forward_, "vx_min", 0.001f);
+  getParam(vx_min_lateral_, "vx_min_lateral", -0.50f);
+  getParam(
+    rocker_forward_sector_topic_, "rocker_forward_sector_topic",
+    std::string("/mppi/rocker_forward_sector_mode"));
 
   // Configure composed objects
   optimizer_.initialize(parent_, name_, costmap_ros_, parameters_handler_.get());
@@ -59,6 +65,12 @@ void MPPIController::configure(
     costmap_ros_->getGlobalFrameID(), parameters_handler_.get());
 
   RCLCPP_INFO(logger_, "Configured MPPI Controller: %s", name_.c_str());
+  if (rocker_sector_vx_min_enable_) {
+    RCLCPP_INFO(
+      logger_,
+      "rocker sector vx_min: forward=%.3f lateral=%.2f topic=%s",
+      vx_min_forward_, vx_min_lateral_, rocker_forward_sector_topic_.c_str());
+  }
 }
 
 void MPPIController::cleanup()
@@ -73,8 +85,8 @@ void MPPIController::activate()
 {
   trajectory_visualizer_.on_activate();
   parameters_handler_->start();
+  auto node = parent_.lock();
   if (reset_seed_min_vx_after_side_pass_enable_) {
-    auto node = parent_.lock();
     side_pass_mode_sub_ = node->create_subscription<std_msgs::msg::Bool>(
       narrow_gate_side_pass_mode_topic_, rclcpp::QoS(1).transient_local(),
       std::bind(&MPPIController::onSidePassMode, this, std::placeholders::_1));
@@ -83,12 +95,18 @@ void MPPIController::activate()
       "side_pass exit seed: min_vx=%.2f topic=%s",
       reset_seed_min_vx_mps_, narrow_gate_side_pass_mode_topic_.c_str());
   }
+  if (rocker_sector_vx_min_enable_) {
+    rocker_forward_sector_sub_ = node->create_subscription<std_msgs::msg::Bool>(
+      rocker_forward_sector_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&MPPIController::onRockerForwardSector, this, std::placeholders::_1));
+  }
   RCLCPP_INFO(logger_, "Activated MPPI Controller: %s", name_.c_str());
 }
 
 void MPPIController::deactivate()
 {
   side_pass_mode_sub_.reset();
+  rocker_forward_sector_sub_.reset();
   trajectory_visualizer_.on_deactivate();
   RCLCPP_INFO(logger_, "Deactivated MPPI Controller: %s", name_.c_str());
 }
@@ -114,6 +132,22 @@ void MPPIController::onSidePassMode(const std_msgs::msg::Bool::SharedPtr msg)
       reset_seed_min_vx_mps_);
   }
   side_pass_active_ = false;
+}
+
+void MPPIController::onRockerForwardSector(const std_msgs::msg::Bool::SharedPtr msg)
+{
+  rocker_forward_sector_active_.store(msg->data, std::memory_order_relaxed);
+}
+
+void MPPIController::applyRockerSectorVxMin()
+{
+  if (!rocker_sector_vx_min_enable_) {
+    return;
+  }
+
+  const float vx_min = rocker_forward_sector_active_.load(std::memory_order_relaxed) ?
+    vx_min_forward_ : vx_min_lateral_;
+  optimizer_.setVxMin(vx_min);
 }
 
 void MPPIController::applyMinAbsVxSeed(
@@ -160,6 +194,8 @@ geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
 
   nav2_costmap_2d::Costmap2D * costmap = costmap_ros_->getCostmap();
   std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> costmap_lock(*(costmap->getMutex()));
+
+  applyRockerSectorVxMin();
 
   geometry_msgs::msg::TwistStamped cmd =
     optimizer_.evalControl(robot_pose, robot_speed, transformed_plan, goal_checker);

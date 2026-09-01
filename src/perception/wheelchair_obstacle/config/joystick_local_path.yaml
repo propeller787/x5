@@ -79,6 +79,15 @@ joystick_local_path_node:
     release_soft_stop_topic: "/mppi/release_soft_stop_mode"
     stick_release_halt_topic: "/mppi/stick_release_halt"
 
+    # 摇杆扇区意图（单一来源）：MPPI vx_min + cmd_vel_safety_gate 扇区滤波共用
+    # UInt8 /mppi/rocker_intent_zone: 0=NONE 1=FRONT 2=LEFT_FRONT 3=RIGHT_FRONT
+    # Bool  /mppi/rocker_forward_sector_mode: true=【前】→ MPPI vx_min
+    rocker_sector_vx_min_enable: true
+    rocker_forward_sector_topic: "/mppi/rocker_forward_sector_mode"
+    rocker_intent_zone_topic: "/mppi/rocker_intent_zone"
+    rocker_intent_front_half_deg: 30.0
+    rocker_intent_side_span_deg: 90.0
+
     # 窄门 detect/track/pass：仅正对（body +x 双侧切片）；斜穿见 gate_side_pass。
     gate_path_enable: true
     obstacle_points_topic: "/perception/obstacle_points"
@@ -173,10 +182,11 @@ joystick_local_path_node:
     gate_side_pass_exit_forward_strip_y_min: [0.2, -0.34]
     gate_side_pass_exit_forward_strip_y_max: [0.34, -0.2]
 
-    # 贴障侧穿：不依赖记忆窄门；左/右/前 10cm 有障 + |v|/|wz| 低于阈值 + 摇杆出死区，点云 10 帧（~1s@10Hz）进入
-    # 退出：footprint 含后向外扩 15cm 内无障碍，连续 5 帧后回 MPPI
+    # 贴障侧穿：内层 6cm forward strip 净空 + 外侧 20cm 有障 + |v|/|wz| 低 + 摇杆出死区，连续 confirm 帧进入
+    # side_pass 内：外侧 20cm 仍被挡 → gate crawl wz(0.10)；外侧 20cm 净空 → avoid turn 加速转向
+    # 退出：footprint 含后向外扩 margin 内无障碍，连续 confirm 帧后回 MPPI
     proximity_side_pass_enable: true
-    proximity_side_pass_enter_depth_m: 0.10
+    proximity_side_pass_outer_probe_depth_m: 0.20
     proximity_side_pass_exit_margin_m: 0.12
     proximity_side_pass_max_speed_mps: 0.02
     proximity_side_pass_max_wz_rps: 0.05   # 进入：odom |angular.z| 上限 (rad/s)

@@ -10,8 +10,9 @@
 //   - tiered wz cap from nearby obstacle-point density
 //   - gear vx cap from /vlago/car/info (1-4 gear -> configurable kph limits)
 //   - stick deflection speed scale: cap vx/wz by |rocker|/100 (min ratio configurable)
-//   - rocker sector intent filter: forward half-plane split into front / left-front /
-//     right-front sectors; block reverse in front, opposite turn in lateral-forward sectors
+//   - rocker sector intent filter: subscribe /mppi/rocker_intent_zone from
+//     joystick_local_path; block opposite turn in left/right-forward sectors
+//     (forward reverse is handled by MPPI vx_min via rocker_forward_sector_mode)
 //   - narrow gate pass mode (/mppi/narrow_gate_pass_mode): vx cap; rocker-intent filter
 //   - side pass crawl (/mppi/narrow_gate_side_pass_mode): skip MPPI; footprint strips + crawl
 //     (forward/backward vx and lateral wz when corresponding strips clear)
@@ -111,16 +112,10 @@ public:
     rocker_timeout_ = declare_parameter<double>("rocker_timeout", 0.30);
     rocker_sector_intent_filter_enable_ = declare_parameter<bool>(
       "rocker_sector_intent_filter_enable", true);
-    rocker_intent_front_half_deg_ = declare_parameter<double>(
-      "rocker_intent_front_half_deg", 30.0);
-    rocker_intent_side_span_deg_ = declare_parameter<double>(
-      "rocker_intent_side_span_deg", 90.0);
-    if (rocker_intent_front_half_deg_ < 0.0) {
-      rocker_intent_front_half_deg_ = 0.0;
-    }
-    if (rocker_intent_side_span_deg_ < 0.0) {
-      rocker_intent_side_span_deg_ = 0.0;
-    }
+    rocker_intent_zone_topic_ = declare_parameter<std::string>(
+      "rocker_intent_zone_topic", "/mppi/rocker_intent_zone");
+    rocker_intent_zone_timeout_ = declare_parameter<double>(
+      "rocker_intent_zone_timeout", 0.30);
 
     cmd_timeout_ = declare_parameter<double>("cmd_timeout", 0.30);
     cmd_hold_timeout_ = declare_parameter<double>("cmd_hold_timeout", 0.50);
@@ -543,6 +538,10 @@ public:
       stick_release_halt_topic_, rclcpp::QoS(1).transient_local(),
       std::bind(&CmdVelSafetyGateNode::onStickReleaseHalt, this, std::placeholders::_1));
 
+    rocker_intent_zone_sub_ = create_subscription<UInt8>(
+      rocker_intent_zone_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&CmdVelSafetyGateNode::onRockerIntentZone, this, std::placeholders::_1));
+
     out_pub_ = create_publisher<Twist>(out_topic_, 10);
     wz_tier_pub_ = create_publisher<UInt8>(
       std::string(get_name()) + "/wz_density_tier", 10);
@@ -621,10 +620,10 @@ public:
     }
     RCLCPP_INFO(
       get_logger(),
-      "rocker_sector_intent_filter=%d front_half=%.0fdeg side_span=%.0fdeg "
-      "(left/right front each side_span wide)",
+      "rocker_sector_intent_filter=%d zone_topic=%s timeout=%.2fs "
+      "(sector angles in joystick_local_path.yaml)",
       rocker_sector_intent_filter_enable_ ? 1 : 0,
-      rocker_intent_front_half_deg_, rocker_intent_side_span_deg_);
+      rocker_intent_zone_topic_.c_str(), rocker_intent_zone_timeout_);
     if (left_turn_wz_trick_enable_) {
       RCLCPP_INFO(
         get_logger(),
@@ -704,6 +703,12 @@ private:
   void onStickReleaseHalt(const Bool::SharedPtr msg)
   {
     stick_release_halt_active_.store(msg->data, std::memory_order_relaxed);
+  }
+
+  void onRockerIntentZone(const UInt8::SharedPtr msg)
+  {
+    rocker_intent_zone_.store(msg->data, std::memory_order_relaxed);
+    rocker_intent_zone_stamp_ns_.store(now().nanoseconds(), std::memory_order_relaxed);
   }
 
   void onTwist(const Twist::SharedPtr msg)
@@ -789,24 +794,6 @@ private:
     } else if (out.linear.x < 0.0) {
       out.linear.x = std::max(out.linear.x, -cap);
     }
-  }
-
-  void scaleWzWithLinearSpeedReduction(Twist & out, double original_vx) const
-  {
-    constexpr double eps = 1e-4;
-    if (std::abs(original_vx) <= intent_eps_) {
-      return;
-    }
-
-    const double new_vx = out.linear.x;
-    const bool reduced =
-      (original_vx > intent_eps_ && new_vx < original_vx - eps) ||
-      (original_vx < -intent_eps_ && new_vx > original_vx + eps);
-    if (!reduced) {
-      return;
-    }
-
-    out.angular.z *= (new_vx / original_vx);
   }
 
   static double tighterSideLimitWz(double scaled_from_mppi, double upstream_capped)
@@ -1007,47 +994,27 @@ private:
     return std::abs(theta) <= half_rad;
   }
 
-  RockerForwardZone classifyRockerForwardZone(double rx, double ry) const
+  bool rockerIntentZoneFresh(const rclcpp::Time & tnow) const
   {
-    if (std::hypot(rx, ry) <= rocker_deadband_) {
-      return RockerForwardZone::NONE;
+    const int64_t stamp_ns = rocker_intent_zone_stamp_ns_.load(std::memory_order_relaxed);
+    if (stamp_ns <= 0) {
+      return false;
     }
-
-    const double theta = std::atan2(ry, rx);
-    const double front_half_rad = rocker_intent_front_half_deg_ * M_PI / 180.0;
-    const double side_span_rad = rocker_intent_side_span_deg_ * M_PI / 180.0;
-    const double forward_limit_rad = front_half_rad + side_span_rad;
-
-    if (std::abs(theta) <= front_half_rad) {
-      return RockerForwardZone::FRONT;
-    }
-    if (theta > front_half_rad && theta <= forward_limit_rad) {
-      return RockerForwardZone::LEFT_FRONT;
-    }
-    if (theta < -front_half_rad && theta >= -forward_limit_rad) {
-      return RockerForwardZone::RIGHT_FRONT;
-    }
-    return RockerForwardZone::NONE;
+    return (tnow - rclcpp::Time(stamp_ns, RCL_ROS_TIME)).seconds() <=
+      rocker_intent_zone_timeout_;
   }
 
   void applyRockerSectorIntentFilter(Twist & out, const rclcpp::Time & tnow) const
   {
-    if (!rocker_sector_intent_filter_enable_ || !rockerFresh(tnow)) {
+    if (!rocker_sector_intent_filter_enable_ || !rockerIntentZoneFresh(tnow)) {
       return;
     }
 
-    const double rx = static_cast<double>(
-      latest_rocker_x_.load(std::memory_order_relaxed));
-    const double ry = static_cast<double>(
-      latest_rocker_y_.load(std::memory_order_relaxed));
-
-    switch (classifyRockerForwardZone(rx, ry)) {
+    switch (static_cast<RockerForwardZone>(
+        rocker_intent_zone_.load(std::memory_order_relaxed)))
+    {
       case RockerForwardZone::FRONT:
-        if (out.linear.x < 0.0) {
-          const double original_vx = out.linear.x;
-          out.linear.x = 0.0;
-          scaleWzWithLinearSpeedReduction(out, original_vx);
-        }
+      case RockerForwardZone::NONE:
         break;
       case RockerForwardZone::LEFT_FRONT:
         if (out.angular.z < 0.0) {
@@ -1059,7 +1026,6 @@ private:
           out.angular.z = 0.0;
         }
         break;
-      case RockerForwardZone::NONE:
       default:
         break;
     }
@@ -1172,6 +1138,51 @@ private:
       }
     }
     return true;
+  }
+
+  // Forward corner outer probe: inner crawl depth (6cm) + side probe (20cm).
+  bool sidePassForwardOuterStripBlocked(bool left) const
+  {
+    if (side_pass_crawl_forward_strip_x_.size() < 3 ||
+      side_pass_crawl_forward_strip_y_min_.size() < 3 ||
+      side_pass_crawl_forward_strip_y_max_.size() < 3)
+    {
+      return false;
+    }
+    const size_t i = left ? 0 : 2;
+    const double x0 =
+      side_pass_crawl_forward_strip_x_[i] + side_pass_crawl_check_depth_m_;
+    const double x1 = x0 + mppi_fail_soft_stop_side_probe_depth_m_;
+    return !sidePassRoiClear(
+      x0, x1,
+      side_pass_crawl_forward_strip_y_min_[i],
+      side_pass_crawl_forward_strip_y_max_[i]);
+  }
+
+  bool sidePassForwardOuterProbesClear() const
+  {
+    return !sidePassForwardOuterStripBlocked(true) &&
+      !sidePassForwardOuterStripBlocked(false);
+  }
+
+  bool sidePassCrawlWzOuterBlocked() const
+  {
+    return sidePassForwardStripsClear() &&
+      (sidePassForwardOuterStripBlocked(true) ||
+      sidePassForwardOuterStripBlocked(false));
+  }
+
+  double sidePassCrawlWzTowardClearSide() const
+  {
+    const bool left_outer = sidePassForwardOuterStripBlocked(true);
+    const bool right_outer = sidePassForwardOuterStripBlocked(false);
+    if (right_outer && !left_outer) {
+      return side_pass_crawl_wz_rps_;
+    }
+    if (left_outer && !right_outer) {
+      return -side_pass_crawl_wz_rps_;
+    }
+    return 0.0;
   }
 
   // Same left/front/right forward strips as joystick_local_path proximity_side_pass.
@@ -1291,12 +1302,7 @@ private:
 
   bool sidePassAvoidTurnEligible() const
   {
-    if (mppiFailSoftStopForwardStripsClear()) {
-      return false;
-    }
-    const bool left_outer = mppiFailSoftStopSideStripBlocked(true);
-    const bool right_outer = mppiFailSoftStopSideStripBlocked(false);
-    return (left_outer && !right_outer) || (right_outer && !left_outer);
+    return sidePassForwardOuterProbesClear();
   }
 
   void clearSidePassAvoidTurn()
@@ -1313,16 +1319,15 @@ private:
     side_pass_avoid_turn_frame_count_ = 0;
     RCLCPP_INFO(
       get_logger(),
-      "side_pass avoid turn: forward blocked, one-sided outer clear "
-      "(probe=%.0fmm, max_frames=%d)",
+      "side_pass avoid turn: outer %.0fmm clear, accelerating wz (max_frames=%d)",
       mppi_fail_soft_stop_side_probe_depth_m_ * 1000.0,
       mppi_fail_soft_stop_max_frames_);
   }
 
   void applyOneSidedOuterAvoidWzRamp(double & wz, double dt) const
   {
-    const bool left_outer = mppiFailSoftStopSideStripBlocked(true);
-    const bool right_outer = mppiFailSoftStopSideStripBlocked(false);
+    const bool left_outer = sidePassForwardOuterStripBlocked(true);
+    const bool right_outer = sidePassForwardOuterStripBlocked(false);
     const bool turning_left = wz > release_soft_stop_vel_eps_;
     const bool turning_right = wz < -release_soft_stop_vel_eps_;
     if ((right_outer && turning_right) || (left_outer && turning_left)) {
@@ -1336,7 +1341,32 @@ private:
       wz = std::min(wz + avoid_step, wz_max);
     } else if (left_outer && !right_outer) {
       wz = std::max(wz - avoid_step, -wz_max);
+    } else if (!left_outer && !right_outer) {
+      if (turning_left) {
+        wz = std::min(wz + avoid_step, wz_max);
+      } else if (turning_right) {
+        wz = std::max(wz - avoid_step, -wz_max);
+      }
     }
+  }
+
+  void applySidePassCrawlWzWhenOuterBlocked(Twist & out, const rclcpp::Time & tnow)
+  {
+    if (!sidePassForwardRockerIntent(tnow) || !sidePassCrawlWzOuterBlocked()) {
+      return;
+    }
+    const double wz = sidePassCrawlWzTowardClearSide();
+    if (std::abs(wz) < release_soft_stop_vel_eps_) {
+      return;
+    }
+    out.linear.x = 0.0;
+    out.angular.z = wz;
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 2000,
+      "side_pass crawl wz: inner %.0fmm clear, outer %.0fmm blocked, wz=%.2f",
+      side_pass_crawl_check_depth_m_ * 1000.0,
+      mppi_fail_soft_stop_side_probe_depth_m_ * 1000.0,
+      wz);
   }
 
   void tickSidePassAvoidTurn(Twist & out, const rclcpp::Time & tnow, bool cloud_ok)
@@ -1373,11 +1403,6 @@ private:
     }
 
     if (!eligible) {
-      return;
-    }
-    if (std::abs(out.linear.x) > release_soft_stop_vel_eps_ ||
-      std::abs(out.angular.z) > release_soft_stop_vel_eps_)
-    {
       return;
     }
     beginSidePassAvoidTurn(out.angular.z);
@@ -2390,7 +2415,12 @@ private:
       {
         out = computeSidePassCrawlTwist(tnow);
         if (side_pass_avoid_turn_enable_ && mppi_fail_soft_stop_enable_) {
-          tickSidePassAvoidTurn(out, tnow, cloud_ok);
+          if (sidePassCrawlWzOuterBlocked()) {
+            clearSidePassAvoidTurn();
+            applySidePassCrawlWzWhenOuterBlocked(out, tnow);
+          } else {
+            tickSidePassAvoidTurn(out, tnow, cloud_ok);
+          }
         }
       } else if (!reason.empty()) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
@@ -2800,8 +2830,8 @@ private:
   double rocker_deadband_{5.0};
   double rocker_timeout_{0.30};
   bool rocker_sector_intent_filter_enable_{true};
-  double rocker_intent_front_half_deg_{30.0};
-  double rocker_intent_side_span_deg_{90.0};
+  std::string rocker_intent_zone_topic_;
+  double rocker_intent_zone_timeout_{0.30};
   bool gate_enable_{true};
   std::string bypass_source_{"handle"};
   double cmd_timeout_{0.30};
@@ -2938,6 +2968,8 @@ private:
   std::atomic<bool> open_corridor_cruise_pre_exit_active_{false};
   std::atomic<bool> release_soft_stop_active_{false};
   std::atomic<bool> stick_release_halt_active_{false};
+  std::atomic<uint8_t> rocker_intent_zone_{0};
+  std::atomic<int64_t> rocker_intent_zone_stamp_ns_{0};
   bool narrow_gate_pass_prev_{false};
   bool narrow_gate_exit_ramp_active_{false};
   rclcpp::Time narrow_gate_exit_ramp_start_{0, 0, RCL_ROS_TIME};
@@ -2954,6 +2986,7 @@ private:
   rclcpp::Subscription<Bool>::SharedPtr open_corridor_cruise_pre_exit_mode_sub_;
   rclcpp::Subscription<Bool>::SharedPtr release_soft_stop_mode_sub_;
   rclcpp::Subscription<Bool>::SharedPtr stick_release_halt_sub_;
+  rclcpp::Subscription<UInt8>::SharedPtr rocker_intent_zone_sub_;
   rclcpp::Publisher<Twist>::SharedPtr out_pub_;
   rclcpp::Publisher<UInt8>::SharedPtr wz_tier_pub_;
   rclcpp::TimerBase::SharedPtr timer_;

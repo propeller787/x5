@@ -47,6 +47,7 @@
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/u_int8.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <tf2/LinearMath/Quaternion.h>
@@ -292,6 +293,23 @@ public:
     stick_release_halt_topic_ = declare_parameter<std::string>(
       "stick_release_halt_topic", "/mppi/stick_release_halt");
 
+    rocker_sector_vx_min_enable_ = declare_parameter<bool>(
+      "rocker_sector_vx_min_enable", true);
+    rocker_forward_sector_topic_ = declare_parameter<std::string>(
+      "rocker_forward_sector_topic", "/mppi/rocker_forward_sector_mode");
+    rocker_intent_zone_topic_ = declare_parameter<std::string>(
+      "rocker_intent_zone_topic", "/mppi/rocker_intent_zone");
+    rocker_intent_front_half_deg_ = declare_parameter<double>(
+      "rocker_intent_front_half_deg", 30.0);
+    rocker_intent_side_span_deg_ = declare_parameter<double>(
+      "rocker_intent_side_span_deg", 90.0);
+    if (rocker_intent_front_half_deg_ < 0.0) {
+      rocker_intent_front_half_deg_ = 0.0;
+    }
+    if (rocker_intent_side_span_deg_ < 0.0) {
+      rocker_intent_side_span_deg_ = 0.0;
+    }
+
     gate_path_enable_ = declare_parameter<bool>("gate_path_enable", true);
     obstacle_points_topic_ = declare_parameter<std::string>(
       "obstacle_points_topic", "/perception/obstacle_points");
@@ -417,8 +435,8 @@ public:
     }
     proximity_side_pass_enable_ = declare_parameter<bool>(
       "proximity_side_pass_enable", true);
-    proximity_side_pass_enter_depth_m_ = declare_parameter<double>(
-      "proximity_side_pass_enter_depth_m", 0.10);
+    proximity_side_pass_outer_probe_depth_m_ = declare_parameter<double>(
+      "proximity_side_pass_outer_probe_depth_m", 0.20);
     proximity_side_pass_exit_margin_m_ = declare_parameter<double>(
       "proximity_side_pass_exit_margin_m", 0.15);
     proximity_side_pass_max_speed_mps_ = declare_parameter<double>(
@@ -563,6 +581,12 @@ public:
       release_soft_stop_topic_, rclcpp::QoS(1).transient_local());
     stick_release_halt_pub_ = create_publisher<std_msgs::msg::Bool>(
       stick_release_halt_topic_, rclcpp::QoS(1).transient_local());
+    if (rocker_sector_vx_min_enable_) {
+      rocker_forward_sector_mode_pub_ = create_publisher<std_msgs::msg::Bool>(
+        rocker_forward_sector_topic_, rclcpp::QoS(1).transient_local());
+      rocker_intent_zone_pub_ = create_publisher<std_msgs::msg::UInt8>(
+        rocker_intent_zone_topic_, rclcpp::QoS(1).transient_local());
+    }
     if (gate_marker_enable_ && gate_path_enable_) {
       gate_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
         gate_marker_topic_, rclcpp::QoS(1).transient_local());
@@ -592,6 +616,18 @@ public:
     open_corridor_cruise_pre_exit_mode_pub_->publish(pass_mode_init);
     release_soft_stop_mode_pub_->publish(pass_mode_init);
     stick_release_halt_pub_->publish(pass_mode_init);
+    if (rocker_forward_sector_mode_pub_) {
+      std_msgs::msg::Bool forward_sector_init;
+      forward_sector_init.data = true;
+      rocker_forward_sector_mode_pub_->publish(forward_sector_init);
+      rocker_forward_sector_active_ = true;
+    }
+    if (rocker_intent_zone_pub_) {
+      std_msgs::msg::UInt8 zone_init;
+      zone_init.data = static_cast<uint8_t>(RockerIntentZone::NONE);
+      rocker_intent_zone_pub_->publish(zone_init);
+      rocker_intent_zone_active_ = RockerIntentZone::NONE;
+    }
     action_client_ = rclcpp_action::create_client<FollowPath>(this, action_name_);
 
     const double period = 1.0 / std::max(0.1, send_rate_hz_);
@@ -687,9 +723,97 @@ public:
         release_soft_stop_radius_, release_soft_stop_topic_.c_str(),
         stick_release_halt_topic_.c_str());
     }
+    if (rocker_sector_vx_min_enable_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "rocker intent zone: front_half=%.0fdeg side_span=%.0fdeg "
+        "forward_topic=%s zone_topic=%s",
+        rocker_intent_front_half_deg_, rocker_intent_side_span_deg_,
+        rocker_forward_sector_topic_.c_str(), rocker_intent_zone_topic_.c_str());
+    }
   }
 
 private:
+  enum class RockerIntentZone : uint8_t { NONE = 0, FRONT = 1, LEFT_FRONT = 2, RIGHT_FRONT = 3 };
+
+  RockerIntentZone classifyRockerIntentZone(double rx, double ry) const
+  {
+    if (std::hypot(rx, ry) <= rocker_deadband_) {
+      return RockerIntentZone::NONE;
+    }
+
+    const double theta = std::atan2(ry, rx);
+    const double front_half_rad = rocker_intent_front_half_deg_ * M_PI / 180.0;
+    const double side_span_rad = rocker_intent_side_span_deg_ * M_PI / 180.0;
+    const double forward_limit_rad = front_half_rad + side_span_rad;
+
+    if (std::abs(theta) <= front_half_rad) {
+      return RockerIntentZone::FRONT;
+    }
+    if (theta > front_half_rad && theta <= forward_limit_rad) {
+      return RockerIntentZone::LEFT_FRONT;
+    }
+    if (theta < -front_half_rad && theta >= -forward_limit_rad) {
+      return RockerIntentZone::RIGHT_FRONT;
+    }
+    return RockerIntentZone::NONE;
+  }
+
+  struct RockerIntentState
+  {
+    RockerIntentZone zone{RockerIntentZone::NONE};
+    bool forward_sector{true};
+  };
+
+  RockerIntentState computeRockerIntentState(const rclcpp::Time & tnow)
+  {
+    Joystick::SharedPtr joy;
+    rclcpp::Time joy_stamp;
+    {
+      std::lock_guard<std::mutex> lock(joystick_mutex_);
+      joy = latest_joystick_;
+      joy_stamp = latest_joystick_stamp_;
+    }
+    if (!joy || (tnow - joy_stamp).seconds() > joystick_timeout_) {
+      return {RockerIntentZone::NONE, true};
+    }
+
+    const double rx = applyRockerDeadbandAxis(static_cast<double>(joy->rocker_x));
+    const double ry = applyRockerDeadbandAxis(static_cast<double>(joy->rocker_y));
+    if (std::hypot(rx, ry) <= rocker_deadband_) {
+      return {RockerIntentZone::NONE, true};
+    }
+
+    const RockerIntentZone zone = classifyRockerIntentZone(rx, ry);
+    return {zone, zone == RockerIntentZone::FRONT};
+  }
+
+  void publishRockerIntentZoneState(const rclcpp::Time & tnow)
+  {
+    if (!rocker_forward_sector_mode_pub_ && !rocker_intent_zone_pub_) {
+      return;
+    }
+
+    const RockerIntentState state = computeRockerIntentState(tnow);
+
+    if (rocker_intent_zone_pub_) {
+      const auto zone = static_cast<uint8_t>(state.zone);
+      std_msgs::msg::UInt8 zone_msg;
+      zone_msg.data = zone;
+      rocker_intent_zone_pub_->publish(zone_msg);
+      rocker_intent_zone_active_ = state.zone;
+    }
+
+    if (rocker_forward_sector_mode_pub_ &&
+      state.forward_sector != rocker_forward_sector_active_)
+    {
+      rocker_forward_sector_active_ = state.forward_sector;
+      std_msgs::msg::Bool forward_msg;
+      forward_msg.data = state.forward_sector;
+      rocker_forward_sector_mode_pub_->publish(forward_msg);
+    }
+  }
+
   void onControl(const Twist::SharedPtr msg)
   {
     std::lock_guard<std::mutex> lock(ctrl_mutex_);
@@ -1200,24 +1324,57 @@ private:
     return true;
   }
 
-  bool proximitySidePassEnterRegionHasCloud(
+  bool proximitySidePassInnerForwardClear(
     const std::vector<std::pair<float, float>> & local_pts) const
   {
     if (local_pts.empty()) {
       return false;
     }
-    const double depth = proximity_side_pass_enter_depth_m_;
-    for (size_t i = 0; i < gate_side_pass_enter_forward_strip_x_.size(); ++i) {
+    const double depth = side_pass_crawl_check_depth_m_;
+    for (size_t i = 0; i < side_pass_crawl_forward_strip_x_.size(); ++i) {
       if (forwardCornerStripHasPoint(
           local_pts,
-          gate_side_pass_enter_forward_strip_x_[i], depth,
-          gate_side_pass_enter_forward_strip_y_min_[i],
-          gate_side_pass_enter_forward_strip_y_max_[i]))
+          side_pass_crawl_forward_strip_x_[i], depth,
+          side_pass_crawl_forward_strip_y_min_[i],
+          side_pass_crawl_forward_strip_y_max_[i]))
       {
-        return true;
+        return false;
       }
     }
-    return false;
+    return true;
+  }
+
+  bool proximitySidePassForwardOuterStripBlocked(
+    const std::vector<std::pair<float, float>> & local_pts, bool left) const
+  {
+    if (local_pts.empty() ||
+      side_pass_crawl_forward_strip_x_.size() < 3 ||
+      side_pass_crawl_forward_strip_y_min_.size() < 3 ||
+      side_pass_crawl_forward_strip_y_max_.size() < 3)
+    {
+      return false;
+    }
+    const size_t i = left ? 0 : 2;
+    const double x0 =
+      side_pass_crawl_forward_strip_x_[i] + side_pass_crawl_check_depth_m_;
+    const double x1 = x0 + proximity_side_pass_outer_probe_depth_m_;
+    return forwardCornerStripHasPoint(
+      local_pts, x0, x1 - x0,
+      side_pass_crawl_forward_strip_y_min_[i],
+      side_pass_crawl_forward_strip_y_max_[i]);
+  }
+
+  bool proximitySidePassEnterConditionsMet(
+    const std::vector<std::pair<float, float>> & local_pts) const
+  {
+    if (local_pts.empty()) {
+      return false;
+    }
+    const bool inner_clear = proximitySidePassInnerForwardClear(local_pts);
+    const bool outer_blocked =
+      proximitySidePassForwardOuterStripBlocked(local_pts, true) ||
+      proximitySidePassForwardOuterStripBlocked(local_pts, false);
+    return inner_clear && outer_blocked;
   }
 
   bool proximitySidePassSurroundingClear(
@@ -1291,9 +1448,9 @@ private:
       vehiclePlanarSpeedMps(*odom) < proximity_side_pass_max_speed_mps_;
     const bool wz_ok =
       std::abs(odom->twist.twist.angular.z) < proximity_side_pass_max_wz_rps_;
-    const bool blocked = proximitySidePassEnterRegionHasCloud(local_pts);
+    const bool enter_ok = proximitySidePassEnterConditionsMet(local_pts);
     const bool rocker_ok = isRockerOutOfDeadband(tnow);
-    if (!speed_ok || !wz_ok || !blocked || !rocker_ok) {
+    if (!speed_ok || !wz_ok || !enter_ok || !rocker_ok) {
       proximity_side_pass_enter_streak_ = 0;
       return;
     }
@@ -1303,10 +1460,12 @@ private:
       setSidePassCrawlMode(true, tnow, -1, SidePassSource::Proximity);
       RCLCPP_INFO(
         get_logger(),
-        "proximity side_pass crawl enter: |v|<%.2f |wz|<%.2f blocked %.0fcm rocker active x%d frames",
+        "proximity side_pass crawl enter: |v|<%.2f |wz|<%.2f inner %.0fmm clear "
+        "outer %.0fmm blocked x%d frames",
         proximity_side_pass_max_speed_mps_,
         proximity_side_pass_max_wz_rps_,
-        proximity_side_pass_enter_depth_m_ * 100.0,
+        side_pass_crawl_check_depth_m_ * 100.0,
+        proximity_side_pass_outer_probe_depth_m_ * 100.0,
         proximity_side_pass_confirm_frames_);
       proximity_side_pass_enter_streak_ = 0;
     }
@@ -2015,6 +2174,9 @@ private:
     publishGateMemorySnapshot();
     if (gate_path_enable_) {
       updateGateMemory(*odom, tnow);
+    }
+    if (rocker_sector_vx_min_enable_) {
+      publishRockerIntentZoneState(tnow);
     }
     if (use_spatial_range_ && gate_path_enable_) {
       publishNarrowGatePassModeState();
@@ -4205,6 +4367,13 @@ private:
   double release_soft_stop_radius_{0.8};
   std::string release_soft_stop_topic_;
   std::string stick_release_halt_topic_;
+  bool rocker_sector_vx_min_enable_{true};
+  std::string rocker_forward_sector_topic_;
+  std::string rocker_intent_zone_topic_;
+  double rocker_intent_front_half_deg_{30.0};
+  double rocker_intent_side_span_deg_{90.0};
+  bool rocker_forward_sector_active_{true};
+  RockerIntentZone rocker_intent_zone_active_{RockerIntentZone::NONE};
   bool release_soft_stop_active_{false};
   bool stick_release_halt_active_{false};
   std::vector<geometry_msgs::msg::Point> footprint_base_pts_;
@@ -4281,7 +4450,7 @@ private:
   std::vector<double> gate_side_pass_exit_forward_strip_y_min_{0.2, -0.34};
   std::vector<double> gate_side_pass_exit_forward_strip_y_max_{0.34, -0.2};
   bool proximity_side_pass_enable_{true};
-  double proximity_side_pass_enter_depth_m_{0.10};
+  double proximity_side_pass_outer_probe_depth_m_{0.20};
   double proximity_side_pass_exit_margin_m_{0.15};
   double proximity_side_pass_max_speed_mps_{0.10};
   double proximity_side_pass_max_wz_rps_{0.20};
@@ -4381,6 +4550,8 @@ private:
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr open_corridor_cruise_pre_exit_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr release_soft_stop_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr stick_release_halt_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr rocker_forward_sector_mode_pub_;
+  rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr rocker_intent_zone_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_memory_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gate_memory_state_pub_;
