@@ -2006,7 +2006,7 @@ private:
 
   void readCmdVelInput(
     const rclcpp::Time & tnow, Twist & target, bool & input_ok,
-    bool & halted, std::string & reason)
+    bool & halted, std::string & reason, bool halt_on_stale = true)
   {
     input_ok = false;
     std::lock_guard<std::mutex> lock(input_mutex_);
@@ -2023,6 +2023,9 @@ private:
           "cmd_vel hold (age=%.3fs, fresh<=%.2fs hold<=%.2fs)",
           age, cmd_timeout_, cmd_hold_timeout_);
       }
+      return;
+    }
+    if (!halt_on_stale) {
       return;
     }
     halted = true;
@@ -2315,7 +2318,7 @@ private:
       } else {
         Twist target;
         bool input_ok = false;
-        readCmdVelInput(tnow, target, input_ok, halted, reason);
+        readCmdVelInput(tnow, target, input_ok, halted, reason, false);
         const double mppi_raw_vx = target.linear.x;
         const double mppi_raw_wz = target.angular.z;
         const double mppi_vx = input_ok ? target.linear.x : 0.0;
