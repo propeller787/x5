@@ -46,6 +46,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/float64.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 #include <visualization_msgs/msg/marker.hpp>
@@ -308,6 +309,27 @@ public:
     }
     if (rocker_intent_side_span_deg_ < 0.0) {
       rocker_intent_side_span_deg_ = 0.0;
+    }
+
+    wz_density_cap_enable_ = declare_parameter<bool>("wz_density_cap_enable", true);
+    wz_density_cap_topic_ = declare_parameter<std::string>(
+      "wz_density_cap_topic", "/mppi/wz_density_cap_rps");
+    wz_density_tier_topic_ = declare_parameter<std::string>(
+      "wz_density_tier_topic", "/mppi/wz_density_tier");
+    density_check_radius_ = declare_parameter<double>("density_check_radius", 1.2);
+    wz_density_caps_rps_ = declare_parameter<std::vector<double>>(
+      "wz_density_caps_rps", std::vector<double>{1.30, 0.785, 0.524});
+    obstacle_count_engage_moderate_ = declare_parameter<int>(
+      "obstacle_count_engage_moderate", 12);
+    obstacle_count_release_open_ = declare_parameter<int>(
+      "obstacle_count_release_open", 6);
+    obstacle_count_engage_dense_ = declare_parameter<int>(
+      "obstacle_count_engage_dense", 40);
+    obstacle_count_release_moderate_ = declare_parameter<int>(
+      "obstacle_count_release_moderate", 28);
+    wz_density_min_dwell_ = declare_parameter<double>("wz_density_min_dwell", 0.4);
+    if (wz_density_caps_rps_.empty()) {
+      wz_density_caps_rps_ = {1.30, 0.785, 0.524};
     }
 
     gate_path_enable_ = declare_parameter<bool>("gate_path_enable", true);
@@ -607,6 +629,12 @@ public:
       rocker_intent_zone_pub_ = create_publisher<std_msgs::msg::UInt8>(
         rocker_intent_zone_topic_, rclcpp::QoS(1).transient_local());
     }
+    if (wz_density_cap_enable_) {
+      wz_density_cap_pub_ = create_publisher<std_msgs::msg::Float64>(
+        wz_density_cap_topic_, rclcpp::QoS(1).transient_local());
+      wz_density_tier_pub_ = create_publisher<std_msgs::msg::UInt8>(
+        wz_density_tier_topic_, rclcpp::QoS(1).transient_local());
+    }
     if (gate_marker_enable_ && gate_path_enable_) {
       gate_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
         gate_marker_topic_, rclcpp::QoS(1).transient_local());
@@ -647,6 +675,12 @@ public:
       zone_init.data = static_cast<uint8_t>(RockerIntentZone::NONE);
       rocker_intent_zone_pub_->publish(zone_init);
       rocker_intent_zone_active_ = RockerIntentZone::NONE;
+    }
+    if (wz_density_cap_pub_) {
+      publishWzDensityCap(wzDensityCapRps());
+      std_msgs::msg::UInt8 tier_init;
+      tier_init.data = static_cast<uint8_t>(current_wz_tier_);
+      wz_density_tier_pub_->publish(tier_init);
     }
     action_client_ = rclcpp_action::create_client<FollowPath>(this, action_name_);
 
@@ -751,9 +785,20 @@ public:
         rocker_intent_front_half_deg_, rocker_intent_side_span_deg_,
         rocker_forward_sector_topic_.c_str(), rocker_intent_zone_topic_.c_str());
     }
+    if (wz_density_cap_enable_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "wz density cap: radius=%.2fm caps=[%.2f, %.2f, %.2f] cap_topic=%s tier_topic=%s",
+        density_check_radius_,
+        wz_density_caps_rps_.size() > 0 ? wz_density_caps_rps_[0] : 0.0,
+        wz_density_caps_rps_.size() > 1 ? wz_density_caps_rps_[1] : 0.0,
+        wz_density_caps_rps_.size() > 2 ? wz_density_caps_rps_[2] : 0.0,
+        wz_density_cap_topic_.c_str(), wz_density_tier_topic_.c_str());
+    }
   }
 
 private:
+  enum class WzDensityTier : uint8_t { OPEN = 0, MODERATE = 1, DENSE = 2 };
   enum class RockerIntentZone : uint8_t { NONE = 0, FRONT = 1, LEFT_FRONT = 2, RIGHT_FRONT = 3 };
 
   RockerIntentZone classifyRockerIntentZone(double rx, double ry) const
@@ -1101,6 +1146,97 @@ private:
       }
     }
     return count;
+  }
+
+  int nearbyObstaclePointCount(const rclcpp::Time & tnow) const
+  {
+    return nearbyObstaclePointCountInRadius(density_check_radius_, tnow);
+  }
+
+  void updateWzDensityTier(int nearby_count, const rclcpp::Time & tnow)
+  {
+    if (!wz_density_cap_enable_) {
+      return;
+    }
+
+    WzDensityTier desired = current_wz_tier_;
+    switch (current_wz_tier_) {
+      case WzDensityTier::OPEN:
+        if (nearby_count >= obstacle_count_engage_moderate_) {
+          desired = WzDensityTier::MODERATE;
+        }
+        break;
+      case WzDensityTier::MODERATE:
+        if (nearby_count >= obstacle_count_engage_dense_) {
+          desired = WzDensityTier::DENSE;
+        } else if (nearby_count < obstacle_count_release_open_) {
+          desired = WzDensityTier::OPEN;
+        }
+        break;
+      case WzDensityTier::DENSE:
+        if (nearby_count < obstacle_count_release_moderate_) {
+          desired = WzDensityTier::MODERATE;
+        }
+        break;
+    }
+
+    if (desired == current_wz_tier_) {
+      return;
+    }
+    if ((tnow - last_wz_tier_change_stamp_).seconds() < wz_density_min_dwell_) {
+      return;
+    }
+    current_wz_tier_ = desired;
+    last_wz_tier_change_stamp_ = tnow;
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "wz obstacle tier -> %s (nearby_points=%d)",
+      desired == WzDensityTier::OPEN ? "OPEN" :
+      (desired == WzDensityTier::MODERATE ? "MODERATE" : "DENSE"),
+      nearby_count);
+  }
+
+  double wzDensityCapRps() const
+  {
+    if (!wz_density_cap_enable_ || wz_density_caps_rps_.empty()) {
+      return wz_density_caps_rps_.empty() ? 1.30 : wz_density_caps_rps_.front();
+    }
+    const size_t idx = static_cast<size_t>(current_wz_tier_);
+    if (idx >= wz_density_caps_rps_.size()) {
+      return wz_density_caps_rps_.back();
+    }
+    return wz_density_caps_rps_[idx];
+  }
+
+  void publishWzDensityCap(double cap_rps)
+  {
+    if (!wz_density_cap_pub_) {
+      return;
+    }
+    std_msgs::msg::Float64 msg;
+    msg.data = cap_rps;
+    wz_density_cap_pub_->publish(msg);
+  }
+
+  void updateWzDensityCap(const rclcpp::Time & tnow)
+  {
+    if (!wz_density_cap_enable_ || !wz_density_cap_pub_) {
+      return;
+    }
+
+    const int nearby = nearbyObstaclePointCount(tnow);
+    if (nearby < 0) {
+      current_wz_tier_ = WzDensityTier::DENSE;
+    } else {
+      updateWzDensityTier(nearby, tnow);
+    }
+
+    publishWzDensityCap(wzDensityCapRps());
+    if (wz_density_tier_pub_) {
+      std_msgs::msg::UInt8 tier_msg;
+      tier_msg.data = static_cast<uint8_t>(current_wz_tier_);
+      wz_density_tier_pub_->publish(tier_msg);
+    }
   }
 
   void updateReleaseSoftStopOnStickIdle(const rclcpp::Time & tnow)
@@ -2001,6 +2137,7 @@ private:
     }
 
     const auto tnow = now();
+    updateWzDensityCap(tnow);
 
     if (!isOdomFresh(odom, tnow)) {
       RCLCPP_WARN_THROTTLE(
@@ -4473,6 +4610,18 @@ private:
   double rocker_intent_side_span_deg_{90.0};
   bool rocker_forward_sector_active_{true};
   RockerIntentZone rocker_intent_zone_active_{RockerIntentZone::NONE};
+  bool wz_density_cap_enable_{true};
+  std::string wz_density_cap_topic_;
+  std::string wz_density_tier_topic_;
+  double density_check_radius_{1.2};
+  std::vector<double> wz_density_caps_rps_{1.30, 0.785, 0.524};
+  int obstacle_count_engage_moderate_{12};
+  int obstacle_count_release_open_{6};
+  int obstacle_count_engage_dense_{40};
+  int obstacle_count_release_moderate_{28};
+  double wz_density_min_dwell_{0.4};
+  WzDensityTier current_wz_tier_{WzDensityTier::OPEN};
+  rclcpp::Time last_wz_tier_change_stamp_{0, 0, RCL_ROS_TIME};
   bool release_soft_stop_active_{false};
   bool stick_release_halt_active_{false};
   std::vector<geometry_msgs::msg::Point> footprint_base_pts_;
@@ -4657,6 +4806,8 @@ private:
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr stick_release_halt_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr rocker_forward_sector_mode_pub_;
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr rocker_intent_zone_pub_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr wz_density_cap_pub_;
+  rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr wz_density_tier_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_memory_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gate_memory_state_pub_;

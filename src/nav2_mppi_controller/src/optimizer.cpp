@@ -526,6 +526,19 @@ void Optimizer::setVxMin(float vx_min)
   }
 }
 
+void Optimizer::setWzMax(float wz_max)
+{
+  settings_.constraints.wz = wz_max;
+  if (motion_model_) {
+    motion_model_->setConstraints(settings_.constraints, settings_.model_dt);
+  }
+}
+
+float Optimizer::getBaseWzMax() const
+{
+  return settings_.base_constraints.wz;
+}
+
 void Optimizer::setSpeedLimit(double speed_limit, bool percentage)
 {
   auto & s = settings_;

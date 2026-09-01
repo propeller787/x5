@@ -29,6 +29,7 @@
 #include "nav2_core/goal_checker.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/float64.hpp"
 
 namespace nav2_mppi_controller
 {
@@ -112,11 +113,13 @@ protected:
 
   void onSidePassMode(const std_msgs::msg::Bool::SharedPtr msg);
   void onRockerForwardSector(const std_msgs::msg::Bool::SharedPtr msg);
+  void onWzDensityCap(const std_msgs::msg::Float64::SharedPtr msg);
 
   static void applyMinAbsVxSeed(
     geometry_msgs::msg::Twist & speed, double min_vx_mps, double vel_eps);
 
   void applyRockerSectorVxMin();
+  void applyWzDensityCap();
 
   std::string name_;
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
@@ -146,6 +149,11 @@ protected:
   std::string rocker_forward_sector_topic_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr rocker_forward_sector_sub_;
   std::atomic<bool> rocker_forward_sector_active_{true};
+
+  bool wz_density_cap_enable_{false};
+  std::string wz_density_cap_topic_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr wz_density_cap_sub_;
+  std::atomic<double> wz_density_cap_rps_{0.0};
 
   // Last time computeVelocityCommands was called
   rclcpp::Time last_time_called_;

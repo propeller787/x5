@@ -63,6 +63,8 @@ controller_server:
       vx_min_lateral: -0.50
       rocker_sector_vx_min_enable: true
       rocker_forward_sector_topic: "/mppi/rocker_forward_sector_mode"
+      wz_density_cap_enable: true
+      wz_density_cap_topic: "/mppi/wz_density_cap_rps"
       vy_max: 0.0
       wz_max: 1.20
       # 加速度约束：rollout 与最优 control sequence 按 model_dt 逐步限幅，使 MPPI 选轨迹时

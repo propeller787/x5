@@ -84,8 +84,6 @@ public:
   using Joystick = interface::msg::Joystick;
   using CarInfo = interface::msg::CarInfo;
 
-  enum class WzDensityTier : uint8_t { OPEN = 0, MODERATE = 1, DENSE = 2 };
-
   enum class RockerForwardZone : uint8_t { NONE = 0, FRONT = 1, LEFT_FRONT = 2, RIGHT_FRONT = 3 };
 
   CmdVelSafetyGateNode()
@@ -161,19 +159,6 @@ public:
       gear_vx_max_mps_ = {2.0 / 3.6, 3.0 / 3.6, 4.0 / 3.6, 6.0 / 3.6};
     }
 
-    wz_density_cap_enable_ = declare_parameter<bool>("wz_density_cap_enable", true);
-    density_check_radius_ = declare_parameter<double>("density_check_radius", 1.2);
-    wz_density_caps_rps_ = declare_parameter<std::vector<double>>(
-      "wz_density_caps_rps", std::vector<double>{1.30, 0.785, 0.524});
-    obstacle_count_engage_moderate_ = declare_parameter<int>(
-      "obstacle_count_engage_moderate", 12);
-    obstacle_count_release_open_ = declare_parameter<int>(
-      "obstacle_count_release_open", 6);
-    obstacle_count_engage_dense_ = declare_parameter<int>(
-      "obstacle_count_engage_dense", 40);
-    obstacle_count_release_moderate_ = declare_parameter<int>(
-      "obstacle_count_release_moderate", 28);
-    wz_density_min_dwell_ = declare_parameter<double>("wz_density_min_dwell", 0.4);
     release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", true);
     release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 0.8);
     release_soft_stop_decel_ = declare_parameter<double>("release_soft_stop_decel", 1.0);
@@ -543,8 +528,6 @@ public:
       std::bind(&CmdVelSafetyGateNode::onRockerIntentZone, this, std::placeholders::_1));
 
     out_pub_ = create_publisher<Twist>(out_topic_, 10);
-    wz_tier_pub_ = create_publisher<UInt8>(
-      std::string(get_name()) + "/wz_density_tier", 10);
 
     const double period = 1.0 / std::max(0.1, publish_rate_hz_);
     timer_ = create_wall_timer(
@@ -558,7 +541,7 @@ public:
       "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s "
       "car_info=%s out=%s "
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
-      "vx_reverse_max=%.2f release_soft_stop_topic=%s wz_density_cap=%d gear_vx_cap=%d "
+      "vx_reverse_max=%.2f release_soft_stop_topic=%s gear_vx_cap=%d "
       "gear_vx_kph=[%.0f,%.0f,%.0f,%.0f] narrow_gate_vx_max=%.2f "
       "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s) side_speed_limit=%d(gear_only=%d) "
       "stick_vx_scale=%d(min_ratio=%.2f wz=%d) vx_accel_limit=%d(%.1fm/s^2) side_pass_crawl_enable=%d "
@@ -570,7 +553,7 @@ public:
       cmd_timeout_, cmd_hold_timeout_, rocker_deadband_,
       proximity_speed_cap_ ? 1 : 0, vx_reverse_max_,
       release_soft_stop_mode_topic_.c_str(),
-      wz_density_cap_enable_ ? 1 : 0, gear_vx_cap_enable_ ? 1 : 0,
+      gear_vx_cap_enable_ ? 1 : 0,
       gear_vx_max_mps_.size() > 0 ? gear_vx_max_mps_[0] * 3.6 : 0.0,
       gear_vx_max_mps_.size() > 1 ? gear_vx_max_mps_[1] * 3.6 : 0.0,
       gear_vx_max_mps_.size() > 2 ? gear_vx_max_mps_[2] * 3.6 : 0.0,
@@ -1096,11 +1079,6 @@ private:
       }
     }
     return count;
-  }
-
-  int nearbyObstaclePointCount() const
-  {
-    return nearbyObstaclePointCountInRadius(density_check_radius_);
   }
 
   int countObstaclePointsInBox(
@@ -2240,61 +2218,6 @@ private:
     }
   }
 
-  void updateWzDensityTier(int nearby_count, const rclcpp::Time & tnow)
-  {
-    if (!wz_density_cap_enable_) {
-      return;
-    }
-
-    WzDensityTier desired = current_wz_tier_;
-    switch (current_wz_tier_) {
-      case WzDensityTier::OPEN:
-        if (nearby_count >= obstacle_count_engage_moderate_) {
-          desired = WzDensityTier::MODERATE;
-        }
-        break;
-      case WzDensityTier::MODERATE:
-        if (nearby_count >= obstacle_count_engage_dense_) {
-          desired = WzDensityTier::DENSE;
-        } else if (nearby_count < obstacle_count_release_open_) {
-          desired = WzDensityTier::OPEN;
-        }
-        break;
-      case WzDensityTier::DENSE:
-        if (nearby_count < obstacle_count_release_moderate_) {
-          desired = WzDensityTier::MODERATE;
-        }
-        break;
-    }
-
-    if (desired == current_wz_tier_) {
-      return;
-    }
-    if ((tnow - last_wz_tier_change_stamp_).seconds() < wz_density_min_dwell_) {
-      return;
-    }
-    current_wz_tier_ = desired;
-    last_wz_tier_change_stamp_ = tnow;
-    RCLCPP_INFO_THROTTLE(
-      get_logger(), *get_clock(), 1000,
-      "wz obstacle tier -> %s (nearby_points=%d)",
-      desired == WzDensityTier::OPEN ? "OPEN" :
-      (desired == WzDensityTier::MODERATE ? "MODERATE" : "DENSE"),
-      nearby_count);
-  }
-
-  double wzDensityCap() const
-  {
-    if (!wz_density_cap_enable_ || wz_density_caps_rps_.empty()) {
-      return wz_max_;
-    }
-    const size_t idx = static_cast<size_t>(current_wz_tier_);
-    if (idx >= wz_density_caps_rps_.size()) {
-      return wz_max_;
-    }
-    return std::min(wz_max_, wz_density_caps_rps_[idx]);
-  }
-
   double minRangeInSector(double center_angle) const
   {
     double best = std::numeric_limits<double>::infinity();
@@ -2448,16 +2371,6 @@ private:
         const double mppi_vx = input_ok ? target.linear.x : 0.0;
         const double mppi_wz = input_ok ? target.angular.z : 0.0;
 
-        double effective_wz_max = wz_max_;
-        if (wz_density_cap_enable_ && input_ok) {
-          if (!cloud_ok) {
-            current_wz_tier_ = WzDensityTier::DENSE;
-          } else {
-            updateWzDensityTier(nearbyObstaclePointCount(), tnow);
-          }
-          effective_wz_max = wzDensityCap();
-        }
-
         Twist out;
         if (side_pass_exit_hold_active_) {
           if (!cloud_ok) {
@@ -2486,28 +2399,20 @@ private:
 
         if (!halted && side_pass_exit_transition_active_) {
           applySidePassExitTransitionFilters(
-            out, tnow, effective_wz_max, cloud_ok, mppi_raw_vx, mppi_raw_wz);
+            out, tnow, wz_max_, cloud_ok, mppi_raw_vx, mppi_raw_wz);
           applyLeftTurnWzTrick(out);
           out_pub_->publish(out);
           last_pub_stamp_ = tnow;
           last_out_ = out;
-
-          UInt8 tier_msg;
-          tier_msg.data = static_cast<uint8_t>(current_wz_tier_);
-          wz_tier_pub_->publish(tier_msg);
           return;
         }
         if (!side_pass_exit_transition_active_ && !halted && input_ok) {
           applySidePassExitTransitionFilters(
-            out, tnow, effective_wz_max, cloud_ok, mppi_raw_vx, mppi_raw_wz);
+            out, tnow, wz_max_, cloud_ok, mppi_raw_vx, mppi_raw_wz);
           applyLeftTurnWzTrick(out);
           out_pub_->publish(out);
           last_pub_stamp_ = tnow;
           last_out_ = out;
-
-          UInt8 tier_msg;
-          tier_msg.data = static_cast<uint8_t>(current_wz_tier_);
-          wz_tier_pub_->publish(tier_msg);
           return;
         }
         if (halted) {
@@ -2716,16 +2621,6 @@ private:
       }
     }
 
-    double effective_wz_max = wz_max_;
-    if (wz_density_cap_enable_ && input_ok && !halted && !soft_stopping_) {
-      if (!cloud_ok) {
-        current_wz_tier_ = WzDensityTier::DENSE;
-      } else {
-        updateWzDensityTier(nearbyObstaclePointCount(), tnow);
-      }
-      effective_wz_max = wzDensityCap();
-    }
-
     if (proximity_speed_cap_ && !narrow_gate_pass && input_ok && !halted &&
       !soft_stopping_ && dir != 0 && std::isfinite(d))
     {
@@ -2767,7 +2662,7 @@ private:
         out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
       }
       if (!halted) {
-        out.angular.z = clamp(out.angular.z, -effective_wz_max, effective_wz_max);
+        out.angular.z = clamp(out.angular.z, -wz_max_, wz_max_);
       }
       applyNarrowGateRockerIntentFilter(out, tnow);
       applyRockerSectorIntentFilter(out, tnow);
@@ -2789,10 +2684,6 @@ private:
     out_pub_->publish(out);
     last_pub_stamp_ = tnow;
     last_out_ = out;
-
-    UInt8 tier_msg;
-    tier_msg.data = static_cast<uint8_t>(current_wz_tier_);
-    wz_tier_pub_->publish(tier_msg);
   }
 
   void publishBypass(const rclcpp::Time & tnow)
@@ -2854,14 +2745,6 @@ private:
   bool gear_vx_cap_enable_{true};
   int gear_default_index_{3};
   std::vector<double> gear_vx_max_mps_;
-  bool wz_density_cap_enable_{true};
-  double density_check_radius_{1.2};
-  std::vector<double> wz_density_caps_rps_{1.30, 0.785, 0.524};
-  int obstacle_count_engage_moderate_{12};
-  int obstacle_count_release_open_{6};
-  int obstacle_count_engage_dense_{40};
-  int obstacle_count_release_moderate_{28};
-  double wz_density_min_dwell_{0.4};
   bool release_soft_stop_enable_{true};
   double release_soft_stop_radius_{0.8};
   double release_soft_stop_decel_{1.0};
@@ -2988,7 +2871,6 @@ private:
   rclcpp::Subscription<Bool>::SharedPtr stick_release_halt_sub_;
   rclcpp::Subscription<UInt8>::SharedPtr rocker_intent_zone_sub_;
   rclcpp::Publisher<Twist>::SharedPtr out_pub_;
-  rclcpp::Publisher<UInt8>::SharedPtr wz_tier_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   std::mutex input_mutex_;
@@ -3014,9 +2896,6 @@ private:
   std::vector<std::pair<float, float>> cloud_pts_;
   rclcpp::Time latest_cloud_stamp_{0, 0, RCL_ROS_TIME};
   bool have_cloud_{false};
-
-  WzDensityTier current_wz_tier_{WzDensityTier::OPEN};
-  rclcpp::Time last_wz_tier_change_stamp_{0, 0, RCL_ROS_TIME};
 
   Twist last_out_;
   rclcpp::Time last_pub_stamp_{0, 0, RCL_ROS_TIME};

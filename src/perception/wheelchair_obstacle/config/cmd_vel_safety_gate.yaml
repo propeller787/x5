@@ -46,10 +46,10 @@ cmd_vel_safety_gate_node:
     standoff: 0.08
     brake_decel: 2.2
     # 把速度限制为 sqrt(2*brake_decel*clearance)，使轮椅在距最近障碍物 standoff 处减速停下。
-    proximity_speed_cap: false
+    proximity_speed_cap: true
     # 行进方向扇区的半角（弧度）。
-    sector_half_angle: 0.30
-    # 障碍物点云比此值更旧 -> proximity / wz 分档 fail-safe（wz 强制 DENSE）。
+    sector_half_angle: 0.20
+    # 障碍物点云比此值更旧 -> proximity fail-safe。
     obstacle_timeout: 0.5
     # |linear.x| 低于此值视为未平移（不计前向威胁）。
     intent_eps: 0.03
@@ -89,7 +89,7 @@ cmd_vel_safety_gate_node:
     open_corridor_cruise_gear_vx_max_kph: [2.0, 3.0, 5.0, 6.0]
 
     # --- 松手软停 legacy（jlp release_soft_stop_enable=false 时 gate 本地判定）---
-    release_soft_stop_enable: true
+    release_soft_stop_enable: false
     release_soft_stop_radius: 0.8
     release_soft_stop_decel: 1.0
     release_soft_stop_wz_decel: 2.0
@@ -117,18 +117,6 @@ cmd_vel_safety_gate_node:
     mppi_fail_soft_stop_avoid_wz_max: 0.75
     # fallback 最长持续帧数（@publish_rate_hz）；超时立即输出 0 并退出 soft-stop。0=不限
     mppi_fail_soft_stop_max_frames: 30
-
-    # --- 按 obstacle_points 周边密度分三档限制角速度（带迟滞）---
-    # 调试：/cmd_vel_safety_gate_node/wz_density_tier (0=OPEN, 1=MODERATE, 2=DENSE)
-    wz_density_cap_enable: true
-    density_check_radius: 1.2
-    # [OPEN, MODERATE, DENSE] 角速度上限 (rad/s)。0.524 ≈ 30°/s，0.785 ≈ 45°/s
-    wz_density_caps_rps: [1.30, 0.785, 0.524]
-    obstacle_count_engage_moderate: 12
-    obstacle_count_release_open: 6
-    obstacle_count_engage_dense: 40
-    obstacle_count_release_moderate: 28
-    wz_density_min_dwell: 0.4
 
     # --- 过窄门模式（订阅 /mppi/narrow_gate_pass_mode）---
     # vx 限速；更信任原始摇杆：前推禁倒退、后拉禁前进，左右推禁反向转向

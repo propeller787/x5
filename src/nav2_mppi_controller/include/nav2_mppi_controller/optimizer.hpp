@@ -117,6 +117,16 @@ public:
   void setVxMin(float vx_min);
 
   /**
+   * @brief Override wz constraint for the current control cycle.
+   */
+  void setWzMax(float wz_max);
+
+  /**
+   * @brief Base wz_max from parameters (before per-cycle overrides).
+   */
+  float getBaseWzMax() const;
+
+  /**
    * @brief Reset the optimization problem to initial conditions
    * @param seed_speed When reset_seed_from_speed is enabled, seed control_sequence
    *   and control_history from this measured speed (typically odom).
