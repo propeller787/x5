@@ -223,6 +223,25 @@ public:
     horizon_ = declare_parameter<double>("horizon", 1.5);
     dt_ = declare_parameter<double>("dt", 0.10);
     send_rate_hz_ = declare_parameter<double>("send_rate_hz", 5.0);
+    send_rate_fast_enable_ = declare_parameter<bool>("send_rate_fast_enable", true);
+    send_rate_hz_fast_ = declare_parameter<double>("send_rate_hz_fast", 10.0);
+    send_rate_fast_rocker_lateral_rate_enter_ = declare_parameter<double>(
+      "send_rate_fast_rocker_lateral_rate_enter", 100.0);
+    send_rate_fast_rocker_lateral_rate_exit_ = declare_parameter<double>(
+      "send_rate_fast_rocker_lateral_rate_exit", 50.0);
+    if (send_rate_hz_fast_ < send_rate_hz_) {
+      send_rate_hz_fast_ = std::max(send_rate_hz_, 10.0);
+    }
+    if (send_rate_fast_rocker_lateral_rate_exit_ >=
+      send_rate_fast_rocker_lateral_rate_enter_)
+    {
+      send_rate_fast_rocker_lateral_rate_exit_ =
+        0.5 * send_rate_fast_rocker_lateral_rate_enter_;
+      RCLCPP_WARN(
+        get_logger(),
+        "send_rate_fast rocker lateral rate exit >= enter; using exit=%.0f",
+        send_rate_fast_rocker_lateral_rate_exit_);
+    }
 
     footprint_publish_enable_ = declare_parameter<bool>("footprint_publish_enable", true);
     footprint_topic_ = declare_parameter<std::string>(
@@ -705,16 +724,20 @@ public:
     }
     action_client_ = rclcpp_action::create_client<FollowPath>(this, action_name_);
 
-    const double period = 1.0 / std::max(0.1, send_rate_hz_);
-    timer_ = create_wall_timer(
-      std::chrono::milliseconds(static_cast<int>(period * 1000)),
-      std::bind(&JoystickLocalPathNode::onTimer, this));
+    resetSendRateTimer(send_rate_hz_);
 
     RCLCPP_INFO(
       get_logger(),
       "joystick_local_path_node: mode=%s odom=%s action=%s frame=%s send_rate=%.1f",
       path_generation_mode_.c_str(), odom_topic_.c_str(), action_name_.c_str(),
-      global_frame_.c_str(), send_rate_hz_);
+      global_frame_.c_str(), active_send_rate_hz_);
+    if (send_rate_fast_enable_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "send_rate_fast: %.1fHz when |Δrocker_y|/s>=%.0f (exit<%.0f)",
+        send_rate_hz_fast_, send_rate_fast_rocker_lateral_rate_enter_,
+        send_rate_fast_rocker_lateral_rate_exit_);
+    }
     if (use_spatial_range_) {
       const double half_back = backward_sector_deg_ * 0.5;
       RCLCPP_INFO(
@@ -917,11 +940,71 @@ private:
     latest_ctrl_stamp_ = now();
   }
 
+  void resetSendRateTimer(double hz)
+  {
+    hz = std::max(0.1, hz);
+    if (timer_ && std::abs(hz - active_send_rate_hz_) < 1e-3) {
+      return;
+    }
+    if (timer_) {
+      timer_->cancel();
+      timer_.reset();
+    }
+    active_send_rate_hz_ = hz;
+    const int period_ms = std::max(1, static_cast<int>(1000.0 / hz));
+    timer_ = create_wall_timer(
+      std::chrono::milliseconds(period_ms),
+      std::bind(&JoystickLocalPathNode::onTimer, this));
+  }
+
+  void updateSendRateFromLateralRockerRate(double lateral_rate)
+  {
+    if (!send_rate_fast_enable_) {
+      return;
+    }
+
+    bool want_fast = send_rate_fast_active_;
+    if (send_rate_fast_active_) {
+      if (lateral_rate < send_rate_fast_rocker_lateral_rate_exit_) {
+        want_fast = false;
+      }
+    } else if (lateral_rate >= send_rate_fast_rocker_lateral_rate_enter_) {
+      want_fast = true;
+    }
+
+    if (want_fast == send_rate_fast_active_) {
+      return;
+    }
+
+    send_rate_fast_active_ = want_fast;
+    const double target_hz = want_fast ? send_rate_hz_fast_ : send_rate_hz_;
+    resetSendRateTimer(target_hz);
+    RCLCPP_INFO(
+      get_logger(),
+      "send_rate -> %.1f Hz (rocker_y lateral rate=%.0f /s, fast=%d)",
+      target_hz, lateral_rate, want_fast ? 1 : 0);
+  }
+
   void onJoystick(const Joystick::SharedPtr msg)
   {
-    std::lock_guard<std::mutex> lock(joystick_mutex_);
-    latest_joystick_ = msg;
-    latest_joystick_stamp_ = now();
+    const auto tnow = now();
+    const double ry = static_cast<double>(msg->rocker_y);
+    double lateral_rate = 0.0;
+    {
+      std::lock_guard<std::mutex> lock(joystick_mutex_);
+      if (have_prev_rocker_y_sample_) {
+        const double dt = (tnow - prev_rocker_y_stamp_).seconds();
+        if (dt > 1e-4) {
+          lateral_rate = std::abs(ry - prev_rocker_y_) / dt;
+        }
+      }
+      prev_rocker_y_ = ry;
+      prev_rocker_y_stamp_ = tnow;
+      have_prev_rocker_y_sample_ = true;
+      latest_joystick_ = msg;
+      latest_joystick_stamp_ = tnow;
+    }
+    updateSendRateFromLateralRockerRate(lateral_rate);
   }
 
   void onCloud(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
@@ -2202,6 +2285,22 @@ private:
 
     const auto tnow = now();
     updateWzDensityCap(tnow);
+
+    if (send_rate_fast_enable_ && send_rate_fast_active_) {
+      Joystick::SharedPtr joy;
+      rclcpp::Time joy_stamp{0, 0, RCL_ROS_TIME};
+      {
+        std::lock_guard<std::mutex> lock(joystick_mutex_);
+        joy = latest_joystick_;
+        joy_stamp = latest_joystick_stamp_;
+      }
+      if (!joy ||
+        (tnow - joy_stamp).seconds() > joystick_timeout_)
+      {
+        send_rate_fast_active_ = false;
+        resetSendRateTimer(send_rate_hz_);
+      }
+    }
 
     if (!isOdomFresh(odom, tnow)) {
       RCLCPP_WARN_THROTTLE(
@@ -4631,6 +4730,15 @@ private:
   double horizon_{1.5};
   double dt_{0.10};
   double send_rate_hz_{5.0};
+  bool send_rate_fast_enable_{true};
+  double send_rate_hz_fast_{10.0};
+  double send_rate_fast_rocker_lateral_rate_enter_{100.0};
+  double send_rate_fast_rocker_lateral_rate_exit_{50.0};
+  double active_send_rate_hz_{5.0};
+  bool send_rate_fast_active_{false};
+  bool have_prev_rocker_y_sample_{false};
+  double prev_rocker_y_{0.0};
+  rclcpp::Time prev_rocker_y_stamp_{0, 0, RCL_ROS_TIME};
 
   bool footprint_publish_enable_{true};
   std::string footprint_topic_;

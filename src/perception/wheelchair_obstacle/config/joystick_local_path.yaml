@@ -30,9 +30,11 @@ joystick_local_path_node:
 
     # 前向 300° / 后向 60° 选择路径模式；|角|=150° 边界 ±10° 回滞
     # backward_reverse_path_enable: 后向扇区倒车避障（path yaw 不变，MPPI vx<0，不原地掉头）
+    # backward_reverse_lateral_invert: 后向扇区反转摇杆横向意图（左后打杆 -> 右后绕行 goal）
     backward_reverse_path_enable: true
-    forward_sector_deg: 300.0
-    backward_sector_deg: 60.0
+    backward_reverse_lateral_invert: true
+    forward_sector_deg: 330.0
+    backward_sector_deg: 30.0
     sector_hysteresis_deg: 10.0
 
     path_interpolation_steps: 20
@@ -42,6 +44,11 @@ joystick_local_path_node:
     # cancel 后等待再 resend；须 > FollowPath.reset_period（0.35s）以触发 Optimizer reset。
     mppi_reset_quiet_sec: 0.40
     send_rate_hz: 5.0
+    # 左右摇杆 rocker_y 物理变化率 |Δy|/Δt（原始单位/s）超阈值 → 10Hz；带迟滞
+    send_rate_fast_enable: true
+    send_rate_hz_fast: 10.0
+    send_rate_fast_rocker_lateral_rate_enter: 100.0   # 进入 10Hz
+    send_rate_fast_rocker_lateral_rate_exit: 50.0      # 退出回 5Hz
 
     # 按挡位发布 /local_costmap/footprint（1–4 挡 -> 1–4 cm padding）。
     # costmap 侧 footprint_padding 须为 0，避免重复膨胀。
