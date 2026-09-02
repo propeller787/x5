@@ -1387,10 +1387,13 @@ private:
     } else if (left_outer && !right_outer) {
       wz = std::max(wz - avoid_step, -wz_max);
     } else if (!left_outer && !right_outer) {
-      if (turning_left) {
-        wz = std::min(wz + avoid_step, wz_max);
-      } else if (turning_right) {
-        wz = std::max(wz - avoid_step, -wz_max);
+      // L/R outer both clear: no lateral avoid target; decay |wz| (do not accelerate turn).
+      if (std::abs(wz) <= release_soft_stop_vel_eps_) {
+        wz = 0.0;
+      } else if (wz > 0.0) {
+        wz = std::max(0.0, wz - avoid_step);
+      } else {
+        wz = std::min(0.0, wz + avoid_step);
       }
     }
   }
@@ -2159,10 +2162,48 @@ private:
            nearbyObstaclePointCountInRadius(release_soft_stop_radius_) == 0;
   }
 
+  bool mppiFailSoftStopBothSideOuterClear() const
+  {
+    return !sidePassForwardOuterStripBlocked(true) &&
+      !sidePassForwardOuterStripBlocked(false);
+  }
+
+  /** Front center strip: crawl_check_depth .. +side_probe_depth (same depth as L/R outer). */
+  bool mppiFailSoftStopForwardOuterProbeClear() const
+  {
+    if (side_pass_crawl_forward_strip_x_.size() < 2 ||
+      side_pass_crawl_forward_strip_y_min_.size() < 2 ||
+      side_pass_crawl_forward_strip_y_max_.size() < 2)
+    {
+      return true;
+    }
+    constexpr size_t front_i = 1;
+    const double x0 =
+      side_pass_crawl_forward_strip_x_[front_i] + side_pass_crawl_check_depth_m_;
+    const double x1 = x0 + mppi_fail_soft_stop_side_probe_depth_m_;
+    return sidePassRoiClear(
+      x0, x1,
+      side_pass_crawl_forward_strip_y_min_[front_i],
+      side_pass_crawl_forward_strip_y_max_[front_i]);
+  }
+
+  /** When L/R outer both clear, require forward side_probe_depth clear to soft-stop. */
+  bool mppiFailSoftStopFrontProbeOkWhenSidesClear() const
+  {
+    if (!mppiFailSoftStopBothSideOuterClear()) {
+      return true;
+    }
+    return mppiFailSoftStopForwardOuterProbeClear();
+  }
+
   bool canSoftStopOnMppiFail(bool cloud_ok) const
   {
-    return mppi_fail_soft_stop_enable_ && cloud_ok &&
-           mppiFailSoftStopForwardStripsClear();
+    if (!mppi_fail_soft_stop_enable_ || !cloud_ok ||
+      !mppiFailSoftStopForwardStripsClear())
+    {
+      return false;
+    }
+    return mppiFailSoftStopFrontProbeOkWhenSidesClear();
   }
 
   double minRangeInSectorHalf(double center_angle, double half_angle) const
@@ -2282,8 +2323,16 @@ private:
     endSoftStop();
     if (!cloud_ok) {
       reason = std::string(context) + " (cloud stale)";
-    } else {
+    } else if (!mppiFailSoftStopForwardStripsClear()) {
       reason = std::string(context) + " (left/front/right strips blocked)";
+    } else if (!mppiFailSoftStopFrontProbeOkWhenSidesClear()) {
+      reason = std::string(context) + " (front blocked, both side outer clear)";
+      RCLCPP_INFO(
+        get_logger(),
+        "mppi fail: halt (both side outer clear, forward probe %.0fmm blocked)",
+        mppi_fail_soft_stop_side_probe_depth_m_ * 1000.0);
+    } else {
+      reason = std::string(context) + " (mppi fail soft-stop denied)";
     }
   }
 
@@ -2839,13 +2888,19 @@ private:
           }
         }
         if (mppi_fail_soft_stop_ &&
-          (!cloud_ok || !mppiFailSoftStopForwardStripsClear()))
+          (!cloud_ok || !mppiFailSoftStopForwardStripsClear() ||
+          !mppiFailSoftStopFrontProbeOkWhenSidesClear()))
         {
           halted = true;
           clearMppiFailSoftStop();
           endSoftStop();
-          reason = !cloud_ok ?
-            "mppi fail (cloud stale)" : "mppi fail (left/front/right strips blocked)";
+          if (!cloud_ok) {
+            reason = "mppi fail (cloud stale)";
+          } else if (!mppiFailSoftStopForwardStripsClear()) {
+            reason = "mppi fail (left/front/right strips blocked)";
+          } else {
+            reason = "mppi fail (front blocked, both side outer clear)";
+          }
         }
       } else if (soft_stop_ramp_mode_ && soft_stop_ramp_legacy_) {
         if (!cloud_ok ||

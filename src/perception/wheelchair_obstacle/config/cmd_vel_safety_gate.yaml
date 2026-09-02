@@ -107,11 +107,13 @@ cmd_vel_safety_gate_node:
 
     # MPPI fail 软停（/cmd_vel 突变为 0 且摇杆仍出死区）：减速度 ramp
     # 安全区：左/右/前 forward strip 各 check_depth 内无障碍（同 proximity_side_pass）
-    # 左右角 strip 在 check_depth 外再探 side_probe_depth，用于 wz 策略：
+    # 左右角 strip 在 side_pass_crawl_check_depth 外再探 side_probe_depth，用于 wz 策略：
     #   转向朝向探知侧障碍 -> wz=0；单侧有障 -> 向避让方向 avoid_wz_accel 加速转向
+    #   左/右 outer 都净空 -> 不加速转向，|wz| 衰减至 0
+    # 两侧 outer 都净空时：前向 center strip 再探 side_probe_depth，净空才 soft-stop，否则 halt
     mppi_fail_soft_stop_enable: true
     mppi_fail_soft_stop_check_depth_m: 0.02
-    mppi_fail_soft_stop_side_probe_depth_m: 0.20
+    mppi_fail_soft_stop_side_probe_depth_m: 0.30
     mppi_fail_soft_stop_jerk_mps3: 0.40
     mppi_fail_soft_stop_decel_mps2: 1.2
     mppi_fail_soft_stop_avoid_wz_accel: 0.80
