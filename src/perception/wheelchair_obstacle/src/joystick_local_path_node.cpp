@@ -332,6 +332,20 @@ public:
       wz_density_caps_rps_ = {1.30, 0.785, 0.524};
     }
 
+    gear_vx_cap_enable_ = declare_parameter<bool>("gear_vx_cap_enable", true);
+    gear_vx_cap_topic_ = declare_parameter<std::string>(
+      "gear_vx_cap_topic", "/mppi/gear_vx_max_mps");
+    const auto gear_vx_max_kph = declare_parameter<std::vector<double>>(
+      "gear_vx_max_kph", std::vector<double>{2.0, 3.0, 5.0, 6.0});
+    gear_vx_max_mps_.clear();
+    gear_vx_max_mps_.reserve(gear_vx_max_kph.size());
+    for (const double kph : gear_vx_max_kph) {
+      gear_vx_max_mps_.push_back(std::max(0.0, kph) / 3.6);
+    }
+    if (gear_vx_max_mps_.empty()) {
+      gear_vx_max_mps_ = {2.0 / 3.6, 3.0 / 3.6, 5.0 / 3.6, 6.0 / 3.6};
+    }
+
     gate_path_enable_ = declare_parameter<bool>("gate_path_enable", true);
     obstacle_points_topic_ = declare_parameter<std::string>(
       "obstacle_points_topic", "/perception/obstacle_points");
@@ -602,7 +616,7 @@ public:
         std::bind(&JoystickLocalPathNode::onControl, this, std::placeholders::_1));
     }
 
-    if (footprint_publish_enable_ || use_spatial_range_) {
+    if (footprint_publish_enable_ || use_spatial_range_ || gear_vx_cap_enable_) {
       car_info_sub_ = create_subscription<CarInfo>(
         car_info_topic_, 10,
         std::bind(&JoystickLocalPathNode::onCarInfo, this, std::placeholders::_1));
@@ -634,6 +648,10 @@ public:
         wz_density_cap_topic_, rclcpp::QoS(1).transient_local());
       wz_density_tier_pub_ = create_publisher<std_msgs::msg::UInt8>(
         wz_density_tier_topic_, rclcpp::QoS(1).transient_local());
+    }
+    if (gear_vx_cap_enable_) {
+      gear_vx_cap_pub_ = create_publisher<std_msgs::msg::Float64>(
+        gear_vx_cap_topic_, rclcpp::QoS(1).transient_local());
     }
     if (gate_marker_enable_ && gate_path_enable_) {
       gate_marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
@@ -681,6 +699,9 @@ public:
       std_msgs::msg::UInt8 tier_init;
       tier_init.data = static_cast<uint8_t>(current_wz_tier_);
       wz_density_tier_pub_->publish(tier_init);
+    }
+    if (gear_vx_cap_pub_) {
+      publishGearVxCap(gearVxMaxMps());
     }
     action_client_ = rclcpp_action::create_client<FollowPath>(this, action_name_);
 
@@ -794,6 +815,16 @@ public:
         wz_density_caps_rps_.size() > 1 ? wz_density_caps_rps_[1] : 0.0,
         wz_density_caps_rps_.size() > 2 ? wz_density_caps_rps_[2] : 0.0,
         wz_density_cap_topic_.c_str(), wz_density_tier_topic_.c_str());
+    }
+    if (gear_vx_cap_enable_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "gear vx cap: kph=[%.0f, %.0f, %.0f, %.0f] topic=%s",
+        gear_vx_max_mps_.size() > 0 ? gear_vx_max_mps_[0] * 3.6 : 0.0,
+        gear_vx_max_mps_.size() > 1 ? gear_vx_max_mps_[1] * 3.6 : 0.0,
+        gear_vx_max_mps_.size() > 2 ? gear_vx_max_mps_[2] * 3.6 : 0.0,
+        gear_vx_max_mps_.size() > 3 ? gear_vx_max_mps_[3] * 3.6 : 0.0,
+        gear_vx_cap_topic_.c_str());
     }
   }
 
@@ -920,6 +951,9 @@ private:
       std::lock_guard<std::mutex> lock(gear_mutex_);
       latest_gear_ = gear;
       have_gear_ = true;
+    }
+    if (gear_vx_cap_enable_) {
+      publishGearVxCap(gearVxMaxMps());
     }
     if (footprint_publish_enable_) {
       publishFootprintForGear(gear);
@@ -1218,6 +1252,33 @@ private:
     wz_density_cap_pub_->publish(msg);
   }
 
+  int currentGearIndex() const
+  {
+    int gear = gear_default_index_;
+    {
+      std::lock_guard<std::mutex> lock(gear_mutex_);
+      if (have_gear_ && latest_gear_ >= 1) {
+        gear = latest_gear_;
+      }
+    }
+    return gear;
+  }
+
+  double gearVxMaxMps() const
+  {
+    return pickGearTable(gear_vx_max_mps_, currentGearIndex(), gear_default_index_);
+  }
+
+  void publishGearVxCap(double cap_mps)
+  {
+    if (!gear_vx_cap_pub_) {
+      return;
+    }
+    std_msgs::msg::Float64 msg;
+    msg.data = cap_mps;
+    gear_vx_cap_pub_->publish(msg);
+  }
+
   void updateWzDensityCap(const rclcpp::Time & tnow)
   {
     if (!wz_density_cap_enable_ || !wz_density_cap_pub_) {
@@ -1236,6 +1297,9 @@ private:
       std_msgs::msg::UInt8 tier_msg;
       tier_msg.data = static_cast<uint8_t>(current_wz_tier_);
       wz_density_tier_pub_->publish(tier_msg);
+    }
+    if (gear_vx_cap_enable_) {
+      publishGearVxCap(gearVxMaxMps());
     }
   }
 
@@ -4615,6 +4679,9 @@ private:
   std::string wz_density_tier_topic_;
   double density_check_radius_{1.2};
   std::vector<double> wz_density_caps_rps_{1.30, 0.785, 0.524};
+  bool gear_vx_cap_enable_{true};
+  std::string gear_vx_cap_topic_;
+  std::vector<double> gear_vx_max_mps_{2.0 / 3.6, 3.0 / 3.6, 5.0 / 3.6, 6.0 / 3.6};
   int obstacle_count_engage_moderate_{12};
   int obstacle_count_release_open_{6};
   int obstacle_count_engage_dense_{40};
@@ -4808,6 +4875,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr rocker_intent_zone_pub_;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr wz_density_cap_pub_;
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr wz_density_tier_pub_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr gear_vx_cap_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_marker_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gate_memory_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gate_memory_state_pub_;
@@ -4823,7 +4891,7 @@ private:
   Joystick::SharedPtr latest_joystick_;
   rclcpp::Time latest_joystick_stamp_{0, 0, RCL_ROS_TIME};
 
-  std::mutex gear_mutex_;
+  mutable std::mutex gear_mutex_;
   int latest_gear_{3};
   bool have_gear_{false};
 

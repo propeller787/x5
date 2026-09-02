@@ -100,6 +100,11 @@ joystick_local_path_node:
     obstacle_count_release_moderate: 28
     wz_density_min_dwell: 0.4
 
+    # 按挡位限制 MPPI vx_max（订阅 /vlago/car/info gear）；gate 不再钳制档位 vx
+    gear_vx_cap_enable: true
+    gear_vx_cap_topic: "/mppi/gear_vx_max_mps"
+    gear_vx_max_kph: [2.0, 3.0, 5.0, 6.0]   # 1–4 挡对应 kph，内部换算为 m/s
+
     # 窄门 detect/track/pass：仅正对（body +x 双侧切片）；斜穿见 gate_side_pass。
     gate_path_enable: true
     obstacle_points_topic: "/perception/obstacle_points"

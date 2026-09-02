@@ -36,8 +36,16 @@ controller_server:
 
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
-      # 1.1.20 的 setMotionModel 区分大小写：必须为 DiffDrive / Omni / Ackermann。
-      motion_model: "DiffDrive"
+      # motion_model: DiffDrive / Omni / Ackermann / WheelchairDiffDrive
+      motion_model: "WheelchairDiffDrive"
+
+      WheelchairDiffDriveConstraints:
+        # 一阶执行器延迟（模拟 handle ramp）；0 表示无额外滞后（仅 ax/az 限幅）
+        vx_time_constant_s: 0.25
+        wz_time_constant_s: 0.20
+        # |vx|>vx_turn_eps 时 |wz|<=|vx|/min_turning_r；低速允许原地大 wz
+        min_turning_r: 0.35
+        vx_turn_eps: 0.05
 
       # 20 Hz 控制器 -> model_dt 必须 >= 控制周期；此处取相等。
       model_dt: 0.05
@@ -53,16 +61,14 @@ controller_server:
       batch_size: 600
       iteration_count: 1
 
-      # 速度包络必须覆盖最高挡位（挡位），否则 MPPI / ConstraintCritic 会钳制从
-      # /handle/control 镜像过来的意图，高挡位永远达不到指令速度。挡位表（最大 v / 最大 w）：
-      #   1: 0.560 / 0.780   2: 1.125 / 0.945
-      #   3: 1.687 / 1.102   4: 2.249 / 1.260
-      # 【前】扇区 vx_min 禁倒车；其他扇区允许 vx_min_lateral。扇区判定在 jlp 发布 topic。
+      # 速度包络上限；档位 vx 限速仅在 cmd_vel_safety_gate 输出侧 clamp（MPPI 保持大包络规划）。
       vx_max: 5.0
       vx_min: 0.001
       vx_min_lateral: -0.50
       rocker_sector_vx_min_enable: true
       rocker_forward_sector_topic: "/mppi/rocker_forward_sector_mode"
+      gear_vx_cap_enable: false
+      gear_vx_cap_topic: "/mppi/gear_vx_max_mps"
       wz_density_cap_enable: true
       wz_density_cap_topic: "/mppi/wz_density_cap_rps"
       vy_max: 0.0

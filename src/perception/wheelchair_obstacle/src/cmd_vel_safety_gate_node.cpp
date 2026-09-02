@@ -7,8 +7,8 @@
 //   - release soft-stop: joystick_local_path publishes /mppi/release_soft_stop_mode;
 //     gate ramps vx/wz down (skip MPPI while active); /mppi/stick_release_halt -> hard stop
 //   - proximity speed cap from obstacle cloud + travel intent
-//   - tiered wz cap from nearby obstacle-point density
-//   - gear vx cap from /vlago/car/info (1-4 gear -> configurable kph limits)
+//   - tiered wz cap from nearby obstacle-point density (MPPI via jlp topic; gate wz_max fallback)
+//   - gear vx cap: jlp publishes /mppi/gear_vx_max_mps -> MPPI vx_max + gate output clamp
 //   - stick deflection speed scale: cap vx/wz by |rocker|/100 (min ratio configurable)
 //   - rocker sector intent filter: subscribe /mppi/rocker_intent_zone from
 //     joystick_local_path; block opposite turn in left/right-forward sectors
@@ -42,6 +42,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/float64.hpp>
 #include <std_msgs/msg/u_int8.hpp>
 #include <interface/msg/joystick.hpp>
 #include <interface/msg/car_info.hpp>
@@ -146,18 +147,10 @@ public:
       left_turn_wz_trick_offset_deg_s_ * M_PI / 180.0;
 
     car_info_topic_ = declare_parameter<std::string>("car_info_topic", "/vlago/car/info");
-    gear_vx_cap_enable_ = declare_parameter<bool>("gear_vx_cap_enable", true);
     gear_default_index_ = declare_parameter<int>("gear_default_index", 3);
-    const auto gear_vx_max_kph = declare_parameter<std::vector<double>>(
-      "gear_vx_max_kph", std::vector<double>{2.0, 3.0, 4.0, 6.0});
-    gear_vx_max_mps_.clear();
-    gear_vx_max_mps_.reserve(gear_vx_max_kph.size());
-    for (const double kph : gear_vx_max_kph) {
-      gear_vx_max_mps_.push_back(std::max(0.0, kph) / 3.6);
-    }
-    if (gear_vx_max_mps_.empty()) {
-      gear_vx_max_mps_ = {2.0 / 3.6, 3.0 / 3.6, 4.0 / 3.6, 6.0 / 3.6};
-    }
+    gear_vx_cap_enable_ = declare_parameter<bool>("gear_vx_cap_enable", true);
+    gear_vx_cap_topic_ = declare_parameter<std::string>(
+      "gear_vx_cap_topic", "/mppi/gear_vx_max_mps");
 
     release_soft_stop_enable_ = declare_parameter<bool>("release_soft_stop_enable", true);
     release_soft_stop_radius_ = declare_parameter<double>("release_soft_stop_radius", 0.8);
@@ -527,6 +520,12 @@ public:
       rocker_intent_zone_topic_, rclcpp::QoS(1).transient_local(),
       std::bind(&CmdVelSafetyGateNode::onRockerIntentZone, this, std::placeholders::_1));
 
+    if (gear_vx_cap_enable_) {
+      gear_vx_cap_sub_ = create_subscription<std_msgs::msg::Float64>(
+        gear_vx_cap_topic_, rclcpp::QoS(1).transient_local(),
+        std::bind(&CmdVelSafetyGateNode::onGearVxCap, this, std::placeholders::_1));
+    }
+
     out_pub_ = create_publisher<Twist>(out_topic_, 10);
 
     const double period = 1.0 / std::max(0.1, publish_rate_hz_);
@@ -541,8 +540,8 @@ public:
       "cmd_vel_safety_gate: gate_enable=%d bypass_source=%s in=%s handle=%s rocker=%s cloud=%s "
       "car_info=%s out=%s "
       "input_type=%s cmd_timeout=%.2f cmd_hold=%.2f rocker_deadband=%.1f proximity_cap=%d "
-      "vx_reverse_max=%.2f release_soft_stop_topic=%s gear_vx_cap=%d "
-      "gear_vx_kph=[%.0f,%.0f,%.0f,%.0f] narrow_gate_vx_max=%.2f "
+      "vx_reverse_max=%.2f release_soft_stop_topic=%s gear_vx_cap=%d topic=%s "
+      "narrow_gate_vx_max=%.2f "
       "narrow_gate_exit_ramp=%d(%.1fs->%.2fm/s) side_speed_limit=%d(gear_only=%d) "
       "stick_vx_scale=%d(min_ratio=%.2f wz=%d) vx_accel_limit=%d(%.1fm/s^2) side_pass_crawl_enable=%d "
       "side_pass_crawl=%.2fm/s/%.2frps forward_strips=%zu depth=%.0fmm",
@@ -553,11 +552,7 @@ public:
       cmd_timeout_, cmd_hold_timeout_, rocker_deadband_,
       proximity_speed_cap_ ? 1 : 0, vx_reverse_max_,
       release_soft_stop_mode_topic_.c_str(),
-      gear_vx_cap_enable_ ? 1 : 0,
-      gear_vx_max_mps_.size() > 0 ? gear_vx_max_mps_[0] * 3.6 : 0.0,
-      gear_vx_max_mps_.size() > 1 ? gear_vx_max_mps_[1] * 3.6 : 0.0,
-      gear_vx_max_mps_.size() > 2 ? gear_vx_max_mps_[2] * 3.6 : 0.0,
-      gear_vx_max_mps_.size() > 3 ? gear_vx_max_mps_[3] * 3.6 : 0.0,
+      gear_vx_cap_enable_ ? 1 : 0, gear_vx_cap_topic_.c_str(),
       narrow_gate_vx_max_,
       narrow_gate_exit_ramp_enable_ ? 1 : 0,
       narrow_gate_exit_ramp_sec_, narrow_gate_exit_ramp_vx_target_,
@@ -738,6 +733,12 @@ private:
     have_gear_ = true;
   }
 
+  void onGearVxCap(const std_msgs::msg::Float64::SharedPtr msg)
+  {
+    gear_vx_cap_mps_.store(msg->data, std::memory_order_relaxed);
+    have_gear_vx_cap_.store(true, std::memory_order_relaxed);
+  }
+
   static double pickGearTable(
     const std::vector<double> & table, int gear, int fallback_g)
   {
@@ -751,25 +752,22 @@ private:
     return table[static_cast<size_t>(fb - 1)];
   }
 
-  double gearVxMaxMps() const
+  double gearVxMaxMpsFromTopic() const
   {
-    int gear = gear_default_index_;
-    {
-      std::lock_guard<std::mutex> lock(gear_mutex_);
-      if (have_gear_ && latest_gear_ >= 1) {
-        gear = latest_gear_;
-      }
+    if (!gear_vx_cap_enable_) {
+      return std::numeric_limits<double>::infinity();
     }
-    return pickGearTable(gear_vx_max_mps_, gear, gear_default_index_);
+    if (!have_gear_vx_cap_.load(std::memory_order_relaxed)) {
+      return std::numeric_limits<double>::infinity();
+    }
+    const double cap = gear_vx_cap_mps_.load(std::memory_order_relaxed);
+    return cap > 0.0 ? cap : std::numeric_limits<double>::infinity();
   }
 
   void applyGearVxCap(Twist & out) const
   {
-    if (!gear_vx_cap_enable_) {
-      return;
-    }
-    const double cap = gearVxMaxMps();
-    if (cap <= 0.0) {
+    const double cap = gearVxMaxMpsFromTopic();
+    if (!std::isfinite(cap) || cap <= 0.0) {
       return;
     }
     if (out.linear.x > 0.0) {
@@ -920,9 +918,9 @@ private:
 
   double stickVxCapBase(bool narrow_gate_pass) const
   {
-    double cap = gear_vx_cap_enable_ ? gearVxMaxMps() : std::numeric_limits<double>::infinity();
+    double cap = gearVxMaxMpsFromTopic();
     if (narrow_gate_pass) {
-      cap = std::min(cap, narrow_gate_vx_max_);
+      cap = narrow_gate_vx_max_;
     }
     return cap;
   }
@@ -2742,9 +2740,12 @@ private:
   double left_turn_wz_trick_offset_deg_s_{2.0};
   double left_turn_wz_trick_offset_rps_{0.03490658503988659};
   std::string car_info_topic_;
-  bool gear_vx_cap_enable_{true};
   int gear_default_index_{3};
-  std::vector<double> gear_vx_max_mps_;
+  bool gear_vx_cap_enable_{true};
+  std::string gear_vx_cap_topic_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr gear_vx_cap_sub_;
+  std::atomic<double> gear_vx_cap_mps_{0.0};
+  std::atomic<bool> have_gear_vx_cap_{false};
   bool release_soft_stop_enable_{true};
   double release_soft_stop_radius_{0.8};
   double release_soft_stop_decel_{1.0};

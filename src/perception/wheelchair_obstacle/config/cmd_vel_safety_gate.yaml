@@ -58,11 +58,11 @@ cmd_vel_safety_gate_node:
     # 倒车线速度上限 (m/s)，仅对 linear.x < 0 生效。
     vx_reverse_max: 0.5
 
-    # --- 按挡位限制线速度（订阅 /vlago/car/info 的 gear 字段）---
+    # 开阔走廊巡航仍订阅 /vlago/car/info 的 gear；档位 vx 上限由 jlp 发布 topic，gate 订阅后做输出 clamp
     car_info_topic: "/vlago/car/info"
-    gear_vx_cap_enable: true
     gear_default_index: 3
-    gear_vx_max_kph: [2.0, 3.0, 5.0, 6.0]   # 1–4 挡对应 kph，内部换算为 m/s
+    gear_vx_cap_enable: true
+    gear_vx_cap_topic: "/mppi/gear_vx_max_mps"
 
     # --- 开阔走廊巡航（仅 3/4 挡；默认关，实车验证后开）---
     open_corridor_cruise_mode_topic: "/mppi/open_corridor_cruise_mode"
@@ -109,10 +109,10 @@ cmd_vel_safety_gate_node:
     # 左右角 strip 在 check_depth 外再探 side_probe_depth，用于 wz 策略：
     #   转向朝向探知侧障碍 -> wz=0；单侧有障 -> 向避让方向 avoid_wz_accel 加速转向
     mppi_fail_soft_stop_enable: true
-    mppi_fail_soft_stop_check_depth_m: 0.03
+    mppi_fail_soft_stop_check_depth_m: 0.02
     mppi_fail_soft_stop_side_probe_depth_m: 0.20
-    mppi_fail_soft_stop_jerk_mps3: 0.20
-    mppi_fail_soft_stop_decel_mps2: 1.0
+    mppi_fail_soft_stop_jerk_mps3: 0.40
+    mppi_fail_soft_stop_decel_mps2: 1.2
     mppi_fail_soft_stop_avoid_wz_accel: 0.80
     mppi_fail_soft_stop_avoid_wz_max: 0.75
     # fallback 最长持续帧数（@publish_rate_hz）；超时立即输出 0 并退出 soft-stop。0=不限
