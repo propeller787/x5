@@ -71,15 +71,16 @@ cmd_vel_safety_gate_node:
     open_corridor_cruise_accel_mps2: 0.5
     open_corridor_cruise_front_half_deg: 30.0
     open_corridor_cruise_exit_hold_frames: 30
-    open_corridor_cruise_pre_exit_jerk_mps3: 0.2
-    open_corridor_cruise_pre_exit_decel_mps2: 0.6
-    open_corridor_cruise_pre_exit_exit_speed_kph: 2.0   # 前向 pre_exit 缓行目标，避免减到 0 后负加速度穿零倒车
+    open_corridor_cruise_pre_exit_jerk_mps3: 0.3
+    open_corridor_cruise_pre_exit_decel_mps2: 0.9
+    open_corridor_cruise_pre_exit_exit_speed_kph: 2.5   # 前向 pre_exit 缓行目标，避免减到 0 后负加速度穿零倒车
     open_corridor_cruise_pre_exit_mode_topic: "/mppi/open_corridor_cruise_pre_exit_mode"
-    open_corridor_cruise_exit_jerk_mps3: 0.3
+    open_corridor_cruise_exit_jerk_mps3: 0.5
     open_corridor_cruise_exit_decel_mps2: 1.2
     open_corridor_cruise_exit_early_speed_kph: 1.5
     open_corridor_cruise_exit_early_below_mppi_enable: true
     open_corridor_cruise_mppi_handoff_enable: true   # 正式退出结束后 jerk 向 MPPI vx 接手
+    # handoff 期间 /cmd_vel 新鲜归零或 stale → 立即输出 0（不等 handoff 超时，不走 mppi_fail_soft_stop）
     open_corridor_cruise_mppi_handoff_jerk_mps3: 0.2
     open_corridor_cruise_mppi_handoff_accel_mps2: 0.5
     open_corridor_cruise_mppi_handoff_max_sec: 0.6
@@ -116,7 +117,17 @@ cmd_vel_safety_gate_node:
     mppi_fail_soft_stop_avoid_wz_accel: 0.80
     mppi_fail_soft_stop_avoid_wz_max: 0.75
     # fallback 最长持续帧数（@publish_rate_hz）；超时立即输出 0 并退出 soft-stop。0=不限
-    mppi_fail_soft_stop_max_frames: 30
+    mppi_fail_soft_stop_max_frames: 50
+    # fail 恢复：/cmd_vel 非零后从 odom 实测速度 jerk 混合到 MPPI（避免直接 snap 到低 cmd_vel）
+    odom_topic: "/odom/fused"
+    odom_timeout: 0.30
+    mppi_fail_recovery_odom_handoff_enable: true
+    mppi_fail_recovery_handoff_jerk_mps3: 0.40
+    mppi_fail_recovery_handoff_accel_mps2: 0.80
+    mppi_fail_recovery_handoff_wz_accel_rps2: 1.00
+    mppi_fail_recovery_handoff_max_sec: 0.50
+    mppi_fail_recovery_handoff_vx_eps: 0.05
+    mppi_fail_recovery_handoff_wz_eps: 0.05
 
     # --- 过窄门模式（订阅 /mppi/narrow_gate_pass_mode）---
     # vx 限速；更信任原始摇杆：前推禁倒退、后拉禁前进，左右推禁反向转向

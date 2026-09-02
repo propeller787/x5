@@ -89,10 +89,11 @@ joystick_local_path_node:
     rocker_intent_side_span_deg: 90.0
 
     # 按 obstacle_points 周边密度分三档限制 MPPI wz_max（带迟滞）；gate 仅保留 wz_max 兜底
-    wz_density_cap_enable: true
+    wz_density_cap_enable: false
     wz_density_cap_topic: "/mppi/wz_density_cap_rps"
     wz_density_tier_topic: "/mppi/wz_density_tier"
     density_check_radius: 1.2
+    # wz_density_caps_rps: [1.30, 0.785, 0.524]
     wz_density_caps_rps: [1.30, 0.785, 0.524]
     obstacle_count_engage_moderate: 12
     obstacle_count_release_open: 6

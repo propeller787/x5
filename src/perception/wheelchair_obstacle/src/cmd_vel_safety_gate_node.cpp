@@ -19,10 +19,12 @@
 //   - open corridor cruise (/mppi/open_corridor_cruise_mode): skip MPPI; jerk-limited
 //     vx ramp (open_corridor_cruise_jerk_mps3, cap open_corridor_cruise_accel_mps2)
 //     toward gear vx cap when path corridor is clear
+//   - open_corridor_cruise MPPI handoff: if /cmd_vel fresh-zero or stale during handoff,
+//     abort handoff immediately -> mppi fail soft-stop (proximity/strips), not 0.6s timeout
 //   - after narrow gate exit: linear vx ramp-up to avoid sudden acceleration
 //   - vx accel limit: max 1 m/s^2 when speeding up forward/reverse; decel/brake unchanged
 //   - mppi fail soft-stop: /cmd_vel -> 0 while rocker active -> release logic (obstacle check);
-//     recover when /cmd_vel becomes non-zero again (even during soft-stop lowpass)
+//     recover when /cmd_vel becomes non-zero: odom-speed jerk handoff to MPPI (not snap passthrough)
 //   - left_turn_wz_trick: optional +offset on output wz when |wz|>intent_eps
 
 #include <algorithm>
@@ -39,6 +41,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <std_msgs/msg/bool.hpp>
@@ -84,6 +87,7 @@ public:
   using Bool = std_msgs::msg::Bool;
   using Joystick = interface::msg::Joystick;
   using CarInfo = interface::msg::CarInfo;
+  using Odometry = nav_msgs::msg::Odometry;
 
   enum class RockerForwardZone : uint8_t { NONE = 0, FRONT = 1, LEFT_FRONT = 2, RIGHT_FRONT = 3 };
 
@@ -199,6 +203,41 @@ public:
       "mppi_fail_soft_stop_avoid_wz_max", 0.35);
     mppi_fail_soft_stop_max_frames_ = declare_parameter<int>(
       "mppi_fail_soft_stop_max_frames", 50);
+
+    odom_topic_ = declare_parameter<std::string>("odom_topic", "/odom/fused");
+    odom_timeout_ = declare_parameter<double>("odom_timeout", 0.30);
+    mppi_fail_recovery_odom_handoff_enable_ = declare_parameter<bool>(
+      "mppi_fail_recovery_odom_handoff_enable", true);
+    mppi_fail_recovery_handoff_jerk_mps3_ = declare_parameter<double>(
+      "mppi_fail_recovery_handoff_jerk_mps3", 0.40);
+    if (mppi_fail_recovery_handoff_jerk_mps3_ < 0.01) {
+      mppi_fail_recovery_handoff_jerk_mps3_ = 0.01;
+    }
+    mppi_fail_recovery_handoff_accel_mps2_ = declare_parameter<double>(
+      "mppi_fail_recovery_handoff_accel_mps2", 0.80);
+    if (mppi_fail_recovery_handoff_accel_mps2_ < 0.05) {
+      mppi_fail_recovery_handoff_accel_mps2_ = 0.05;
+    }
+    mppi_fail_recovery_handoff_wz_accel_rps2_ = declare_parameter<double>(
+      "mppi_fail_recovery_handoff_wz_accel_rps2", 1.00);
+    if (mppi_fail_recovery_handoff_wz_accel_rps2_ < 0.05) {
+      mppi_fail_recovery_handoff_wz_accel_rps2_ = 0.05;
+    }
+    mppi_fail_recovery_handoff_max_sec_ = declare_parameter<double>(
+      "mppi_fail_recovery_handoff_max_sec", 0.50);
+    if (mppi_fail_recovery_handoff_max_sec_ < 0.05) {
+      mppi_fail_recovery_handoff_max_sec_ = 0.05;
+    }
+    mppi_fail_recovery_handoff_vx_eps_ = declare_parameter<double>(
+      "mppi_fail_recovery_handoff_vx_eps", 0.05);
+    if (mppi_fail_recovery_handoff_vx_eps_ < 0.01) {
+      mppi_fail_recovery_handoff_vx_eps_ = 0.01;
+    }
+    mppi_fail_recovery_handoff_wz_eps_ = declare_parameter<double>(
+      "mppi_fail_recovery_handoff_wz_eps", 0.05);
+    if (mppi_fail_recovery_handoff_wz_eps_ < 0.01) {
+      mppi_fail_recovery_handoff_wz_eps_ = 0.01;
+    }
 
     narrow_gate_pass_mode_topic_ = declare_parameter<std::string>(
       "narrow_gate_pass_mode_topic", "/mppi/narrow_gate_pass_mode");
@@ -486,6 +525,10 @@ public:
       car_info_topic_, 10,
       std::bind(&CmdVelSafetyGateNode::onCarInfo, this, std::placeholders::_1));
 
+    odom_sub_ = create_subscription<Odometry>(
+      odom_topic_, 10,
+      std::bind(&CmdVelSafetyGateNode::onOdom, this, std::placeholders::_1));
+
     cloud_sub_ = create_subscription<PointCloud2>(
       obstacle_topic_, rclcpp::SensorDataQoS(),
       std::bind(&CmdVelSafetyGateNode::onCloud, this, std::placeholders::_1));
@@ -731,6 +774,32 @@ private:
     std::lock_guard<std::mutex> lock(gear_mutex_);
     latest_gear_ = static_cast<int>(msg->gear);
     have_gear_ = true;
+  }
+
+  void onOdom(const Odometry::SharedPtr msg)
+  {
+    Twist twist;
+    twist.linear.x = msg->twist.twist.linear.x;
+    twist.angular.z = msg->twist.twist.angular.z;
+    const rclcpp::Time stamp = rclcpp::Time(msg->header.stamp);
+    std::lock_guard<std::mutex> lock(odom_mutex_);
+    latest_odom_twist_ = twist;
+    latest_odom_stamp_ = stamp.nanoseconds() > 0 ? stamp : now();
+    have_odom_ = true;
+  }
+
+  bool readOdomTwist(const rclcpp::Time & tnow, Twist & out) const
+  {
+    std::lock_guard<std::mutex> lock(odom_mutex_);
+    if (!have_odom_) {
+      return false;
+    }
+    const double age = (tnow - latest_odom_stamp_).seconds();
+    if (age > odom_timeout_) {
+      return false;
+    }
+    out = latest_odom_twist_;
+    return true;
   }
 
   void onGearVxCap(const std_msgs::msg::Float64::SharedPtr msg)
@@ -1692,6 +1761,115 @@ private:
     open_cruise_handoff_ax_ = 0.0;
   }
 
+  void endMppiFailRecoveryHandoff()
+  {
+    mppi_fail_recovery_handoff_active_ = false;
+    mppi_fail_handoff_vx_ = 0.0;
+    mppi_fail_handoff_wz_ = 0.0;
+    mppi_fail_handoff_vx_ax_ = 0.0;
+    mppi_fail_handoff_wz_az_ = 0.0;
+  }
+
+  static void jerkRampScalarToward(
+    double & state, double & accel_state, double target, double dt,
+    double max_accel, double jerk)
+  {
+    const double max_da = jerk * dt;
+    if (state < target - 1e-6) {
+      accel_state = std::min(max_accel, accel_state + max_da);
+    } else if (state > target + 1e-6) {
+      accel_state = std::max(-max_accel, accel_state - max_da);
+    } else if (accel_state > 0.0) {
+      accel_state = std::max(0.0, accel_state - max_da);
+    } else if (accel_state < 0.0) {
+      accel_state = std::min(0.0, accel_state + max_da);
+    } else {
+      accel_state = 0.0;
+    }
+
+    state += accel_state * dt;
+    if (accel_state >= 0.0 && state > target) {
+      state = target;
+      accel_state = 0.0;
+    } else if (accel_state <= 0.0 && state < target) {
+      state = target;
+      accel_state = 0.0;
+    }
+  }
+
+  void beginMppiFailRecoveryHandoff(const rclcpp::Time & tnow, const Twist & mppi_target)
+  {
+    if (!mppi_fail_recovery_odom_handoff_enable_) {
+      return;
+    }
+
+    Twist seed;
+    const bool odom_ok = readOdomTwist(tnow, seed);
+    if (odom_ok) {
+      mppi_fail_handoff_vx_ = seed.linear.x;
+      mppi_fail_handoff_wz_ = seed.angular.z;
+    } else {
+      mppi_fail_handoff_vx_ = soft_stop_vx_;
+      mppi_fail_handoff_wz_ = soft_stop_wz_;
+      RCLCPP_WARN(
+        get_logger(),
+        "mppi fail recovery handoff: odom stale/missing, seed from gate soft-stop "
+        "(vx=%.2f wz=%.2f)",
+        mppi_fail_handoff_vx_, mppi_fail_handoff_wz_);
+    }
+
+    endSoftStop();
+    mppi_fail_recovery_handoff_active_ = true;
+    mppi_fail_handoff_vx_ax_ = 0.0;
+    mppi_fail_handoff_wz_az_ = 0.0;
+    mppi_fail_handoff_start_ = tnow;
+    RCLCPP_INFO(
+      get_logger(),
+      "mppi fail recovery handoff: odom_vx=%.2f odom_wz=%.2f -> mppi_vx=%.2f mppi_wz=%.2f "
+      "jerk=%.2f accel=%.2f wz_accel=%.2f max=%.2fs",
+      mppi_fail_handoff_vx_, mppi_fail_handoff_wz_,
+      mppi_target.linear.x, mppi_target.angular.z,
+      mppi_fail_recovery_handoff_jerk_mps3_,
+      mppi_fail_recovery_handoff_accel_mps2_,
+      mppi_fail_recovery_handoff_wz_accel_rps2_,
+      mppi_fail_recovery_handoff_max_sec_);
+  }
+
+  Twist computeMppiFailRecoveryHandoffTwist(
+    const rclcpp::Time & tnow, const Twist & mppi_target)
+  {
+    Twist out;
+    const double dt = 1.0 / std::max(0.1, publish_rate_hz_);
+    const double target_vx = mppi_target.linear.x;
+    const double target_wz = mppi_target.angular.z;
+
+    jerkRampScalarToward(
+      mppi_fail_handoff_vx_, mppi_fail_handoff_vx_ax_, target_vx, dt,
+      mppi_fail_recovery_handoff_accel_mps2_, mppi_fail_recovery_handoff_jerk_mps3_);
+    jerkRampScalarToward(
+      mppi_fail_handoff_wz_, mppi_fail_handoff_wz_az_, target_wz, dt,
+      mppi_fail_recovery_handoff_wz_accel_rps2_,
+      mppi_fail_recovery_handoff_jerk_mps3_);
+
+    out.linear.x = mppi_fail_handoff_vx_;
+    out.angular.z = mppi_fail_handoff_wz_;
+
+    const double elapsed = (tnow - mppi_fail_handoff_start_).seconds();
+    const bool vx_done =
+      std::abs(mppi_fail_handoff_vx_ - target_vx) <= mppi_fail_recovery_handoff_vx_eps_;
+    const bool wz_done =
+      std::abs(mppi_fail_handoff_wz_ - target_wz) <= mppi_fail_recovery_handoff_wz_eps_;
+    if ((vx_done && wz_done) || elapsed >= mppi_fail_recovery_handoff_max_sec_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "mppi fail recovery handoff complete (handoff_vx=%.2f mppi_vx=%.2f "
+        "handoff_wz=%.2f mppi_wz=%.2f elapsed=%.2fs)",
+        mppi_fail_handoff_vx_, target_vx, mppi_fail_handoff_wz_, target_wz, elapsed);
+      endMppiFailRecoveryHandoff();
+    }
+    return out;
+  }
+
   void beginOpenCruiseMppiHandoff(const rclcpp::Time & tnow, double start_vx)
   {
     if (!open_corridor_cruise_mppi_handoff_enable_) {
@@ -2061,6 +2239,20 @@ private:
            std::abs(twist.angular.z) <= release_soft_stop_vel_eps_;
   }
 
+  /** True when the latest /cmd_vel sample is within cmd_timeout (not hold) and near zero. */
+  bool mppiCmdVelFreshNearZero(const rclcpp::Time & tnow)
+  {
+    std::lock_guard<std::mutex> lock(input_mutex_);
+    if (!have_input_) {
+      return false;
+    }
+    const double age = (tnow - latest_input_stamp_).seconds();
+    if (age > cmd_timeout_) {
+      return false;
+    }
+    return isTwistNearZero(latest_twist_);
+  }
+
   void applyReleaseLikeStop(
     bool cloud_ok, bool & halted, std::string & reason, const char * context)
   {
@@ -2125,17 +2317,23 @@ private:
     endSoftStop();
   }
 
-  void tryRecoverFromMppiFailSoftStop(const Twist & target, bool input_ok)
+  void tryRecoverFromMppiFailSoftStop(
+    const Twist & target, bool input_ok, const rclcpp::Time & tnow)
   {
     if (!mppi_fail_soft_stop_ || !input_ok || isTwistNearZero(target)) {
       return;
     }
     clearMppiFailSoftStop();
-    endSoftStop();
+    if (mppi_fail_recovery_odom_handoff_enable_) {
+      beginMppiFailRecoveryHandoff(tnow, target);
+    } else {
+      endSoftStop();
+    }
     RCLCPP_INFO(
       get_logger(),
-      "mppi fail soft-stop recovered (cmd_vel vx=%.2f wz=%.2f)",
-      target.linear.x, target.angular.z);
+      "mppi fail soft-stop recovered (cmd_vel vx=%.2f wz=%.2f handoff=%d)",
+      target.linear.x, target.angular.z,
+      mppi_fail_recovery_odom_handoff_enable_ ? 1 : 0);
   }
 
   void beginSoftStopRampLegacy()
@@ -2155,6 +2353,7 @@ private:
 
   void beginSoftStopRampMppiFail()
   {
+    endMppiFailRecoveryHandoff();
     if (!soft_stopping_) {
       soft_stop_ramp_mode_ = true;
       soft_stop_ramp_legacy_ = false;
@@ -2519,18 +2718,52 @@ private:
       Twist mppi_target;
       bool mppi_ok = false;
       readCmdVelInput(tnow, mppi_target, mppi_ok, halted, reason);
-      Twist out;
-      if (halted || soft_stopping_ || !mppi_ok) {
+
+      const bool was_moving =
+        std::abs(last_out_.linear.x) > release_soft_stop_vel_eps_ ||
+        std::abs(last_out_.angular.z) > release_soft_stop_vel_eps_;
+      const bool rocker_drive =
+        have_rocker_.load(std::memory_order_relaxed) && !rocker_stale &&
+        !stick_release_halt && !release_soft_stop;
+      const bool mppi_fresh_zero = mppiCmdVelFreshNearZero(tnow);
+      const bool handoff_mppi_fail =
+        rocker_drive && was_moving && (mppi_fresh_zero || !mppi_ok);
+
+      if (handoff_mppi_fail) {
         endOpenCruiseMppiHandoff();
-        if (halted || !mppi_ok) {
+        clearMppiFailSoftStop();
+        endSoftStop();
+        RCLCPP_INFO(
+          get_logger(),
+          "open_corridor_cruise handoff: mppi fail -> halt "
+          "(fresh_zero=%d mppi_ok=%d out_vx=%.2f)",
+          mppi_fresh_zero ? 1 : 0, mppi_ok ? 1 : 0, last_out_.linear.x);
+        Twist out;
+        applyLeftTurnWzTrick(out);
+        out_pub_->publish(out);
+        last_pub_stamp_ = tnow;
+        last_out_ = out;
+        return;
+      } else if (halted || soft_stopping_) {
+        endOpenCruiseMppiHandoff();
+        if (halted) {
+          Twist out;
           applyLeftTurnWzTrick(out);
           out_pub_->publish(out);
           last_pub_stamp_ = tnow;
           last_out_ = out;
           return;
         }
+      } else if (!mppi_ok) {
+        endOpenCruiseMppiHandoff();
+        Twist out;
+        applyLeftTurnWzTrick(out);
+        out_pub_->publish(out);
+        last_pub_stamp_ = tnow;
+        last_out_ = out;
+        return;
       } else {
-        out = computeOpenCruiseMppiHandoffTwist(tnow, mppi_target);
+        Twist out = computeOpenCruiseMppiHandoffTwist(tnow, mppi_target);
         if (shouldApplyCruiseExitProximityCap() && cloud_ok && dir != 0 &&
           std::isfinite(d))
         {
@@ -2552,7 +2785,24 @@ private:
     readCmdVelInput(tnow, target, input_ok, halted, reason);
     const double mppi_raw_vx = target.linear.x;
     const double mppi_raw_wz = target.angular.z;
-    tryRecoverFromMppiFailSoftStop(target, input_ok);
+    tryRecoverFromMppiFailSoftStop(target, input_ok, tnow);
+
+    if (mppi_fail_recovery_handoff_active_ && !halted && input_ok) {
+      Twist out = computeMppiFailRecoveryHandoffTwist(tnow, target);
+      applyGearVxCap(out);
+      applyStickSpeedScale(out, tnow, narrow_gate_pass);
+      if (out.linear.x < 0.0) {
+        out.linear.x = std::max(out.linear.x, -vx_reverse_max_);
+      }
+      out.angular.z = clamp(out.angular.z, -wz_max_, wz_max_);
+      applyNarrowGateRockerIntentFilter(out, tnow);
+      applyRockerSectorIntentFilter(out, tnow);
+      applyLeftTurnWzTrick(out);
+      out_pub_->publish(out);
+      last_pub_stamp_ = tnow;
+      last_out_ = out;
+      return;
+    }
 
     if (mppi_fail_soft_stop_enable_ && !side_pass_crawl && !halted && !soft_stopping_ &&
       input_ok && have_rocker_.load(std::memory_order_relaxed) &&
@@ -2671,6 +2921,7 @@ private:
       }
     } else {
       clearMppiFailSoftStop();
+      endMppiFailRecoveryHandoff();
       last_out_ = Twist();
       if (!reason.empty()) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
@@ -2863,6 +3114,7 @@ private:
   rclcpp::Subscription<Twist>::SharedPtr handle_sub_;
   rclcpp::Subscription<Joystick>::SharedPtr joystick_sub_;
   rclcpp::Subscription<CarInfo>::SharedPtr car_info_sub_;
+  rclcpp::Subscription<Odometry>::SharedPtr odom_sub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr cloud_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_pass_mode_sub_;
   rclcpp::Subscription<Bool>::SharedPtr narrow_gate_side_pass_mode_sub_;
@@ -2908,6 +3160,27 @@ private:
   double soft_stop_vx_ax_{0.0};
   bool mppi_fail_soft_stop_{false};
   int mppi_fail_soft_stop_frame_count_{0};
+
+  std::string odom_topic_;
+  double odom_timeout_{0.30};
+  bool mppi_fail_recovery_odom_handoff_enable_{true};
+  double mppi_fail_recovery_handoff_jerk_mps3_{0.40};
+  double mppi_fail_recovery_handoff_accel_mps2_{0.80};
+  double mppi_fail_recovery_handoff_wz_accel_rps2_{1.00};
+  double mppi_fail_recovery_handoff_max_sec_{0.50};
+  double mppi_fail_recovery_handoff_vx_eps_{0.05};
+  double mppi_fail_recovery_handoff_wz_eps_{0.05};
+  bool mppi_fail_recovery_handoff_active_{false};
+  double mppi_fail_handoff_vx_{0.0};
+  double mppi_fail_handoff_wz_{0.0};
+  double mppi_fail_handoff_vx_ax_{0.0};
+  double mppi_fail_handoff_wz_az_{0.0};
+  rclcpp::Time mppi_fail_handoff_start_{0, 0, RCL_ROS_TIME};
+
+  mutable std::mutex odom_mutex_;
+  Twist latest_odom_twist_;
+  rclcpp::Time latest_odom_stamp_{0, 0, RCL_ROS_TIME};
+  bool have_odom_{false};
 };
 
 int main(int argc, char ** argv)

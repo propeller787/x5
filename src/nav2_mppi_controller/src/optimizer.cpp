@@ -141,6 +141,7 @@ void Optimizer::setOffset(double controller_frequency)
 
 void Optimizer::reset(const geometry_msgs::msg::Twist * seed_speed)
 {
+  fail_recovery_seed_pending_ = false;
   state_.reset(settings_.batch_size, settings_.time_steps);
   control_sequence_.reset(settings_.time_steps);
   control_history_[0] = {0.0, 0.0, 0.0};
@@ -228,6 +229,15 @@ void Optimizer::optimize()
   }
 }
 
+bool Optimizer::consumeFailRecoverySeedPending()
+{
+  if (!fail_recovery_seed_pending_) {
+    return false;
+  }
+  fail_recovery_seed_pending_ = false;
+  return true;
+}
+
 bool Optimizer::fallback(bool fail)
 {
   static size_t counter = 0;
@@ -237,10 +247,17 @@ bool Optimizer::fallback(bool fail)
     return false;
   }
 
-  reset();
+  if (reset_seed_from_speed_) {
+    reset(&state_.speed);
+  } else {
+    reset();
+  }
 
   if (++counter > settings_.retry_attempt_limit) {
     counter = 0;
+    if (reset_seed_from_speed_) {
+      fail_recovery_seed_pending_ = true;
+    }
     throw std::runtime_error("Optimizer fail to compute path");
   }
 

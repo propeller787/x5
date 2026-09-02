@@ -254,13 +254,23 @@ geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
   auto start = std::chrono::system_clock::now();
 #endif
 
-  if (clock_->now() - last_time_called_ > rclcpp::Duration::from_seconds(reset_period_)) {
+  const bool idle_reset =
+    clock_->now() - last_time_called_ > rclcpp::Duration::from_seconds(reset_period_);
+  const bool fail_recovery_seed = optimizer_.consumeFailRecoverySeedPending();
+  if (idle_reset || fail_recovery_seed) {
     geometry_msgs::msg::Twist seed_speed = robot_speed;
     if (reset_seed_min_vx_after_side_pass_enable_ && side_pass_exit_seed_pending_) {
       applyMinAbsVxSeed(seed_speed, reset_seed_min_vx_mps_, 1e-3);
       side_pass_exit_seed_pending_ = false;
     }
     optimizer_.reset(&seed_speed);
+    if (fail_recovery_seed) {
+      RCLCPP_INFO(
+        logger_,
+        "Optimizer fail recovery seed from odom (vx=%.3f wz=%.3f, elapsed=%.3fs < reset_period=%.2fs)",
+        seed_speed.linear.x, seed_speed.angular.z,
+        (clock_->now() - last_time_called_).seconds(), reset_period_);
+    }
   }
   last_time_called_ = clock_->now();
 

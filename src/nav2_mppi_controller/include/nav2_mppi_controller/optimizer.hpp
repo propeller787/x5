@@ -143,6 +143,12 @@ public:
    */
   void reset(const geometry_msgs::msg::Twist * seed_speed = nullptr);
 
+  /**
+   * @brief True once after optimizer hard-fail; next control cycle should seed from odom
+   *   even if elapsed time since last cycle is below reset_period.
+   */
+  bool consumeFailRecoverySeedPending();
+
 protected:
   /**
    * @brief Main function to generate, score, and return trajectories
@@ -277,6 +283,7 @@ protected:
 
   models::OptimizerSettings settings_;
   bool reset_seed_from_speed_{false};
+  bool fail_recovery_seed_pending_{false};
 
   models::State state_;
   models::ControlSequence control_sequence_;

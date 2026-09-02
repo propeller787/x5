@@ -51,14 +51,15 @@ controller_server:
       model_dt: 0.05
       # 须大于 MPPI 正常帧间隔（~0.18s@5Hz），小于回零 cancel→resend（~0.5s）。
       reset_period: 0.35
-      # idle reset 时用 odom robot_speed 填充 control_sequence，使 rollout 噪声均值与 t=0 速度一致。
+      # idle reset（>reset_period）或 optimizer fail 后下一帧（即使间隔<reset_period）：
+      # 用 odom robot_speed 填满 control_sequence，使 rollout 噪声均值与实测速度一致。
       reset_seed_from_speed: true
       # side_pass 退出后首次 idle reset：|vx| 下限（与 cmd_vel_safety_gate side_pass_crawl_vx_mps 对齐）
       reset_seed_min_vx_after_side_pass_enable: true
       reset_seed_min_vx_mps: 0.10
       narrow_gate_side_pass_mode_topic: "/mppi/narrow_gate_side_pass_mode"
-      time_steps: 40
-      batch_size: 600
+      time_steps: 60
+      batch_size: 800
       iteration_count: 1
 
       # 速度包络上限；档位 vx 限速仅在 cmd_vel_safety_gate 输出侧 clamp（MPPI 保持大包络规划）。
@@ -67,7 +68,7 @@ controller_server:
       vx_min_lateral: -0.50
       rocker_sector_vx_min_enable: true
       rocker_forward_sector_topic: "/mppi/rocker_forward_sector_mode"
-      gear_vx_cap_enable: false
+      gear_vx_cap_enable: true
       gear_vx_cap_topic: "/mppi/gear_vx_max_mps"
       wz_density_cap_enable: true
       wz_density_cap_topic: "/mppi/wz_density_cap_rps"
@@ -82,7 +83,7 @@ controller_server:
       ax_min: -1.5     # 默认 -3.0
       ay_max: 1.0      # 默认 3.0
       ay_min: -1.0     # 默认 -3.0
-      az_max: 2.0      # 默认 3.5
+      az_max: 3.5      # 默认 3.5
 
       # 略减 vx 采样、加大 wz 采样，使 rollout 更多探索“低速+大角速度”绕障轨迹。
       vx_std: 0.35
@@ -91,7 +92,7 @@ controller_server:
 
       temperature: 0.25
       gamma: 0.01
-      retry_attempt_limit: 1
+      retry_attempt_limit: 2
       regenerate_noises: false
       # 打开后，MPPI 会把候选轨迹与最优轨迹（“Optimal Trajectory” 命名空间）发布到
       # /trajectories(visualization_msgs/MarkerArray)，并把跟踪的局部路径发布到
@@ -135,7 +136,7 @@ controller_server:
         near_goal_distance: 2.5
         # 近终点（距 path 终点 <= near_goal_distance）是否仍累加膨胀梯度软代价 pose_cost。
         # false（默认）：仅保留碰撞 + INSCRIBED 硬罚，便于末端对准/原地转向；true：与远场一致避障。
-        near_goal_repulsive_cost_enable: false
+        near_goal_repulsive_cost_enable: true
         inflation_layer_name: "inflation_layer"
 
       GoalCritic:

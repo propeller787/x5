@@ -87,6 +87,7 @@ target_compile_features(cmd_vel_safety_gate_node PUBLIC cxx_std_17)
 ament_target_dependencies(cmd_vel_safety_gate_node
   rclcpp
   geometry_msgs
+  nav_msgs
   sensor_msgs
   std_msgs
   interface
