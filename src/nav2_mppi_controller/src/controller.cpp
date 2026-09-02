@@ -61,6 +61,10 @@ void MPPIController::configure(
   getParam(
     wz_density_cap_topic_, "wz_density_cap_topic",
     std::string("/mppi/wz_density_cap_rps"));
+  getParam(gear_vx_cap_enable_, "gear_vx_cap_enable", false);
+  getParam(
+    gear_vx_cap_topic_, "gear_vx_cap_topic",
+    std::string("/mppi/gear_vx_max_mps"));
 
   // Configure composed objects
   optimizer_.initialize(parent_, name_, costmap_ros_, parameters_handler_.get());
@@ -81,6 +85,12 @@ void MPPIController::configure(
       logger_,
       "wz density cap: topic=%s base_wz_max=%.2f",
       wz_density_cap_topic_.c_str(), optimizer_.getBaseWzMax());
+  }
+  if (gear_vx_cap_enable_) {
+    RCLCPP_INFO(
+      logger_,
+      "gear vx cap: topic=%s base_vx_max=%.2f",
+      gear_vx_cap_topic_.c_str(), optimizer_.getBaseVxMax());
   }
 }
 
@@ -116,6 +126,11 @@ void MPPIController::activate()
       wz_density_cap_topic_, rclcpp::QoS(1).transient_local(),
       std::bind(&MPPIController::onWzDensityCap, this, std::placeholders::_1));
   }
+  if (gear_vx_cap_enable_) {
+    gear_vx_cap_sub_ = node->create_subscription<std_msgs::msg::Float64>(
+      gear_vx_cap_topic_, rclcpp::QoS(1).transient_local(),
+      std::bind(&MPPIController::onGearVxCap, this, std::placeholders::_1));
+  }
   RCLCPP_INFO(logger_, "Activated MPPI Controller: %s", name_.c_str());
 }
 
@@ -124,6 +139,7 @@ void MPPIController::deactivate()
   side_pass_mode_sub_.reset();
   rocker_forward_sector_sub_.reset();
   wz_density_cap_sub_.reset();
+  gear_vx_cap_sub_.reset();
   trajectory_visualizer_.on_deactivate();
   RCLCPP_INFO(logger_, "Deactivated MPPI Controller: %s", name_.c_str());
 }
@@ -161,6 +177,11 @@ void MPPIController::onWzDensityCap(const std_msgs::msg::Float64::SharedPtr msg)
   wz_density_cap_rps_.store(msg->data, std::memory_order_relaxed);
 }
 
+void MPPIController::onGearVxCap(const std_msgs::msg::Float64::SharedPtr msg)
+{
+  gear_vx_cap_mps_.store(msg->data, std::memory_order_relaxed);
+}
+
 void MPPIController::applyRockerSectorVxMin()
 {
   if (!rocker_sector_vx_min_enable_) {
@@ -170,6 +191,22 @@ void MPPIController::applyRockerSectorVxMin()
   const float vx_min = rocker_forward_sector_active_.load(std::memory_order_relaxed) ?
     vx_min_forward_ : vx_min_lateral_;
   optimizer_.setVxMin(vx_min);
+}
+
+void MPPIController::applyGearVxCap()
+{
+  const float base = optimizer_.getBaseVxMax();
+  if (!gear_vx_cap_enable_) {
+    optimizer_.setVxMax(base);
+    return;
+  }
+
+  const double cap = gear_vx_cap_mps_.load(std::memory_order_relaxed);
+  if (cap <= 1e-6) {
+    optimizer_.setVxMax(base);
+    return;
+  }
+  optimizer_.setVxMax(std::min(base, static_cast<float>(cap)));
 }
 
 void MPPIController::applyWzDensityCap()
@@ -234,6 +271,7 @@ geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
   std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> costmap_lock(*(costmap->getMutex()));
 
   applyRockerSectorVxMin();
+  applyGearVxCap();
   applyWzDensityCap();
 
   geometry_msgs::msg::TwistStamped cmd =

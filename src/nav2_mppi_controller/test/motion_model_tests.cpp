@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <chrono>
+#include <cmath>
 #include <thread>
 
 #include "gtest/gtest.h"
@@ -282,4 +283,54 @@ TEST(MotionModelTests, AccelConstraintTest)
   EXPECT_NEAR(state.vx(0, 1), 1.9f, 1e-5);
   EXPECT_NEAR(state.vx(0, 2), 1.8f, 1e-5);
   EXPECT_NEAR(state.wz(0, 1), 0.0f, 1e-5);
+}
+
+TEST(MotionModelTests, WheelchairDiffDriveLagTest)
+{
+  models::State state;
+  const int batches = 2;
+  const int timesteps = 6;
+  state.reset(batches, timesteps);
+  auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("wheelchair_node");
+  ParametersHandler param_handler(node);
+  std::unique_ptr<WheelchairDiffDriveMotionModel> model =
+    std::make_unique<WheelchairDiffDriveMotionModel>(&param_handler, node->get_name());
+
+  models::ControlConstraints constraints{};
+  constraints.ax_max = 10.0f;
+  constraints.ax_min = -10.0f;
+  constraints.az_max = 10.0f;
+  model->setConstraints(constraints, 0.05f);
+
+  xt::view(state.vx, xt::all(), 0) = 0.0f;
+  xt::view(state.wz, xt::all(), 0) = 0.0f;
+  state.cvx = xt::ones<float>({batches, timesteps});
+  state.cwz = xt::zeros<float>({batches, timesteps});
+
+  model->predict(state);
+
+  const float alpha = 1.0f - std::exp(-0.05f / 0.25f);
+  EXPECT_NEAR(state.vx(0, 1), alpha, 1e-4);
+  EXPECT_GT(state.vx(0, 2), state.vx(0, 1));
+  EXPECT_LT(state.vx(0, 1), 1.0f);
+}
+
+TEST(MotionModelTests, WheelchairDiffDriveTurningConstraintTest)
+{
+  models::ControlSequence control_sequence;
+  control_sequence.reset(10);
+  auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("wheelchair_node2");
+  ParametersHandler param_handler(node);
+  std::unique_ptr<WheelchairDiffDriveMotionModel> model =
+    std::make_unique<WheelchairDiffDriveMotionModel>(&param_handler, node->get_name());
+
+  control_sequence.vx(3) = 1.0f;
+  control_sequence.wz(3) = 5.0f;
+  control_sequence.vx(1) = 0.0f;
+  control_sequence.wz(1) = 1.0f;
+
+  model->applyConstraints(control_sequence);
+
+  EXPECT_NEAR(control_sequence.wz(3), 1.0f / 0.35f, 1e-4);
+  EXPECT_NEAR(control_sequence.wz(1), 1.0f, 1e-4);
 }

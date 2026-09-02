@@ -114,11 +114,13 @@ protected:
   void onSidePassMode(const std_msgs::msg::Bool::SharedPtr msg);
   void onRockerForwardSector(const std_msgs::msg::Bool::SharedPtr msg);
   void onWzDensityCap(const std_msgs::msg::Float64::SharedPtr msg);
+  void onGearVxCap(const std_msgs::msg::Float64::SharedPtr msg);
 
   static void applyMinAbsVxSeed(
     geometry_msgs::msg::Twist & speed, double min_vx_mps, double vel_eps);
 
   void applyRockerSectorVxMin();
+  void applyGearVxCap();
   void applyWzDensityCap();
 
   std::string name_;
@@ -154,6 +156,11 @@ protected:
   std::string wz_density_cap_topic_;
   rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr wz_density_cap_sub_;
   std::atomic<double> wz_density_cap_rps_{0.0};
+
+  bool gear_vx_cap_enable_{false};
+  std::string gear_vx_cap_topic_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr gear_vx_cap_sub_;
+  std::atomic<double> gear_vx_cap_mps_{0.0};
 
   // Last time computeVelocityCommands was called
   rclcpp::Time last_time_called_;

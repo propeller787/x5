@@ -117,9 +117,19 @@ public:
   void setVxMin(float vx_min);
 
   /**
+   * @brief Override vx_max constraint for the current control cycle.
+   */
+  void setVxMax(float vx_max);
+
+  /**
    * @brief Override wz constraint for the current control cycle.
    */
   void setWzMax(float wz_max);
+
+  /**
+   * @brief Base vx_max from parameters (before per-cycle overrides).
+   */
+  float getBaseVxMax() const;
 
   /**
    * @brief Base wz_max from parameters (before per-cycle overrides).

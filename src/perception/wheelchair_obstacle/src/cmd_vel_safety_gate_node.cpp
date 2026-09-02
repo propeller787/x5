@@ -8,7 +8,7 @@
 //     gate ramps vx/wz down (skip MPPI while active); /mppi/stick_release_halt -> hard stop
 //   - proximity speed cap from obstacle cloud + travel intent
 //   - tiered wz cap from nearby obstacle-point density (MPPI via jlp topic; gate wz_max fallback)
-//   - gear vx cap: jlp publishes /mppi/gear_vx_max_mps -> MPPI vx_max + gate output clamp
+//   - gear vx cap: jlp publishes /mppi/gear_vx_max_mps -> gate output clamp + stick scale
 //   - stick deflection speed scale: cap vx/wz by |rocker|/100 (min ratio configurable)
 //   - rocker sector intent filter: subscribe /mppi/rocker_intent_zone from
 //     joystick_local_path; block opposite turn in left/right-forward sectors

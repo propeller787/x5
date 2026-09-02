@@ -507,11 +507,14 @@ void Optimizer::setMotionModel(const std::string & model)
     motion_model_ = std::make_shared<OmniMotionModel>();
   } else if (model == "Ackermann") {
     motion_model_ = std::make_shared<AckermannMotionModel>(parameters_handler_, name_);
+  } else if (model == "WheelchairDiffDrive") {
+    motion_model_ = std::make_shared<WheelchairDiffDriveMotionModel>(
+      parameters_handler_, name_);
   } else {
     throw std::runtime_error(
             std::string(
               "Model " + model + " is not valid! Valid options are DiffDrive, Omni, "
-              "or Ackermann"));
+              "Ackermann, or WheelchairDiffDrive"));
   }
   if (motion_model_) {
     motion_model_->setConstraints(settings_.constraints, settings_.model_dt);
@@ -524,6 +527,19 @@ void Optimizer::setVxMin(float vx_min)
   if (motion_model_) {
     motion_model_->setConstraints(settings_.constraints, settings_.model_dt);
   }
+}
+
+void Optimizer::setVxMax(float vx_max)
+{
+  settings_.constraints.vx_max = vx_max;
+  if (motion_model_) {
+    motion_model_->setConstraints(settings_.constraints, settings_.model_dt);
+  }
+}
+
+float Optimizer::getBaseVxMax() const
+{
+  return settings_.base_constraints.vx_max;
 }
 
 void Optimizer::setWzMax(float wz_max)
