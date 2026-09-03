@@ -8,7 +8,9 @@
 //   Pure lateral (|rx| deadbanded) -> in-place turn.
 //   Forward + narrow gate (head-on): bilateral cloud scan along body +x only;
 //     oblique/side crossing uses side_pass crawl (this node publishes /cmd_vel, skip MPPI).
-//     proximity side_pass (no separate enable): enter on left/right/front + slow; exit shell -> hot MPPI.
+//     proximity side_pass: enter on inner-clear + outer-blocked + slow; exit shell -> hot MPPI.
+//     corner_clear side_pass: corner 20cm clear + front/lateral 20cm blocked + stick in
+//       matching left-front/right-front 90deg; then inner 6cm crawl.
 //     pass_mode enters ONLY when |odom|<=gate_creep_speed_max_mps; once active, keeps until
 //     body clear (latch default); intent/front_to_gate exits optional via yaml.
 //     gate distance refreshed from odom anchor + cloud; zero footprint padding (all gears
@@ -525,6 +527,40 @@ public:
       "proximity_side_pass_confirm_frames", 10);
     proximity_side_pass_exit_confirm_frames_ = declare_parameter<int>(
       "proximity_side_pass_exit_confirm_frames", 5);
+    corner_clear_side_pass_enable_ = declare_parameter<bool>(
+      "corner_clear_side_pass_enable", true);
+    corner_clear_side_pass_probe_depth_m_ = declare_parameter<double>(
+      "corner_clear_side_pass_probe_depth_m", 0.20);
+    if (corner_clear_side_pass_probe_depth_m_ < 0.0) {
+      corner_clear_side_pass_probe_depth_m_ = 0.0;
+    }
+    corner_clear_side_pass_exit_margin_m_ = declare_parameter<double>(
+      "corner_clear_side_pass_exit_margin_m", 0.12);
+    corner_clear_side_pass_max_speed_mps_ = declare_parameter<double>(
+      "corner_clear_side_pass_max_speed_mps", 0.02);
+    corner_clear_side_pass_max_wz_rps_ = declare_parameter<double>(
+      "corner_clear_side_pass_max_wz_rps", 0.05);
+    if (corner_clear_side_pass_max_wz_rps_ < 0.0) {
+      corner_clear_side_pass_max_wz_rps_ = 0.0;
+    }
+    corner_clear_side_pass_confirm_frames_ = declare_parameter<int>(
+      "corner_clear_side_pass_confirm_frames", 10);
+    if (corner_clear_side_pass_confirm_frames_ < 1) {
+      corner_clear_side_pass_confirm_frames_ = 1;
+    }
+    corner_clear_side_pass_exit_confirm_frames_ = declare_parameter<int>(
+      "corner_clear_side_pass_exit_confirm_frames", 3);
+    if (corner_clear_side_pass_exit_confirm_frames_ < 1) {
+      corner_clear_side_pass_exit_confirm_frames_ = 1;
+    }
+    corner_clear_side_pass_sector_deg_ = declare_parameter<double>(
+      "corner_clear_side_pass_sector_deg", 90.0);
+    if (corner_clear_side_pass_sector_deg_ < 1.0) {
+      corner_clear_side_pass_sector_deg_ = 1.0;
+    }
+    if (corner_clear_side_pass_sector_deg_ > 90.0) {
+      corner_clear_side_pass_sector_deg_ = 90.0;
+    }
     gate_pass_mode_enter_m_ = declare_parameter<double>("gate_pass_mode_enter_m", 0.80);
     gate_pass_front_center_x_m_ = declare_parameter<double>("gate_pass_front_center_x_m", 0.85);
     gate_pass_mode_exit_m_ = declare_parameter<double>("gate_pass_mode_exit_m", 0.95);
@@ -821,6 +857,16 @@ public:
         release_soft_stop_radius_, release_soft_stop_topic_.c_str(),
         stick_release_halt_topic_.c_str());
     }
+    if (corner_clear_side_pass_enable_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "corner_clear side_pass: probe=%.0fcm sector=%.0fdeg |v|<%.2f |wz|<%.2f confirm=%d",
+        corner_clear_side_pass_probe_depth_m_ * 100.0,
+        corner_clear_side_pass_sector_deg_,
+        corner_clear_side_pass_max_speed_mps_,
+        corner_clear_side_pass_max_wz_rps_,
+        corner_clear_side_pass_confirm_frames_);
+    }
     if (rocker_sector_vx_min_enable_) {
       RCLCPP_INFO(
         get_logger(),
@@ -1025,6 +1071,7 @@ private:
     latest_cloud_stamp_ = now();
     have_cloud_ = true;
     updateProximitySidePassCrawlModeFromCloud();
+    updateCornerClearSidePassCrawlModeFromCloud();
   }
 
   void onCarInfo(const CarInfo::SharedPtr msg)
@@ -1094,7 +1141,13 @@ private:
       active ? "ACTIVE" : "inactive");
   }
 
-  enum class SidePassSource { None, MemoryGate, Proximity };
+  enum class SidePassSource { None, MemoryGate, Proximity, CornerClear };
+
+  bool isCloudSidePassSource() const
+  {
+    return side_pass_source_ == SidePassSource::Proximity ||
+      side_pass_source_ == SidePassSource::CornerClear;
+  }
 
   void setSidePassCrawlMode(
     bool active, const rclcpp::Time & tnow, int memory_idx = -1,
@@ -1113,12 +1166,17 @@ private:
       side_pass_memory_gate_idx_ = memory_idx;
       proximity_side_pass_enter_streak_ = 0;
       proximity_side_pass_exit_streak_ = 0;
+      corner_clear_side_pass_enter_streak_ = 0;
+      corner_clear_side_pass_exit_streak_ = 0;
       cancelActiveGoal();
     } else {
       side_pass_source_ = SidePassSource::None;
       side_pass_memory_gate_idx_ = -1;
       proximity_side_pass_enter_streak_ = 0;
       proximity_side_pass_exit_streak_ = 0;
+      corner_clear_side_pass_enter_streak_ = 0;
+      corner_clear_side_pass_exit_streak_ = 0;
+      corner_clear_side_pass_left_ = false;
       scheduleMppiReset("side_pass exit");
     }
 
@@ -1128,6 +1186,7 @@ private:
 
     const char * src =
       source == SidePassSource::Proximity ? "proximity" :
+      source == SidePassSource::CornerClear ? "corner_clear" :
       source == SidePassSource::MemoryGate ? "memory_gate" : "none";
     RCLCPP_INFO(
       get_logger(), "narrow_gate_side_pass_mode -> %s (%s)",
@@ -1711,7 +1770,8 @@ private:
       return;
     }
     if (narrow_gate_side_pass_crawl_active_ &&
-      side_pass_source_ == SidePassSource::MemoryGate)
+      (side_pass_source_ == SidePassSource::MemoryGate ||
+      side_pass_source_ == SidePassSource::CornerClear))
     {
       return;
     }
@@ -1771,6 +1831,232 @@ private:
         proximity_side_pass_outer_probe_depth_m_ * 100.0,
         proximity_side_pass_confirm_frames_);
       proximity_side_pass_enter_streak_ = 0;
+    }
+  }
+
+  bool roiBoxHasPoint(
+    const std::vector<std::pair<float, float>> & local_pts,
+    double x0, double x1, double y0, double y1) const
+  {
+    for (const auto & p : local_pts) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool cornerClearForwardProbeBlocked(
+    const std::vector<std::pair<float, float>> & local_pts) const
+  {
+    if (local_pts.empty() ||
+      side_pass_crawl_forward_strip_x_.size() < 2)
+    {
+      return false;
+    }
+    const size_t i = 1;
+    return forwardCornerStripHasPoint(
+      local_pts,
+      side_pass_crawl_forward_strip_x_[i],
+      corner_clear_side_pass_probe_depth_m_,
+      side_pass_crawl_forward_strip_y_min_[i],
+      side_pass_crawl_forward_strip_y_max_[i]);
+  }
+
+  bool cornerClearCornerProbeClear(
+    const std::vector<std::pair<float, float>> & local_pts, bool left) const
+  {
+    if (local_pts.empty() ||
+      side_pass_crawl_forward_strip_x_.size() < 3)
+    {
+      return false;
+    }
+    const size_t i = left ? 0 : 2;
+    return !forwardCornerStripHasPoint(
+      local_pts,
+      side_pass_crawl_forward_strip_x_[i],
+      corner_clear_side_pass_probe_depth_m_,
+      side_pass_crawl_forward_strip_y_min_[i],
+      side_pass_crawl_forward_strip_y_max_[i]);
+  }
+
+  bool cornerClearLateralProbeBlocked(
+    const std::vector<std::pair<float, float>> & local_pts, bool left) const
+  {
+    if (local_pts.empty() || side_pass_crawl_lateral_strip_x_min_.empty()) {
+      return false;
+    }
+    const double depth = corner_clear_side_pass_probe_depth_m_;
+    for (size_t i = 0; i < side_pass_crawl_lateral_strip_x_min_.size(); ++i) {
+      const double ye = side_pass_crawl_lateral_strip_y_edge_[i];
+      const double x0 = side_pass_crawl_lateral_strip_x_min_[i];
+      const double x1 = side_pass_crawl_lateral_strip_x_max_[i];
+      if (left) {
+        if (roiBoxHasPoint(local_pts, x0, x1, ye, ye + depth)) {
+          return true;
+        }
+      } else if (roiBoxHasPoint(local_pts, x0, x1, -(ye + depth), -ye)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool cornerClearRockerInSector(bool left, const rclcpp::Time & tnow)
+  {
+    Joystick::SharedPtr joy;
+    rclcpp::Time joy_stamp;
+    {
+      std::lock_guard<std::mutex> lock(joystick_mutex_);
+      joy = latest_joystick_;
+      joy_stamp = latest_joystick_stamp_;
+    }
+    if (!joy || (tnow - joy_stamp).seconds() > joystick_timeout_) {
+      return false;
+    }
+    const double rx = applyRockerDeadbandAxis(static_cast<double>(joy->rocker_x));
+    const double ry = applyRockerDeadbandAxis(static_cast<double>(joy->rocker_y));
+    if (std::abs(rx) < 1e-6 && std::abs(ry) < 1e-6) {
+      return false;
+    }
+    const double theta = std::atan2(ry, rx);
+    const double sector_rad = corner_clear_side_pass_sector_deg_ * M_PI / 180.0;
+    if (left) {
+      return theta > 1e-3 && theta <= sector_rad;
+    }
+    return theta < -1e-3 && theta >= -sector_rad;
+  }
+
+  bool cornerClearSidePassSurroundingClear(
+    const std::vector<std::pair<float, float>> & local_pts) const
+  {
+    if (local_pts.empty()) {
+      return false;
+    }
+    const double m = corner_clear_side_pass_exit_margin_m_;
+    const double x0 = footprint_body_x_min_ - m;
+    const double x1 = footprint_body_x_max_ + m;
+    const double y0 = footprint_body_y_min_ - m;
+    const double y1 = footprint_body_y_max_ + m;
+    for (const auto & p : local_pts) {
+      const double x = static_cast<double>(p.first);
+      const double y = static_cast<double>(p.second);
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void updateCornerClearSidePassCrawlModeFromCloud()
+  {
+    if (!corner_clear_side_pass_enable_) {
+      return;
+    }
+    if (narrow_gate_pass_active_) {
+      corner_clear_side_pass_enter_streak_ = 0;
+      return;
+    }
+    if (narrow_gate_side_pass_crawl_active_ &&
+      side_pass_source_ != SidePassSource::CornerClear)
+    {
+      return;
+    }
+
+    const rclcpp::Time tnow = now();
+    Odometry::SharedPtr odom;
+    {
+      std::lock_guard<std::mutex> lock(odom_mutex_);
+      odom = latest_odom_;
+    }
+    if (!odom) {
+      corner_clear_side_pass_enter_streak_ = 0;
+      return;
+    }
+
+    const auto local_pts = filterLocalCloudPoints(cloud_pts_);
+
+    if (narrow_gate_side_pass_crawl_active_ &&
+      side_pass_source_ == SidePassSource::CornerClear)
+    {
+      if (cornerClearSidePassSurroundingClear(local_pts)) {
+        ++corner_clear_side_pass_exit_streak_;
+        if (corner_clear_side_pass_exit_streak_ >=
+          corner_clear_side_pass_exit_confirm_frames_)
+        {
+          setSidePassCrawlMode(false, tnow);
+          RCLCPP_INFO(
+            get_logger(),
+            "corner_clear side_pass crawl exit: surrounding %.0fcm clear",
+            corner_clear_side_pass_exit_margin_m_ * 100.0);
+        }
+      } else {
+        corner_clear_side_pass_exit_streak_ = 0;
+      }
+      return;
+    }
+
+    const bool speed_ok =
+      vehiclePlanarSpeedMps(*odom) < corner_clear_side_pass_max_speed_mps_;
+    const bool wz_ok =
+      std::abs(odom->twist.twist.angular.z) < corner_clear_side_pass_max_wz_rps_;
+    const bool front_blocked = cornerClearForwardProbeBlocked(local_pts);
+    const bool left_corner_clear = cornerClearCornerProbeClear(local_pts, true);
+    const bool right_corner_clear = cornerClearCornerProbeClear(local_pts, false);
+    const bool left_ok = left_corner_clear &&
+      cornerClearLateralProbeBlocked(local_pts, true) &&
+      front_blocked &&
+      cornerClearRockerInSector(true, tnow);
+    const bool right_ok = right_corner_clear &&
+      cornerClearLateralProbeBlocked(local_pts, false) &&
+      front_blocked &&
+      cornerClearRockerInSector(false, tnow);
+
+    bool want_left = false;
+    if (left_ok && right_ok) {
+      want_left = corner_clear_side_pass_left_;
+      Joystick::SharedPtr joy;
+      {
+        std::lock_guard<std::mutex> lock(joystick_mutex_);
+        joy = latest_joystick_;
+      }
+      if (joy) {
+        want_left = static_cast<double>(joy->rocker_y) > 0.0;
+      }
+    } else if (left_ok) {
+      want_left = true;
+    } else if (!right_ok) {
+      corner_clear_side_pass_enter_streak_ = 0;
+      return;
+    }
+
+    if (!speed_ok || !wz_ok) {
+      corner_clear_side_pass_enter_streak_ = 0;
+      return;
+    }
+
+    if (corner_clear_side_pass_enter_streak_ > 0 &&
+      want_left != corner_clear_side_pass_left_)
+    {
+      corner_clear_side_pass_enter_streak_ = 0;
+    }
+    corner_clear_side_pass_left_ = want_left;
+    ++corner_clear_side_pass_enter_streak_;
+    if (corner_clear_side_pass_enter_streak_ >= corner_clear_side_pass_confirm_frames_) {
+      setSidePassCrawlMode(true, tnow, -1, SidePassSource::CornerClear);
+      RCLCPP_INFO(
+        get_logger(),
+        "corner_clear side_pass crawl enter: %s corner %.0fcm clear, "
+        "front+lateral %.0fcm blocked, |v|<%.2f |wz|<%.2f x%d frames",
+        want_left ? "left" : "right",
+        corner_clear_side_pass_probe_depth_m_ * 100.0,
+        corner_clear_side_pass_probe_depth_m_ * 100.0,
+        corner_clear_side_pass_max_speed_mps_,
+        corner_clear_side_pass_max_wz_rps_,
+        corner_clear_side_pass_confirm_frames_);
+      corner_clear_side_pass_enter_streak_ = 0;
     }
   }
 
@@ -2678,7 +2964,7 @@ private:
           gate_side_pass_enable_ ? fetchLocalCloudPoints(tnow) :
           std::vector<std::pair<float, float>>{};
         if (gate_side_pass_enable_ &&
-          side_pass_source_ != SidePassSource::Proximity)
+          !isCloudSidePassSource())
         {
           std::lock_guard<std::mutex> lock(gate_mutex_);
           if (const auto mem = findSidePassMemorizedGateUnlocked(
@@ -4887,6 +5173,17 @@ private:
   int proximity_side_pass_exit_confirm_frames_{5};
   int proximity_side_pass_enter_streak_{0};
   int proximity_side_pass_exit_streak_{0};
+  bool corner_clear_side_pass_enable_{true};
+  double corner_clear_side_pass_probe_depth_m_{0.20};
+  double corner_clear_side_pass_exit_margin_m_{0.12};
+  double corner_clear_side_pass_max_speed_mps_{0.02};
+  double corner_clear_side_pass_max_wz_rps_{0.05};
+  int corner_clear_side_pass_confirm_frames_{10};
+  int corner_clear_side_pass_exit_confirm_frames_{3};
+  double corner_clear_side_pass_sector_deg_{90.0};
+  int corner_clear_side_pass_enter_streak_{0};
+  int corner_clear_side_pass_exit_streak_{0};
+  bool corner_clear_side_pass_left_{false};
   SidePassSource side_pass_source_{SidePassSource::None};
   double footprint_body_x_min_{-0.2};
   double footprint_body_x_max_{0.935};

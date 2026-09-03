@@ -226,6 +226,17 @@ joystick_local_path_node:
     proximity_side_pass_confirm_frames: 20
     proximity_side_pass_exit_confirm_frames: 3
 
+    # 角净空侧穿（独立于 proximity）：对应角 20cm 净空 + 正前 20cm 有障 + 同侧侧向 20cm 有障
+    # + 摇杆出死区且在该角左前/右前 90° + 低速，连续 confirm 帧 → 进入内 6cm crawl
+    corner_clear_side_pass_enable: true
+    corner_clear_side_pass_probe_depth_m: 0.20
+    corner_clear_side_pass_exit_margin_m: 0.12
+    corner_clear_side_pass_max_speed_mps: 0.02
+    corner_clear_side_pass_max_wz_rps: 0.05
+    corner_clear_side_pass_confirm_frames: 10
+    corner_clear_side_pass_exit_confirm_frames: 3
+    corner_clear_side_pass_sector_deg: 90.0
+
     # 过窄门模式：匹配窄门且车头中心距门中心 <= gate_pass_mode_enter_m 时激活。
     # gate_pass_front_center_x_m 为 base_link 下前向参考点（约车头中心）。
     # 零 footprint padding；costmap inflation/resolution 由 PassModeInflationLayer 处理。
